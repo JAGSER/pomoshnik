@@ -67,16 +67,16 @@ const norm = (s) => String(s ?? "").trim().normalize("NFC");
 function auth(body) {
   let users;
   try { users = JSON.parse(env("USERS", "")); }
-  catch (_) { return { err: "Ошибка в настройке USERS: сбиты кавычки или скобки. Сообщите Юре.", status: 500 }; }
-  if (!users || typeof users !== "object") return { err: "Настройка USERS пустая. Сообщите Юре.", status: 500 };
+  catch (_) { return { err: "Ошибка в настройке USERS: сбиты кавычки или скобки.", status: 500 }; }
+  if (!users || typeof users !== "object") return { err: "Настройка USERS пустая.", status: 500 };
   const id = String(body.user || "").toLowerCase();
-  if (!users[id]) return { err: `В настройке USERS нет пользователя «${id}». Сообщите Юре.`, status: 401 };
+  if (!users[id]) return { err: `В настройке USERS нет пользователя «${id}».`, status: 401 };
   // Пароль и ключ можно хранить отдельными переменными: PASSWORD_MAMA, KEY_MAMA
   const u = { ...users[id] };
   const ID = id.toUpperCase();
   if (env("PASSWORD_" + ID)) u.password = env("PASSWORD_" + ID);
   if (env("KEY_" + ID)) u.key = env("KEY_" + ID).trim();
-  if (!u.password) return { err: `Для «${id}» не задан пароль (PASSWORD_${ID}). Сообщите Юре.`, status: 500 };
+  if (!u.password) return { err: `Для «${id}» не задан пароль (PASSWORD_${ID}).`, status: 500 };
   if (tooManyFails(id)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
   if (!safeEqual(norm(u.password), norm(body.password))) { addFail(id); return { err: "Неверный пароль", status: 401 }; }
   return { id, ...u };
@@ -157,11 +157,11 @@ export async function handler(req) {
   if (!res.ok) {
     const text = await res.text();
     let msg = "Claude сейчас недоступен, попробуйте позже";
-    if (res.status === 401) msg = "Ключ API недействителен — сообщите Юре";
+    if (res.status === 401) msg = "Ключ API недействителен";
     if (res.status === 429) msg = "Слишком много запросов или закончился лимит — подождите немного";
     if (res.status === 529) msg = "Claude перегружен, попробуйте через минуту";
-    if (res.status === 403) msg = "Anthropic отказал в доступе (ключ или регион) — сообщите Юре";
-    if (/credit|billing|spend/i.test(text)) msg = "Закончился лимит трат — сообщите Юре";
+    if (res.status === 403) msg = "Anthropic отказал в доступе (ключ или регион)";
+    if (/credit|billing|spend/i.test(text)) msg = "Закончился лимит на этот месяц";
     // Ошибки Anthropic отдаём как 502, чтобы приложение не путало их с неверным паролем
     return json({ error: msg, details: text.slice(0, 500) }, res.status === 401 || res.status === 403 ? 502 : res.status, h);
   }
