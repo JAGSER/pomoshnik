@@ -184,6 +184,7 @@ $("#login-form").onsubmit = async (e) => {
 function me() { return CFG.users[SESSION.user]; }
 
 async function startHome() {
+  stopSnippet();
   stopSpeaking();
   const u = me();
   document.documentElement.classList.toggle("big", !!u.bigText);
@@ -211,8 +212,13 @@ async function startHome() {
     const li = document.createElement("li");
     if (c.pinned) li.className = "pinned";
     const open = el("button", "hopen");
-    open.innerHTML = `<span class="hemoji">${esc(c.emoji || p.icon || "💬")}</span><span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${c.pinned ? "📌 закреплён · " : ""}${fmtDate(c.updated)}</span></span>`;
+    open.innerHTML = `<span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${c.pinned ? "📌 закреплён · " : ""}${fmtDate(c.updated)}</span></span>`;
     open.onclick = () => openChat(c);
+    // эмодзи — кнопка: проигрывает первую фразу последнего ответа (она уже записана заранее)
+    const emo = el("button", "hemoji");
+    emo.textContent = c.emoji || p.icon || "💬";
+    emo.setAttribute("aria-label", "Послушать начало последнего ответа");
+    emo.onclick = () => playSnippet(c, emo);
     const pin = el("button", "icon-btn hdel" + (c.pinned ? " on" : ""));
     pin.textContent = "📌";
     pin.setAttribute("aria-label", c.pinned ? "Открепить разговор" : "Закрепить разговор");
@@ -230,7 +236,7 @@ async function startHome() {
       await DB.del(c.id);
       startHome();
     };
-    li.append(open, pin, ren, del);
+    li.append(emo, open, pin, ren, del);
     list.append(li);
   });
 }
@@ -247,6 +253,7 @@ function newChat(presetId) {
 }
 
 function openChat(chat) {
+  stopSnippet();
   CHAT = chat;
   PENDING = [];
   renderAttachments();
@@ -959,6 +966,42 @@ function md(src) {
   });
   closeList();
   return out.join("").replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre><code>${blocks[i]}</code></pre>`);
+}
+
+/* ===== Быстрое прослушивание начала ответа по нажатию на эмодзи разговора ===== */
+let SNIPPET = null;
+function stopSnippet() {
+  if (!SNIPPET) return;
+  try { SNIPPET.audio && SNIPPET.audio.pause(); } catch (_) {}
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  SNIPPET.btn.classList.remove("playing");
+  SNIPPET = null;
+}
+async function playSnippet(chat, btn) {
+  const was = SNIPPET && SNIPPET.btn === btn;
+  stopSnippet();
+  stopSpeaking();
+  if (was) return;
+  const last = [...chat.messages].reverse().find((m) => m.role === "assistant");
+  if (!last) { toast("В этом разговоре пока нет ответа"); return; }
+  const text = (last.tts && last.tts[0]) || firstChunk(plain(textOf(last)), true);
+  if (!text) return;
+  const me_ = { btn, audio: null };
+  SNIPPET = me_;
+  btn.classList.add("playing");
+  const done = () => { if (SNIPPET === me_) { btn.classList.remove("playing"); SNIPPET = null; } };
+  if (!useGemini()) { browserSpeak(text, done); return; }
+  try {
+    const url = await ttsFetch(text);
+    if (SNIPPET !== me_) return;
+    me_.audio = new Audio(url);
+    me_.audio.playbackRate = RATE;
+    me_.audio.onended = me_.audio.onerror = done;
+    await me_.audio.play();
+  } catch (err) {
+    if (SNIPPET !== me_) return;
+    browserSpeak(text, done);
+  }
 }
 
 /* ===== Образцы голосов: общие для всех, хранятся на сервере ===== */

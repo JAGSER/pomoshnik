@@ -193,3 +193,6 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .logout { margin-top: 28px; border: 1px solid var(--line); color: var(--danger); }
 .prep { border: 1px dashed var(--accent); color: var(--accent); margin-bottom: 10px; }
+.history .hemoji { border: 0; background: none; cursor: pointer; font-size: 1.4em; min-width: 52px; min-height: 52px; border-radius: 12px; flex: none; }
+.history .hemoji.playing { background: var(--accent-soft); animation: pulse 1.2s infinite; }
+.history .hopen { padding-left: 4px; }
