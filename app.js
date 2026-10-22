@@ -272,7 +272,7 @@ function actions(text) {
   const speak = el("button");
   speak.textContent = "🔊 Вслух";
   speak.onclick = () => {
-    if (speechSynthesis.speaking) { stopSpeaking(); speak.textContent = "🔊 Вслух"; return; }
+    if (isSpeaking()) { stopSpeaking(); speak.textContent = "🔊 Вслух"; return; }
     speak.textContent = "⏹ Стоп";
     speakText(text, () => (speak.textContent = "🔊 Вслух"));
   };
@@ -283,7 +283,6 @@ function actions(text) {
     catch (_) { copy.textContent = "Не вышло"; }
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
-  if (!("speechSynthesis" in window)) speak.hidden = true;
   a.append(speak, copy);
   return a;
 }
@@ -548,17 +547,80 @@ function plain(text) {
     .replace(/^\s*[-•]\s+/gm, "")
     .replace(/\n{2,}/g, ". ");
 }
+function splitText(t, max) {
+  const parts = t.match(/[^.!?…]+[.!?…]*\s*/g) || [t];
+  const out = [];
+  let cur = "";
+  parts.forEach((p) => { if ((cur + p).length > max && cur) { out.push(cur); cur = p; } else cur += p; });
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+// Озвучка: голос Gemini через прослойку, при сбое — встроенный голос телефона
+let SPEAK_ID = 0;
+let AUDIO = null;
+let GEMINI_OFF = false;
+let SPEAKING = false;
+function isSpeaking() { return SPEAKING; }
+
 function speakText(text, onEnd) {
-  if (!("speechSynthesis" in window)) return;
   stopSpeaking();
+  const t = plain(text).trim();
+  if (!t) return;
+  SPEAKING = true;
+  const done = onEnd;
+  onEnd = () => { SPEAKING = false; if (done) done(); };
+  const v = CFG.voice || {};
+  if (v.engine === "gemini" && !GEMINI_OFF) geminiSpeak(t, onEnd);
+  else browserSpeak(t, onEnd);
+}
+
+async function ttsFetch(chunk) {
+  const v = CFG.voice || {};
+  const r = await fetch(CFG.proxy + "/tts", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: me().voice || v.name }),
+  });
+  if (r.status === 501) GEMINI_OFF = true;
+  if (!r.ok) throw new Error("tts " + r.status);
+  return URL.createObjectURL(await r.blob());
+}
+
+async function geminiSpeak(t, onEnd) {
+  const id = ++SPEAK_ID;
+  // Первый кусок короче — чтобы голос зазвучал быстрее; следующие готовим заранее
+  const first = splitText(t, 250);
+  const chunks = [first[0], ...splitText(first.slice(1).join(""), 900)].filter((c) => c && c.trim());
+  let next = ttsFetch(chunks[0]);
+  for (let i = 0; i < chunks.length; i++) {
+    let url;
+    try { url = await next; }
+    catch (_) {
+      if (id !== SPEAK_ID) return;
+      AUDIO = null;
+      if (i === 0) return browserSpeak(chunks.join(" "), onEnd);
+      if (onEnd) onEnd();
+      return;
+    }
+    if (id !== SPEAK_ID) { URL.revokeObjectURL(url); return; }
+    if (i + 1 < chunks.length) next = ttsFetch(chunks[i + 1]);
+    await new Promise((res) => {
+      AUDIO = new Audio(url);
+      AUDIO.onended = AUDIO.onerror = () => { URL.revokeObjectURL(url); res(); };
+      AUDIO.play().catch(() => res());
+    });
+    if (id !== SPEAK_ID) return;
+  }
+  AUDIO = null;
+  if (onEnd) onEnd();
+}
+
+function browserSpeak(t, onEnd) {
+  if (!("speechSynthesis" in window)) { if (onEnd) onEnd(); return; }
   const voices = speechSynthesis.getVoices();
   const ru = voices.find((v) => v.lang === "ru-RU" && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith("ru"));
   // длинный текст читаем кусками — иначе на Android обрывается
-  const parts = plain(text).match(/[^.!?…]+[.!?…]*\s*/g) || [plain(text)];
-  const chunks = [];
-  let cur = "";
-  parts.forEach((p) => { if ((cur + p).length > 220) { chunks.push(cur); cur = p; } else cur += p; });
-  if (cur.trim()) chunks.push(cur);
+  const chunks = splitText(t, 220);
   chunks.forEach((c, i) => {
     const u = new SpeechSynthesisUtterance(c);
     u.lang = "ru-RU";
@@ -568,7 +630,12 @@ function speakText(text, onEnd) {
     speechSynthesis.speak(u);
   });
 }
-function stopSpeaking() { if ("speechSynthesis" in window) speechSynthesis.cancel(); }
+function stopSpeaking() {
+  SPEAK_ID++;
+  SPEAKING = false;
+  if (AUDIO) { try { AUDIO.pause(); } catch (_) {} AUDIO = null; }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 
 /* ===== Мини-разметка ответов ===== */

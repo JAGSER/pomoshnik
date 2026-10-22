@@ -115,6 +115,28 @@ async function callAnthropic(key, payload) {
   });
 }
 
+// Ищем в ответе Gemini звук в base64 (поле data рядом с mime_type/audio)
+function findAudio(o, depth = 0) {
+  if (!o || typeof o !== "object" || depth > 8) return null;
+  if (typeof o.data === "string" && o.data.length > 200) {
+    const mime = o.mime_type || o.mimeType || o.type || "";
+    return { data: o.data, mime };
+  }
+  for (const v of Object.values(o)) { const f = findAudio(v, depth + 1); if (f) return f; }
+  return null;
+}
+// Сырой PCM 16 бит моно -> WAV
+function pcmToWav(pcm, rate) {
+  const buf = new Uint8Array(44 + pcm.length);
+  const dv = new DataView(buf.buffer);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) buf[o + i] = s.charCodeAt(i); };
+  w(0, "RIFF"); dv.setUint32(4, 36 + pcm.length, true); w(8, "WAVE"); w(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  w(36, "data"); dv.setUint32(40, pcm.length, true); buf.set(pcm, 44);
+  return buf;
+}
+
 export async function handler(req, info) {
   const ip = info?.remoteAddr?.hostname || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "anon";
   const origin = req.headers.get("Origin") || "";
@@ -156,6 +178,32 @@ export async function handler(req, info) {
     const line = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().split("\n")[0];
     const m = line.match(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*(.*)$/u);
     return json({ emoji: m ? m[1] : "💬", title: (m ? m[2] : line).replace(/^["«]|["».]$/g, "").slice(0, 60) }, 200, h);
+  }
+
+  // Озвучка ответа голосом Gemini. Ключ — переменная GEMINI_KEY
+  if (url.pathname === "/tts") {
+    const gkey = env("GEMINI_KEY");
+    if (!gkey) return json({ error: "Голос Gemini не настроен" }, 501, h);
+    const text = String(body.text || "").slice(0, 5000);
+    if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
+    const voice = /^[A-Za-z]{3,20}$/.test(body.voice || "") ? body.voice : env("GEMINI_VOICE", "Sulafat");
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      method: "POST",
+      headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts"),
+        input: [{ type: "user_input", content: [{ type: "text", text,
+          annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
+        response_format: { type: "audio" },
+        generation_config: { speech_config: [{ voice }] },
+      }),
+    });
+    if (!r.ok) return json({ error: "Gemini не смог озвучить", details: (await r.text()).slice(0, 500) }, 502, h);
+    const audio = findAudio(await r.json());
+    if (!audio) return json({ error: "Gemini вернул ответ без звука" }, 502, h);
+    let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
+    if (!/wav/i.test(audio.mime || "") && !(bytes[0] === 0x52 && bytes[1] === 0x49)) bytes = pcmToWav(bytes, 24000);
+    return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
   }
 
   if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
