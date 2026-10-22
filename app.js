@@ -727,12 +727,12 @@ const VOICES = [
   ["Autonoe", "яркий"], ["Fenrir", "эмоциональный"], ["Pulcherrima", "напористый"], ["Enceladus", "с придыханием"], ["Algenib", "с хрипотцой"],
 ];
 function userVoice() {
-  return (SESSION && store.get("voice:" + SESSION.user)) || me().voice || (CFG.voice || {}).name || "Sulafat";
+  return (SESSION && store.get("voice:" + SESSION.user)) || me().voice || (CFG.voice || {}).name || "Algieba";
 }
 async function ttsFetch(chunk, voice) {
   const v = CFG.voice || {};
   voice = voice || userVoice();
-  const key = [voice, v.model || "", chunk.trim()].join("|");
+  const key = ttsKey(chunk, voice);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return URL.createObjectURL(blob); }
   blob = await ttsLoad(chunk, voice);
@@ -977,6 +977,13 @@ function stopSnippet() {
   SNIPPET.btn.classList.remove("playing");
   SNIPPET = null;
 }
+function ttsKey(chunk, voice) {
+  return [voice || userVoice(), (CFG.voice || {}).model || "", chunk.trim()].join("|");
+}
+async function ttsHas(chunk) {
+  const key = ttsKey(chunk);
+  return TTS_MEM.has(key) || !!(await ADB.get(key));
+}
 async function playSnippet(chat, btn) {
   const was = SNIPPET && SNIPPET.btn === btn;
   stopSnippet();
@@ -984,23 +991,38 @@ async function playSnippet(chat, btn) {
   if (was) return;
   const last = [...chat.messages].reverse().find((m) => m.role === "assistant");
   if (!last) { toast("В этом разговоре пока нет ответа"); return; }
-  const text = (last.tts && last.tts[0]) || firstChunk(plain(textOf(last)), true);
-  if (!text) return;
+  const first = (last.tts && last.tts[0]) || firstChunk(plain(textOf(last)), true);
+  if (!first) return;
   const me_ = { btn, audio: null };
   SNIPPET = me_;
   btn.classList.add("playing");
   const done = () => { if (SNIPPET === me_) { btn.classList.remove("playing"); SNIPPET = null; } };
-  if (!useGemini()) { browserSpeak(text, done); return; }
+  if (!useGemini()) { browserSpeak(first, done); return; }
+  // всё, что уже записано подряд с начала, играем целиком; иначе — только первую фразу
+  let parts = [first];
+  if (last.tts && last.tts.length > 1) {
+    parts = [];
+    for (const c of last.tts) { if (await ttsHas(c)) parts.push(c); else break; }
+    if (!parts.length) parts = [first];
+  }
   try {
-    const url = await ttsFetch(text);
-    if (SNIPPET !== me_) return;
-    me_.audio = new Audio(url);
-    me_.audio.playbackRate = RATE;
-    me_.audio.onended = me_.audio.onerror = done;
-    await me_.audio.play();
+    for (const part of parts) {
+      const url = await ttsFetch(part);
+      if (SNIPPET !== me_) return;
+      me_.audio = new Audio(url);
+      me_.audio.playbackRate = RATE;
+      await new Promise((res, rej) => {
+        me_.audio.onended = res;
+        me_.audio.onerror = rej;
+        me_.audio.onpause = () => { if (SNIPPET !== me_) res(); };
+        me_.audio.play().catch(rej);
+      });
+      if (SNIPPET !== me_) return;
+    }
+    done();
   } catch (err) {
     if (SNIPPET !== me_) return;
-    browserSpeak(text, done);
+    browserSpeak(first, done);
   }
 }
 
