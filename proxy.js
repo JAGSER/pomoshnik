@@ -70,8 +70,13 @@ function auth(body) {
   catch (_) { return { err: "Ошибка в настройке USERS: сбиты кавычки или скобки. Сообщите Юре.", status: 500 }; }
   if (!users || typeof users !== "object") return { err: "Настройка USERS пустая. Сообщите Юре.", status: 500 };
   const id = String(body.user || "").toLowerCase();
-  const u = users[id];
-  if (!u) return { err: `В настройке USERS нет пользователя «${id}». Сообщите Юре.`, status: 401 };
+  if (!users[id]) return { err: `В настройке USERS нет пользователя «${id}». Сообщите Юре.`, status: 401 };
+  // Пароль и ключ можно хранить отдельными переменными: PASSWORD_MAMA, KEY_MAMA
+  const u = { ...users[id] };
+  const ID = id.toUpperCase();
+  if (env("PASSWORD_" + ID)) u.password = env("PASSWORD_" + ID);
+  if (env("KEY_" + ID)) u.key = env("KEY_" + ID).trim();
+  if (!u.password) return { err: `Для «${id}» не задан пароль (PASSWORD_${ID}). Сообщите Юре.`, status: 500 };
   if (tooManyFails(id)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
   if (!safeEqual(norm(u.password), norm(body.password))) { addFail(id); return { err: "Неверный пароль", status: 401 }; }
   return { id, ...u };
