@@ -373,7 +373,7 @@ function actions(text, msg) {
   };
   const vid = el("button");
   vid.className = "vid-btn";
-  vid.textContent = "🎬";
+  vid.textContent = "🎬 Видео";
   vid.title = "Сохранить ответ как видео с озвучкой (9:16)";
   vid.setAttribute("aria-label", vid.title);
   vid.onclick = () => videoButton(vid, text, msg);
@@ -1245,7 +1245,7 @@ async function videoButton(btn, text, msg) {
   } catch (err) {
     console.error(err);
     btn.disabled = false;
-    label("🎬");
+    label("🎬 Видео");
     toast("Не получилось сделать видео: " + (err.message || err));
   } finally { VIDEO_BUSY = false; }
 }
@@ -1369,7 +1369,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=22");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=23");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
