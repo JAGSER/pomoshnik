@@ -133,12 +133,19 @@ async function startHome() {
   list.innerHTML = "";
   const chats = DB.db ? await DB.byUser(SESSION.user) : [];
   $("#history-title").hidden = !chats.length;
-  chats.slice(0, 30).forEach((c) => {
+  chats.sort((x, y) => (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || y.updated - x.updated);
+  chats.slice(0, 40).forEach((c) => {
     const p = CFG.presets[c.preset] || {};
     const li = document.createElement("li");
+    if (c.pinned) li.className = "pinned";
     const open = el("button", "hopen");
-    open.innerHTML = `<span class="hemoji">${esc(c.emoji || p.icon || "💬")}</span><span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${fmtDate(c.updated)}</span></span>`;
+    open.innerHTML = `<span class="hemoji">${esc(c.emoji || p.icon || "💬")}</span><span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${c.pinned ? "📌 закреплён · " : ""}${fmtDate(c.updated)}</span></span>`;
     open.onclick = () => openChat(c);
+    const pin = el("button", "icon-btn hdel" + (c.pinned ? " on" : ""));
+    pin.textContent = "📌";
+    pin.setAttribute("aria-label", c.pinned ? "Открепить разговор" : "Закрепить разговор");
+    pin.title = c.pinned ? "Открепить" : "Закрепить наверху";
+    pin.onclick = async () => { c.pinned = !c.pinned; if (DB.db) { try { await DB.put(c); } catch (_) {} } startHome(); };
     const ren = el("button", "icon-btn hdel");
     ren.textContent = "✏️";
     ren.setAttribute("aria-label", "Переименовать разговор");
@@ -151,7 +158,7 @@ async function startHome() {
       await DB.del(c.id);
       startHome();
     };
-    li.append(open, ren, del);
+    li.append(open, pin, ren, del);
     list.append(li);
   });
 }
@@ -269,12 +276,21 @@ function chip(text) { const s = el("span", "file-chip"); s.textContent = text; r
 
 function actions(text) {
   const a = el("div", "msg-actions");
-  const speak = el("button");
-  speak.textContent = "🔊 Вслух";
+  const speak = el("button", "speak-btn");
+  setSpeakBtn(speak, "idle");
   speak.onclick = () => {
-    if (isSpeaking()) { stopSpeaking(); speak.textContent = "🔊 Вслух"; return; }
-    speak.textContent = "⏹ Стоп";
-    speakText(text, () => (speak.textContent = "🔊 Вслух"));
+    // та же кнопка: пауза / продолжить, если сейчас читается именно этот ответ
+    if (SPEAKER && SPEAKER.owner === speak) { SPEAKER.paused ? SPEAKER.resume() : SPEAKER.pause(); return; }
+    speakText(text, speak);
+  };
+  const rate = el("button", "rate-btn");
+  rate.textContent = rateLabel();
+  rate.title = "Скорость чтения";
+  rate.onclick = () => {
+    RATE = RATES[(RATES.indexOf(RATE) + 1) % RATES.length];
+    store.set("rate", RATE);
+    document.querySelectorAll(".rate-btn").forEach((b) => (b.textContent = rateLabel()));
+    if (SPEAKER && SPEAKER.setRate) SPEAKER.setRate(RATE);
   };
   const copy = el("button");
   copy.textContent = "📋 Копия";
@@ -283,8 +299,15 @@ function actions(text) {
     catch (_) { copy.textContent = "Не вышло"; }
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
-  a.append(speak, copy);
+  a.append(speak, rate, copy);
   return a;
+}
+const RATES = [0.8, 1, 1.2, 1.5];
+let RATE = RATES.includes(Number(store.get("rate"))) ? Number(store.get("rate")) : 1;
+function rateLabel() { return "⏩ " + String(RATE).replace(".", ",") + "×"; }
+function setSpeakBtn(btn, state) {
+  if (!btn) return;
+  btn.textContent = state === "playing" ? "⏸ Пауза" : state === "paused" ? "▶ Дальше" : "🔊 Вслух";
 }
 
 function textOf(m) {
@@ -386,11 +409,13 @@ async function ask() {
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     CHAT.messages.push(msg);
-    bubble.append(actions(full));
+    const acts = actions(full);
+    bubble.append(acts);
     await save();
     autoTitle(CHAT);
-    if (live) live.end();
-    else if (u.readAloud) speakText(full);
+    const btn = acts.querySelector(".speak-btn");
+    if (live) { live.end(); if (SPEAKER === live) live.setOwner(btn); }
+    else if (u.readAloud) speakText(full, btn);
   } catch (err) {
     if (live) live.stop();
     if (full) {
@@ -570,12 +595,12 @@ let GEMINI_OFF = false;
 function isSpeaking() { return !!SPEAKER; }
 function useGemini() { return (CFG.voice || {}).engine === "gemini" && !GEMINI_OFF; }
 
-function speakText(text, onEnd) {
+function speakText(text, owner) {
   stopSpeaking();
   const t = plain(text).trim();
   if (!t) return;
-  if (!useGemini()) { SPEAKER = { stop() {} }; return browserSpeak(t, () => { SPEAKER = null; if (onEnd) onEnd(); }); }
-  const sp = new Speaker(onEnd);
+  const sp = useGemini() ? new Speaker() : new BrowserSpeaker();
+  sp.setOwner(owner);
   sp.push(text);
   sp.end();
 }
@@ -592,12 +617,28 @@ async function ttsFetch(chunk) {
 }
 
 class Speaker {
-  constructor(onEnd) {
-    this.onEnd = onEnd; this.full = ""; this.used = 0; this.queue = []; this.ended = false;
+  constructor() {
+    this.full = ""; this.used = 0; this.queue = []; this.ended = false;
     this.stopped = false; this.audio = null; this.wake = null; this.count = 0;
+    this.paused = false; this.owner = null; this.resumeWait = null; this.fallback = null;
     SPEAKER = this;
     this.run();
   }
+  setOwner(btn) { this.owner = btn; setSpeakBtn(btn, this.paused ? "paused" : "playing"); }
+  pause() {
+    this.paused = true;
+    if (this.audio) this.audio.pause();
+    if (this.fallback) this.fallback.pause();
+    setSpeakBtn(this.owner, "paused");
+  }
+  resume() {
+    this.paused = false;
+    if (this.audio) this.audio.play().catch(() => {});
+    if (this.fallback) this.fallback.resume();
+    if (this.resumeWait) { const r = this.resumeWait; this.resumeWait = null; r(); }
+    setSpeakBtn(this.owner, "playing");
+  }
+  setRate(r) { if (this.audio) this.audio.playbackRate = r; }
   // full — весь текст ответа на данный момент (растёт, пока Claude пишет)
   push(full) { this.full = full; this.cut(false); }
   end() { this.ended = true; this.cut(true); }
@@ -636,14 +677,21 @@ class Speaker {
         // Gemini не ответил — дочитываем встроенным голосом
         const left = [chunk, ...this.queue].join(" ");
         this.queue = [];
-        return browserSpeak(left, () => this.finish());
+        this.fallback = new BrowserSpeaker(true);
+        this.fallback.onDone = () => this.finish();
+        this.fallback.push(left); this.fallback.end();
+        if (this.paused) this.fallback.pause();
+        return;
       }
       // следующий кусок, если он уже готов, отправляем на озвучку заранее
       let upcoming = this.queue.length ? this.queue.shift() : undefined;
       if (upcoming && !this.stopped) pending = ttsFetch(upcoming);
       if (this.stopped) { URL.revokeObjectURL(url); return; }
+      if (this.paused) await new Promise((r) => (this.resumeWait = r));
+      if (this.stopped) { URL.revokeObjectURL(url); return; }
       await new Promise((res) => {
         this.audio = new Audio(url);
+        this.audio.playbackRate = RATE;
         this.audio.onended = this.audio.onerror = () => { URL.revokeObjectURL(url); res(); };
         this.audio.play().catch(() => res());
       });
@@ -653,13 +701,34 @@ class Speaker {
     }
     this.finish();
   }
-  finish() { if (SPEAKER === this) SPEAKER = null; if (!this.stopped && this.onEnd) this.onEnd(); this.onEnd = null; }
+  finish() { if (SPEAKER === this) SPEAKER = null; if (!this.stopped) setSpeakBtn(this.owner, "idle"); }
   stop() {
     this.stopped = true;
+    setSpeakBtn(this.owner, "idle");
+    if (this.fallback) this.fallback.stop();
+    if (this.resumeWait) { const r = this.resumeWait; this.resumeWait = null; r(); }
     if (this.audio) { try { this.audio.pause(); } catch (_) {} }
     if (this.wake) { const w = this.wake; this.wake = null; w(); }
     if (SPEAKER === this) SPEAKER = null;
   }
+}
+
+// Встроенный голос телефона — с тем же управлением (пауза, скорость)
+class BrowserSpeaker {
+  constructor(inner) { this.text = ""; this.paused = false; this.owner = null; this.onDone = null; this.inner = inner; if (!inner) SPEAKER = this; }
+  setOwner(btn) { this.owner = btn; setSpeakBtn(btn, "playing"); }
+  push(full) { this.text = plain(full); }
+  end() {
+    browserSpeak(this.text, () => {
+      if (!this.inner && SPEAKER === this) SPEAKER = null;
+      setSpeakBtn(this.owner, "idle");
+      if (this.onDone) this.onDone();
+    });
+  }
+  pause() { this.paused = true; if ("speechSynthesis" in window) speechSynthesis.pause(); setSpeakBtn(this.owner, "paused"); }
+  resume() { this.paused = false; if ("speechSynthesis" in window) speechSynthesis.resume(); setSpeakBtn(this.owner, "playing"); }
+  setRate() {}
+  stop() { if ("speechSynthesis" in window) speechSynthesis.cancel(); setSpeakBtn(this.owner, "idle"); if (!this.inner && SPEAKER === this) SPEAKER = null; }
 }
 
 function browserSpeak(t, onEnd) {
@@ -672,7 +741,7 @@ function browserSpeak(t, onEnd) {
     const u = new SpeechSynthesisUtterance(c);
     u.lang = "ru-RU";
     if (ru) u.voice = ru;
-    u.rate = 0.95;
+    u.rate = 0.95 * RATE;
     if (i === chunks.length - 1 && onEnd) u.onend = onEnd;
     speechSynthesis.speak(u);
   });
@@ -710,6 +779,28 @@ function md(src) {
   closeList();
   return out.join("").replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre><code>${blocks[i]}</code></pre>`);
 }
+
+/* ===== Установка на рабочий стол ===== */
+let INSTALL_EVT = null;
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+function isStandalone() { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+function updateInstall() {
+  const can = !isStandalone() && (INSTALL_EVT || IS_IOS);
+  document.querySelectorAll(".install-btn").forEach((b) => (b.hidden = !can));
+}
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL_EVT = e; updateInstall(); });
+window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstall(); });
+document.querySelectorAll(".install-btn").forEach((b) => (b.onclick = async () => {
+  if (INSTALL_EVT) {
+    INSTALL_EVT.prompt();
+    try { await INSTALL_EVT.userChoice; } catch (_) {}
+    INSTALL_EVT = null;
+    updateInstall();
+  } else if (IS_IOS) {
+    alert("Чтобы установить на iPhone: нажмите кнопку «Поделиться» (квадрат со стрелкой) внизу экрана Safari и выберите «На экран Домой».");
+  }
+}));
+updateInstall();
 
 /* ===== Мелочи ===== */
 function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }

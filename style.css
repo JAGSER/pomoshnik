@@ -158,3 +158,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .think-toggle:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .chat-title { cursor: pointer; }
 .hemoji { font-size: 1.3em; width: 1.6em; text-align: center; flex: none; }
+
+.btn-install { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+.history li.pinned { border-color: var(--accent); }
+.history .hdel { min-width: 44px; }
+.history .hdel.on { filter: none; }
+.history .hdel:not(.on)[aria-label^="Закрепить"] { filter: grayscale(1); opacity: .55; }
+.msg-actions { flex-wrap: wrap; }

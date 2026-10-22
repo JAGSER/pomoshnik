@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -24,6 +24,7 @@
       <div class="pass-row"><input id="login-pass" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required><button type="button" id="pass-toggle" class="btn btn-ghost small pass-toggle">Показать</button></div>
       <button type="submit" class="btn btn-primary btn-wide">Войти</button>
       <p id="login-error" class="error" role="alert"></p>
+      <button type="button" class="btn btn-install btn-wide install-btn" hidden>⬇ Установить на телефон</button>
     </form>
   </div>
 </section>
@@ -32,6 +33,7 @@
 <section id="screen-home" class="screen" hidden>
   <header class="topbar">
     <h1 class="hello" id="hello"></h1>
+    <button class="btn btn-install small install-btn" hidden>⬇ Установить</button>
     <button id="btn-logout" class="btn btn-ghost small" aria-label="Выйти">Выйти</button>
   </header>
   <main class="home-main">
@@ -59,6 +61,6 @@
   </form>
 </section>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>
