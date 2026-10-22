@@ -624,13 +624,19 @@ function stopListening() { if (rec) { try { rec.stop(); } catch (_) {} } }
 
 /* ===== Голос: чтение вслух ===== */
 function plain(text) {
+  // Убираем разметку и превращаем заголовки и пункты списка в обычные фразы,
+  // чтобы голос читал текст связно, а не кусками
   return text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/https?:\/\/\S+/g, "")
-    .replace(/[*_#`>|]/g, "")
-    .replace(/^\s*[-•]\s+/gm, "")
-    .replace(/\n{2,}/g, ". ");
+    .replace(/[*_`>|#]/g, "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*(?:[-•]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean)
+    .map((l, i, arr) => (i < arr.length - 1 && !/[.!?…:;,]$/.test(l) ? l + "." : l))
+    .join(" ")
+    .replace(/\s{2,}/g, " ");
 }
 function splitText(t, max) {
   const parts = t.match(/[^.!?…]+[.!?…]*\s*/g) || [t];
@@ -724,12 +730,18 @@ class Speaker {
     const t = plain(this.full);
     let rest = t.slice(this.used);
     for (;;) {
-      const limit = this.count === 0 ? 140 : 450;
-      // ищем конец предложения не дальше лимита (или последний, если кусок короче)
-      const re = /[.!?…:;\n]+\s/g;
+      // первый кусок короткий (голос стартует быстрее), остальные крупные (меньше пауз)
+      const first = this.count === 0;
+      const min = first ? 50 : 300, max = first ? 260 : 900;
+      if (!final && rest.length < (first ? min : 600)) break;
+      const re = /[.!?…]+["»)]*\s+/g;
       let end = -1, m;
-      while ((m = re.exec(rest))) { if (m.index + m[0].length <= limit || end < 0) end = m.index + m[0].length; if (end >= limit) break; }
-      if (end < 0 || (end < 25 && !final && rest.length < limit)) {
+      while ((m = re.exec(rest))) {
+        const e = m.index + m[0].length;
+        if (e <= max || end < 0) end = e;
+        if (e >= max) break;
+      }
+      if (end < 0 || (!final && end < min)) {
         if (final && rest.trim()) { this.add(rest); this.used = t.length; }
         break;
       }
@@ -738,7 +750,13 @@ class Speaker {
     // будим очередь, только когда есть что читать или текст закончился
     if (this.wake && (this.queue.length || this.ended)) { const w = this.wake; this.wake = null; w(); }
   }
-  add(chunk) { if (chunk.trim()) { this.queue.push(chunk); this.all.push(chunk); this.count++; } }
+  // каждый кусок сразу отправляем на озвучку — пока звучит первый, остальные уже готовятся
+  add(chunk) {
+    if (!chunk.trim()) return;
+    const item = { text: chunk, p: useGemini() ? ttsFetch(chunk) : null };
+    if (item.p) item.p.catch(() => {});
+    this.queue.push(item); this.all.push(chunk); this.count++;
+  }
   // повтор: режем текст так же, как в прошлый раз, чтобы взять звук из кэша
   preset(full, chunks) {
     this.full = full;
@@ -753,16 +771,15 @@ class Speaker {
     return new Promise((res) => { this.wake = () => res(this.next()); });
   }
   async run() {
-    let chunk = await this.next();
-    let pending = chunk ? ttsFetch(chunk) : null;
-    while (chunk && !this.stopped) {
+    let item = await this.next();
+    while (item && !this.stopped) {
       let url;
-      try { url = await pending; }
+      try { url = await item.p; }
       catch (err) {
         if (this.stopped) return;
         toast((err && err.message ? err.message : "Голос Gemini недоступен") + " — читаю голосом телефона");
         // Gemini не ответил — дочитываем встроенным голосом
-        const left = [chunk, ...this.queue].join(" ");
+        const left = [item.text, ...this.queue.map((q) => q.text)].join(" ");
         this.queue = [];
         this.fallback = new BrowserSpeaker(true);
         this.fallback.onDone = () => this.finish();
@@ -770,9 +787,6 @@ class Speaker {
         if (this.paused) this.fallback.pause();
         return;
       }
-      // следующий кусок, если он уже готов, отправляем на озвучку заранее
-      let upcoming = this.queue.length ? this.queue.shift() : undefined;
-      if (upcoming && !this.stopped) pending = ttsFetch(upcoming);
       if (this.stopped) { URL.revokeObjectURL(url); return; }
       if (this.paused) await new Promise((r) => (this.resumeWait = r));
       if (this.stopped) { URL.revokeObjectURL(url); return; }
@@ -783,8 +797,7 @@ class Speaker {
         this.audio.play().catch(() => res());
       });
       this.audio = null;
-      if (upcoming === undefined) { upcoming = await this.next(); if (upcoming && !this.stopped) pending = ttsFetch(upcoming); }
-      chunk = upcoming;
+      item = await this.next();
     }
     this.finish();
   }
