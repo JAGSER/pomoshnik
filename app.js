@@ -325,7 +325,7 @@ async function ask() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      if (r.status === 401) { store.del("session"); throw new Error("Пароль больше не подходит. Войдите заново."); }
+      if (r.status === 401 && /пароль/i.test(d.error || "")) { store.del("session"); throw new Error("Пароль больше не подходит. Войдите заново."); }
       throw new Error(d.error || "Не получилось получить ответ");
     }
     const reader = r.body.getReader();

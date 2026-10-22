@@ -160,8 +160,10 @@ export async function handler(req) {
     if (res.status === 401) msg = "Ключ API недействителен — сообщите Юре";
     if (res.status === 429) msg = "Слишком много запросов или закончился лимит — подождите немного";
     if (res.status === 529) msg = "Claude перегружен, попробуйте через минуту";
+    if (res.status === 403) msg = "Anthropic отказал в доступе (ключ или регион) — сообщите Юре";
     if (/credit|billing|spend/i.test(text)) msg = "Закончился лимит трат — сообщите Юре";
-    return json({ error: msg, details: text.slice(0, 500) }, res.status, h);
+    // Ошибки Anthropic отдаём как 502, чтобы приложение не путало их с неверным паролем
+    return json({ error: msg, details: text.slice(0, 500) }, res.status === 401 || res.status === 403 ? 502 : res.status, h);
   }
 
   return new Response(res.body, {
