@@ -372,8 +372,10 @@ function actions(text, msg) {
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
   const vid = el("button");
-  vid.textContent = "🎬 Видео";
+  vid.className = "vid-btn";
+  vid.textContent = "🎬";
   vid.title = "Сохранить ответ как видео с озвучкой (9:16)";
+  vid.setAttribute("aria-label", vid.title);
   vid.onclick = () => videoButton(vid, text, msg);
   a.append(speak, copy, vid);
   return a;
@@ -1217,8 +1219,8 @@ async function videoButton(btn, text, msg) {
     const ac = new OfflineAudioContext(1, 1, VRATE);
     const parts = [];
     let done = 0;
-    label(`🎬 Озвучка 0/${chunks.length}`);
-    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c).then((b) => { done++; label(`🎬 Озвучка ${done}/${chunks.length}`); return b; })));
+    label(`⏳ 0/${chunks.length}`);
+    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c).then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
@@ -1231,18 +1233,19 @@ async function videoButton(btn, text, msg) {
       off += a.length;
     });
     // 2) сборка видео
-    label("🎬 Видео 0%");
+    label("⏳ 0%");
     const scene = makeScene(emoji, title, subs, pcm.length / VRATE);
-    const blob = await encodeVideo(scene, pcm, (k) => label(`🎬 Видео ${Math.round(k * 100)}%`));
+    const blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`));
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
     btn.disabled = false;
-    label("💾 Сохранить видео");
-    toast("Видео готово — нажмите «Сохранить видео»");
+    label("💾 Видео");
+    btn.classList.add("ready");
+    toast("Видео готово — нажмите «💾 Видео», чтобы сохранить");
   } catch (err) {
     console.error(err);
     btn.disabled = false;
-    label("🎬 Видео");
+    label("🎬");
     toast("Не получилось сделать видео: " + (err.message || err));
   } finally { VIDEO_BUSY = false; }
 }
@@ -1366,7 +1369,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=21");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=22");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

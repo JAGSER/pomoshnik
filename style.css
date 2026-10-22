@@ -196,3 +196,5 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .history .hemoji { border: 0; background: none; cursor: pointer; font-size: 1.4em; min-width: 52px; min-height: 52px; border-radius: 12px; flex: none; }
 .history .hemoji.playing { background: var(--accent-soft); animation: pulse 1.2s infinite; }
 .history .hopen { padding-left: 4px; }
+.msg-actions .vid-btn { margin-left: auto; min-width: 48px; }
+.msg-actions .vid-btn.ready { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
