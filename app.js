@@ -338,6 +338,9 @@ async function ask() {
   setBusy(true);
   ABORT = new AbortController();
   let full = "";
+  // Чтение вслух начинается, пока Claude ещё пишет ответ
+  stopSpeaking();
+  const live = u.readAloud && useGemini() ? new Speaker() : null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
@@ -373,6 +376,7 @@ async function ask() {
           if (!started) { started = true; body.classList.remove("typing"); }
           full += ev.delta.text;
           body.innerHTML = md(full);
+          if (live) live.push(full);
           scrollDown();
         } else if (ev.type === "error") {
           throw new Error(ev.error?.type === "overloaded_error" ? "Claude перегружен, попробуйте через минуту" : "Ошибка при ответе");
@@ -385,8 +389,10 @@ async function ask() {
     bubble.append(actions(full));
     await save();
     autoTitle(CHAT);
-    if (u.readAloud) speakText(full);
+    if (live) live.end();
+    else if (u.readAloud) speakText(full);
   } catch (err) {
+    if (live) live.stop();
     if (full) {
       // ответ оборвали — сохраняем то, что успело прийти
       CHAT.messages.push({ role: "assistant", content: [{ type: "text", text: full + "\n\n…(ответ остановлен)" }] });
@@ -556,63 +562,104 @@ function splitText(t, max) {
   return out;
 }
 
-// Озвучка: голос Gemini через прослойку, при сбое — встроенный голос телефона
-let SPEAK_ID = 0;
-let AUDIO = null;
+// Озвучка: голос Gemini через прослойку, при сбое — встроенный голос телефона.
+// Текст режется на куски по предложениям; первый кусок короткий, чтобы голос зазвучал быстро,
+// следующие готовятся, пока звучит предыдущий. Можно подавать текст по мере того, как Claude его пишет.
+let SPEAKER = null;
 let GEMINI_OFF = false;
-let SPEAKING = false;
-function isSpeaking() { return SPEAKING; }
+function isSpeaking() { return !!SPEAKER; }
+function useGemini() { return (CFG.voice || {}).engine === "gemini" && !GEMINI_OFF; }
 
 function speakText(text, onEnd) {
   stopSpeaking();
   const t = plain(text).trim();
   if (!t) return;
-  SPEAKING = true;
-  const done = onEnd;
-  onEnd = () => { SPEAKING = false; if (done) done(); };
-  const v = CFG.voice || {};
-  if (v.engine === "gemini" && !GEMINI_OFF) geminiSpeak(t, onEnd);
-  else browserSpeak(t, onEnd);
+  if (!useGemini()) { SPEAKER = { stop() {} }; return browserSpeak(t, () => { SPEAKER = null; if (onEnd) onEnd(); }); }
+  const sp = new Speaker(onEnd);
+  sp.push(text);
+  sp.end();
 }
 
 async function ttsFetch(chunk) {
   const v = CFG.voice || {};
   const r = await fetch(CFG.proxy + "/tts", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: me().voice || v.name }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: me().voice || v.name, model: v.model }),
   });
   if (r.status === 501) GEMINI_OFF = true;
   if (!r.ok) throw new Error("tts " + r.status);
   return URL.createObjectURL(await r.blob());
 }
 
-async function geminiSpeak(t, onEnd) {
-  const id = ++SPEAK_ID;
-  // Первый кусок короче — чтобы голос зазвучал быстрее; следующие готовим заранее
-  const first = splitText(t, 250);
-  const chunks = [first[0], ...splitText(first.slice(1).join(""), 900)].filter((c) => c && c.trim());
-  let next = ttsFetch(chunks[0]);
-  for (let i = 0; i < chunks.length; i++) {
-    let url;
-    try { url = await next; }
-    catch (_) {
-      if (id !== SPEAK_ID) return;
-      AUDIO = null;
-      if (i === 0) return browserSpeak(chunks.join(" "), onEnd);
-      if (onEnd) onEnd();
-      return;
-    }
-    if (id !== SPEAK_ID) { URL.revokeObjectURL(url); return; }
-    if (i + 1 < chunks.length) next = ttsFetch(chunks[i + 1]);
-    await new Promise((res) => {
-      AUDIO = new Audio(url);
-      AUDIO.onended = AUDIO.onerror = () => { URL.revokeObjectURL(url); res(); };
-      AUDIO.play().catch(() => res());
-    });
-    if (id !== SPEAK_ID) return;
+class Speaker {
+  constructor(onEnd) {
+    this.onEnd = onEnd; this.full = ""; this.used = 0; this.queue = []; this.ended = false;
+    this.stopped = false; this.audio = null; this.wake = null; this.count = 0;
+    SPEAKER = this;
+    this.run();
   }
-  AUDIO = null;
-  if (onEnd) onEnd();
+  // full — весь текст ответа на данный момент (растёт, пока Claude пишет)
+  push(full) { this.full = full; this.cut(false); }
+  end() { this.ended = true; this.cut(true); }
+  cut(final) {
+    const t = plain(this.full);
+    let rest = t.slice(this.used);
+    for (;;) {
+      const limit = this.count === 0 ? 140 : 450;
+      // ищем конец предложения не дальше лимита (или последний, если кусок короче)
+      const re = /[.!?…:;\n]+\s/g;
+      let end = -1, m;
+      while ((m = re.exec(rest))) { if (m.index + m[0].length <= limit || end < 0) end = m.index + m[0].length; if (end >= limit) break; }
+      if (end < 0 || (end < 25 && !final && rest.length < limit)) {
+        if (final && rest.trim()) { this.add(rest); this.used = t.length; }
+        break;
+      }
+      this.add(rest.slice(0, end)); this.used += end; rest = rest.slice(end);
+    }
+    // будим очередь, только когда есть что читать или текст закончился
+    if (this.wake && (this.queue.length || this.ended)) { const w = this.wake; this.wake = null; w(); }
+  }
+  add(chunk) { if (chunk.trim()) { this.queue.push(chunk); this.count++; } }
+  next() {
+    if (this.queue.length) return Promise.resolve(this.queue.shift());
+    if (this.ended || this.stopped) return Promise.resolve(null);
+    return new Promise((res) => { this.wake = () => res(this.next()); });
+  }
+  async run() {
+    let chunk = await this.next();
+    let pending = chunk ? ttsFetch(chunk) : null;
+    while (chunk && !this.stopped) {
+      let url;
+      try { url = await pending; }
+      catch (_) {
+        if (this.stopped) return;
+        // Gemini не ответил — дочитываем встроенным голосом
+        const left = [chunk, ...this.queue].join(" ");
+        this.queue = [];
+        return browserSpeak(left, () => this.finish());
+      }
+      // следующий кусок, если он уже готов, отправляем на озвучку заранее
+      let upcoming = this.queue.length ? this.queue.shift() : undefined;
+      if (upcoming && !this.stopped) pending = ttsFetch(upcoming);
+      if (this.stopped) { URL.revokeObjectURL(url); return; }
+      await new Promise((res) => {
+        this.audio = new Audio(url);
+        this.audio.onended = this.audio.onerror = () => { URL.revokeObjectURL(url); res(); };
+        this.audio.play().catch(() => res());
+      });
+      this.audio = null;
+      if (upcoming === undefined) { upcoming = await this.next(); if (upcoming && !this.stopped) pending = ttsFetch(upcoming); }
+      chunk = upcoming;
+    }
+    this.finish();
+  }
+  finish() { if (SPEAKER === this) SPEAKER = null; if (!this.stopped && this.onEnd) this.onEnd(); this.onEnd = null; }
+  stop() {
+    this.stopped = true;
+    if (this.audio) { try { this.audio.pause(); } catch (_) {} }
+    if (this.wake) { const w = this.wake; this.wake = null; w(); }
+    if (SPEAKER === this) SPEAKER = null;
+  }
 }
 
 function browserSpeak(t, onEnd) {
@@ -631,9 +678,7 @@ function browserSpeak(t, onEnd) {
   });
 }
 function stopSpeaking() {
-  SPEAK_ID++;
-  SPEAKING = false;
-  if (AUDIO) { try { AUDIO.pause(); } catch (_) {} AUDIO = null; }
+  if (SPEAKER) { SPEAKER.stop(); SPEAKER = null; }
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};

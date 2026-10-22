@@ -115,6 +115,8 @@ async function callAnthropic(key, payload) {
   });
 }
 
+const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
+
 // Ищем в ответе Gemini звук в base64 (поле data рядом с mime_type/audio)
 function findAudio(o, depth = 0) {
   if (!o || typeof o !== "object" || depth > 8) return null;
@@ -191,7 +193,7 @@ export async function handler(req, info) {
       method: "POST",
       headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
       body: JSON.stringify({
-        model: env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts"),
+        model: TTS_MODELS.includes(body.model) ? body.model : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts"),
         input: [{ type: "user_input", content: [{ type: "text", text,
           annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
         response_format: { type: "audio" },
