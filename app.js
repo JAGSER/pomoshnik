@@ -17,21 +17,48 @@ const DB = {
   db: null,
   open() {
     return new Promise((res, rej) => {
-      // без номера версии: открываем то, что уже есть на устройстве, — так обновления не конфликтуют
-      const r = indexedDB.open("pomoshnik");
-      r.onupgradeneeded = () => {
-        const db = r.result;
-        if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "id" }).createIndex("user", "user");
-      };
+      // Новое отдельное хранилище: старые версии приложения его не трогают и не блокируют
+      const r = indexedDB.open("pomoshnik-chats", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("chats", { keyPath: "id" }).createIndex("user", "user");
       r.onsuccess = () => {
         this.db = r.result;
-        this.db.onversionchange = () => { try { this.db.close(); } catch (_) {} this.db = null; location.reload(); };
+        this.db.onversionchange = () => { try { this.db.close(); } catch (_) {} this.db = null; };
         res();
-        // если хранилище открылось позже, чем показалась главная, — обновляем список разговоров
-        if (SESSION && !$("#screen-home").hidden) startHome();
+        this.migrate();
       };
       r.onerror = () => rej(r.error);
+      r.onblocked = () => rej(new Error("blocked"));
     });
+  },
+  // Один раз переносим разговоры из старого хранилища «pomoshnik»; если оно занято — попробуем при следующем запуске
+  migrate() {
+    if (store.get("migrated-v2")) return;
+    let done = false;
+    const finish = () => { done = true; };
+    setTimeout(finish, 4000);
+    try {
+      const r = indexedDB.open("pomoshnik");
+      r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (_) {} };
+      r.onsuccess = () => {
+        const old = r.result;
+        if (done || !old.objectStoreNames.contains("chats")) { old.close(); if (!done) store.set("migrated-v2", true); return; }
+        const g = old.transaction("chats").objectStore("chats").getAll();
+        g.onsuccess = () => {
+          const list = g.result || [];
+          old.close();
+          if (!this.db) return;
+          const tx = this.db.transaction("chats", "readwrite");
+          const st = tx.objectStore("chats");
+          list.forEach((c) => { const q = st.get(c.id); q.onsuccess = () => { if (!q.result) st.put(c); }; });
+          tx.oncomplete = () => {
+            store.set("migrated-v2", true);
+            if (list.length && SESSION && !$("#screen-home").hidden) startHome();
+          };
+        };
+        g.onerror = () => old.close();
+      };
+      r.onerror = r.onblocked = () => {};
+    } catch (_) {}
   },
   tx(mode) { return this.db.transaction("chats", mode).objectStore("chats"); },
   put(chat) {
@@ -683,21 +710,34 @@ function rememberChunks(msg, sp) {
 }
 
 const TTS_MEM = new Map();
-async function ttsFetch(chunk) {
+// 30 голосов Gemini: все одинаковые по цене, говорят по-русски
+const VOICES = [
+  ["Sulafat", "тёплый"], ["Vindemiatrix", "нежный"], ["Achird", "дружелюбный"], ["Gacrux", "зрелый"], ["Schedar", "ровный"],
+  ["Callirrhoe", "спокойный"], ["Umbriel", "спокойный"], ["Algieba", "плавный"], ["Despina", "плавный"], ["Achernar", "мягкий"],
+  ["Charon", "дикторский"], ["Rasalgethi", "дикторский"], ["Iapetus", "чёткий"], ["Erinome", "чёткий"], ["Sadaltager", "знающий"],
+  ["Kore", "твёрдый"], ["Orus", "твёрдый"], ["Alnilam", "твёрдый"], ["Zubenelgenubi", "непринуждённый"], ["Aoede", "лёгкий"],
+  ["Leda", "молодой"], ["Puck", "бодрый"], ["Laomedeia", "бодрый"], ["Sadachbia", "живой"], ["Zephyr", "яркий"],
+  ["Autonoe", "яркий"], ["Fenrir", "эмоциональный"], ["Pulcherrima", "напористый"], ["Enceladus", "с придыханием"], ["Algenib", "с хрипотцой"],
+];
+function userVoice() {
+  return (SESSION && store.get("voice:" + SESSION.user)) || me().voice || (CFG.voice || {}).name || "Sulafat";
+}
+async function ttsFetch(chunk, voice) {
   const v = CFG.voice || {};
-  const key = [me().voice || v.name || "", v.model || "", chunk.trim()].join("|");
+  voice = voice || userVoice();
+  const key = [voice, v.model || "", chunk.trim()].join("|");
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return URL.createObjectURL(blob); }
-  blob = await ttsLoad(chunk);
+  blob = await ttsLoad(chunk, voice);
   TTS_MEM.set(key, blob);
   ADB.put(key, blob);
   return URL.createObjectURL(blob);
 }
-async function ttsLoad(chunk) {
+async function ttsLoad(chunk, voice) {
   const v = CFG.voice || {};
   const r = await fetch(CFG.proxy + "/tts", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: me().voice || v.name, model: v.model }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: v.model }),
   });
   if (r.status === 501) GEMINI_OFF = true;
   if (!r.ok) {
@@ -895,6 +935,60 @@ function md(src) {
   });
   closeList();
   return out.join("").replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre><code>${blocks[i]}</code></pre>`);
+}
+
+/* ===== Настройки ===== */
+$("#btn-settings").onclick = openSettings;
+$("#settings-back").onclick = () => { stopPreview(); startHome(); };
+let PREVIEW = null;
+function stopPreview() {
+  if (PREVIEW) { try { PREVIEW.pause(); } catch (_) {} PREVIEW = null; }
+  document.querySelectorAll(".voice-play").forEach((b) => (b.textContent = "▶"));
+}
+function openSettings() {
+  stopSpeaking();
+  show("screen-settings");
+  const list = $("#voice-list");
+  list.innerHTML = "";
+  const cur = userVoice();
+  VOICES.forEach(([name, desc]) => {
+    const li = el("li", "voice" + (name === cur ? " on" : ""));
+    const pick = el("button", "voice-pick");
+    pick.innerHTML = `<span class="vname">${esc(name)}</span><span class="vdesc">${esc(desc)}</span>${name === cur ? '<span class="vcheck">✓</span>' : ""}`;
+    pick.onclick = () => { store.set("voice:" + SESSION.user, name); openSettings(); toast("Голос выбран: " + name); };
+    const play = el("button", "icon-btn voice-play");
+    play.textContent = "▶";
+    play.setAttribute("aria-label", "Послушать голос " + name);
+    play.onclick = async () => {
+      const was = play.textContent;
+      stopPreview();
+      if (was !== "▶") return;
+      play.textContent = "⏳";
+      try {
+        const url = await ttsFetch("Здравствуйте! Так звучит мой голос. Я буду читать вам ответы.", name);
+        if (play.textContent !== "⏳") return;
+        PREVIEW = new Audio(url);
+        PREVIEW.playbackRate = RATE;
+        play.textContent = "⏹";
+        PREVIEW.onended = () => { play.textContent = "▶"; PREVIEW = null; };
+        PREVIEW.play().catch(() => (play.textContent = "▶"));
+      } catch (err) {
+        play.textContent = "▶";
+        toast(err && err.message ? err.message : "Не удалось загрузить голос");
+      }
+    };
+    li.append(pick, play);
+    list.append(li);
+  });
+  document.querySelectorAll("#rate-seg button").forEach((b) => {
+    b.classList.toggle("on", Number(b.dataset.rate) === RATE);
+    b.onclick = () => {
+      RATE = Number(b.dataset.rate);
+      store.set("rate", RATE);
+      $("#rate-btn").textContent = rateLabel();
+      document.querySelectorAll("#rate-seg button").forEach((x) => x.classList.toggle("on", x === b));
+    };
+  });
 }
 
 /* ===== Установка на рабочий стол ===== */

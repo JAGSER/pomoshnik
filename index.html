@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
@@ -34,12 +34,31 @@
   <header class="topbar">
     <h1 class="hello" id="hello"></h1>
     <button class="icon-btn install-btn install-icon" hidden aria-label="Установить на рабочий стол" title="Установить на рабочий стол">📲</button>
-    <button id="btn-logout" class="btn btn-ghost small" aria-label="Выйти">Выйти</button>
+    <button id="btn-settings" class="icon-btn settings-btn" aria-label="Настройки" title="Настройки">⚙️</button>
   </header>
   <main class="home-main">
     <div id="preset-grid" class="preset-grid"></div>
     <h2 class="section-title" id="history-title" hidden>Прошлые разговоры</h2>
     <ul id="history" class="history"></ul>
+  </main>
+</section>
+
+<!-- Настройки -->
+<section id="screen-settings" class="screen" hidden>
+  <header class="topbar">
+    <button id="settings-back" class="icon-btn" aria-label="Назад">←</button>
+    <h1 class="chat-title">Настройки</h1>
+  </header>
+  <main class="home-main settings">
+    <h2 class="section-title">Голос</h2>
+    <p class="hint">Нажмите ▶, чтобы послушать, и выберите понравившийся.</p>
+    <ul id="voice-list" class="voice-list"></ul>
+    <h2 class="section-title">Скорость чтения</h2>
+    <div class="seg" id="rate-seg">
+      <button type="button" data-rate="1.2">1×</button>
+      <button type="button" data-rate="1.5">1,5×</button>
+    </div>
+    <button id="btn-logout" class="btn btn-ghost btn-wide logout">Выйти</button>
   </main>
 </section>
 
@@ -65,6 +84,6 @@
   </form>
 </section>
 
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>
