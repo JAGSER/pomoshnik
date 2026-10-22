@@ -69,57 +69,39 @@ async function init() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-/* ===== Вход ===== */
-let loginUser = null;
+/* ===== Вход (только пароль — прослойка сама находит человека) ===== */
 function startLogin() {
   document.documentElement.classList.remove("big");
   show("screen-login");
-  $("#login-form").hidden = true;
-  const tiles = $("#user-tiles");
-  tiles.hidden = false;
-  tiles.innerHTML = "";
-  Object.entries(CFG.users).forEach(([id, u]) => {
-    const b = el("button", "user-tile");
-    b.innerHTML = `<span class="av">${esc(u.avatar || "🙂")}</span>${esc(u.name)}`;
-    b.onclick = () => pickUser(id);
-    tiles.append(b);
-  });
-}
-function pickUser(id) {
-  loginUser = id;
-  const u = CFG.users[id];
-  $("#user-tiles").hidden = true;
-  $("#login-form").hidden = false;
-  $("#login-avatar").textContent = u.avatar || "🙂";
-  $("#login-name").textContent = u.name;
   $("#login-error").textContent = "";
   $("#login-pass").value = "";
   $("#login-pass").type = "password";
   $("#pass-toggle").textContent = "Показать";
-  $("#login-pass").focus();
+  if (!matchMedia("(pointer: coarse)").matches) $("#login-pass").focus();
 }
-$("#login-back").onclick = startLogin;
 // В поле пароля многие Android-клавиатуры дают только английскую раскладку.
 // «Показать» делает поле обычным — тогда доступна и русская.
 $("#pass-toggle").onclick = () => {
   const f = $("#login-pass");
-  const show = f.type === "password";
-  f.type = show ? "text" : "password";
-  $("#pass-toggle").textContent = show ? "Скрыть" : "Показать";
+  const showIt = f.type === "password";
+  f.type = showIt ? "text" : "password";
+  $("#pass-toggle").textContent = showIt ? "Скрыть" : "Показать";
   f.blur(); setTimeout(() => f.focus(), 50);
 };
 $("#login-form").onsubmit = async (e) => {
   e.preventDefault();
   const password = $("#login-pass").value.trim();
+  if (!password) return;
   $("#login-error").textContent = "Проверяю…";
   try {
     const r = await fetch(CFG.proxy + "/login", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: loginUser, password }),
+      body: JSON.stringify({ password }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { $("#login-error").textContent = d.error || "Не получилось войти"; return; }
-    SESSION = { user: loginUser, password, models: d.models, webSearch: d.webSearch };
+    if (!CFG.users[d.user]) { $("#login-error").textContent = "Пользователь не найден в настройках приложения"; return; }
+    SESSION = { user: d.user, password, models: d.models, webSearch: d.webSearch };
     store.set("session", SESSION);
     startHome();
   } catch (_) {

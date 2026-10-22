@@ -18,10 +18,6 @@ function env(name, def = "") {
   return def;
 }
 
-function loadUsers() {
-  try { return JSON.parse(env("USERS", "{}")); } catch (_) { return {}; }
-}
-
 function cors(origin) {
   const allowed = env("ALLOWED_ORIGIN", "*");
   const list = allowed.split(",").map((s) => s.trim());
@@ -63,22 +59,47 @@ function addFail(id) { (fails.get(id) || fails.set(id, []).get(id)).push(Date.no
 // Пароль сравниваем без пробелов по краям и в единой форме букв (й/ё и т.п.)
 const norm = (s) => String(s ?? "").trim().normalize("NFC");
 
-// Возвращает пользователя или { err, status } с понятной причиной
-function auth(body) {
+// Загружает всех пользователей вместе с паролями и ключами из переменных
+function loadAll() {
   let users;
   try { users = JSON.parse(env("USERS", "")); }
   catch (_) { return { err: "Ошибка в настройке USERS: сбиты кавычки или скобки.", status: 500 }; }
   if (!users || typeof users !== "object") return { err: "Настройка USERS пустая.", status: 500 };
-  const id = String(body.user || "").toLowerCase();
-  if (!users[id]) return { err: `В настройке USERS нет пользователя «${id}».`, status: 401 };
-  // Пароль и ключ можно хранить отдельными переменными: PASSWORD_MAMA, KEY_MAMA
-  const u = { ...users[id] };
-  const ID = id.toUpperCase();
-  if (env("PASSWORD_" + ID)) u.password = env("PASSWORD_" + ID);
-  if (env("KEY_" + ID)) u.key = env("KEY_" + ID).trim();
-  if (!u.password) return { err: `Для «${id}» не задан пароль (PASSWORD_${ID}).`, status: 500 };
-  if (tooManyFails(id)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
-  if (!safeEqual(norm(u.password), norm(body.password))) { addFail(id); return { err: "Неверный пароль", status: 401 }; }
+  const all = {};
+  for (const [id, cfg] of Object.entries(users)) {
+    const u = { ...cfg };
+    const ID = id.toUpperCase();
+    // Пароль и ключ хранятся отдельными переменными: PASSWORD_MAMA, KEY_MAMA
+    if (env("PASSWORD_" + ID)) u.password = env("PASSWORD_" + ID);
+    if (env("KEY_" + ID)) u.key = env("KEY_" + ID).trim();
+    all[id.toLowerCase()] = u;
+  }
+  return { all };
+}
+
+// Возвращает пользователя или { err, status } с понятной причиной.
+// Без имени (вход только по паролю) ищем человека по паролю; пароли у всех должны быть разными.
+function auth(body, ip) {
+  const loaded = loadAll();
+  if (loaded.err) return loaded;
+  const all = loaded.all;
+  const pass = norm(body.password);
+  const limitKey = body.user ? "u:" + String(body.user).toLowerCase() : "ip:" + ip;
+  if (tooManyFails(limitKey)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
+
+  if (body.user) {
+    const id = String(body.user).toLowerCase();
+    const u = all[id];
+    if (!u) return { err: "Неверный пароль", status: 401 };
+    if (!u.password || !safeEqual(norm(u.password), pass)) { addFail(limitKey); return { err: "Неверный пароль", status: 401 }; }
+    return { id, ...u };
+  }
+
+  if (pass.length < 1) return { err: "Введите пароль", status: 401 };
+  const found = Object.entries(all).filter(([, u]) => u.password && safeEqual(norm(u.password), pass));
+  if (found.length > 1) return { err: "Этот пароль задан у нескольких людей — пароли должны быть разными.", status: 500 };
+  if (!found.length) { addFail(limitKey); return { err: "Неверный пароль", status: 401 }; }
+  const [id, u] = found[0];
   return { id, ...u };
 }
 
@@ -94,7 +115,8 @@ async function callAnthropic(key, payload) {
   });
 }
 
-export async function handler(req) {
+export async function handler(req, info) {
+  const ip = info?.remoteAddr?.hostname || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "anon";
   const origin = req.headers.get("Origin") || "";
   const h = cors(origin);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
@@ -108,7 +130,7 @@ export async function handler(req) {
   let body;
   try { body = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
 
-  const user = auth(body);
+  const user = auth(body, ip);
   if (user.err) return json({ error: user.err }, user.status, h);
 
   const models = user.models && user.models.length ? user.models : ["claude-sonnet-5-5"];

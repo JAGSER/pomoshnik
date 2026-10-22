@@ -19,14 +19,10 @@
 <section id="screen-login" class="screen" hidden>
   <div class="login-wrap">
     <div class="brand"><span class="brand-mark">✦</span><h1 id="app-name">Помощник</h1></div>
-    <p class="lead">Кто вы?</p>
-    <div id="user-tiles" class="user-tiles"></div>
-    <form id="login-form" class="login-form" hidden>
-      <p class="login-who"><span id="login-avatar"></span> <span id="login-name"></span></p>
-      <label for="login-pass" class="label">Пароль</label>
+    <form id="login-form" class="login-form">
+      <label for="login-pass" class="lead">Введите пароль</label>
       <div class="pass-row"><input id="login-pass" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required><button type="button" id="pass-toggle" class="btn btn-ghost small pass-toggle">Показать</button></div>
       <button type="submit" class="btn btn-primary btn-wide">Войти</button>
-      <button type="button" id="login-back" class="btn btn-ghost btn-wide">Это не я</button>
       <p id="login-error" class="error" role="alert"></p>
     </form>
   </div>
