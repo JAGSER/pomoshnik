@@ -961,6 +961,55 @@ function md(src) {
   return out.join("").replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre><code>${blocks[i]}</code></pre>`);
 }
 
+/* ===== Образцы голосов: общие для всех, хранятся на сервере ===== */
+async function sampleUrl(voice) {
+  const key = "sample|" + voice;
+  let blob = TTS_MEM.get(key) || await ADB.get(key);
+  if (!blob) {
+    let r = await fetch(CFG.proxy + "/sample?voice=" + encodeURIComponent(voice)).catch(() => null);
+    if (!r || !r.ok) {
+      // образца ещё нет — создаём его (один раз для всех)
+      await ttsSlot();
+      try {
+        r = await fetch(CFG.proxy + "/sample", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: SESSION.user, password: SESSION.password, voice }),
+        });
+      } finally { ttsRelease(); }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        const e = new Error(d.error || "Не удалось загрузить голос");
+        if (r.status === 429) e.retryAfter = Math.max(3, Number(d.retryAfter) || 20);
+        throw e;
+      }
+    }
+    blob = await r.blob();
+    TTS_MEM.set(key, blob);
+    ADB.put(key, blob);
+  }
+  return URL.createObjectURL(blob);
+}
+
+async function prepareAllSamples(btn) {
+  btn.disabled = true;
+  let have = [];
+  try { have = (await fetch(CFG.proxy + "/samples").then((r) => r.json())).have || []; } catch (_) {}
+  const todo = VOICES.map((v) => v[0]).filter((n) => !have.includes(n));
+  let done = VOICES.length - todo.length;
+  btn.textContent = `Готово ${done} из ${VOICES.length}`;
+  for (const name of todo) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try { await sampleUrl(name); done++; break; }
+      catch (err) { if (err.retryAfter) await new Promise((r) => setTimeout(r, err.retryAfter * 1000)); else break; }
+    }
+    btn.textContent = `Готово ${done} из ${VOICES.length}`;
+    // не больше 8 в минуту — чтобы не упереться в лимит Google
+    await new Promise((r) => setTimeout(r, 7500));
+  }
+  btn.textContent = done === VOICES.length ? "Все образцы готовы ✓" : `Готово ${done} из ${VOICES.length} — нажмите ещё раз`;
+  btn.disabled = done === VOICES.length;
+}
+
 /* ===== Настройки ===== */
 $("#btn-settings").onclick = openSettings;
 $("#settings-back").onclick = () => { stopPreview(); startHome(); };
@@ -989,7 +1038,7 @@ function openSettings() {
       if (was !== "▶") return;
       play.textContent = "⏳";
       try {
-        const url = await ttsFetch("Здравствуйте! Так звучит мой голос. Я буду читать вам ответы.", name);
+        const url = await sampleUrl(name);
         if (play.textContent !== "⏳") return;
         PREVIEW = new Audio(url);
         PREVIEW.playbackRate = RATE;
@@ -1004,6 +1053,9 @@ function openSettings() {
     li.append(pick, play);
     list.append(li);
   });
+  const prep = $("#prep-samples");
+  prep.hidden = !me().admin;
+  if (!prep.disabled) { prep.textContent = "Подготовить все образцы голосов"; prep.onclick = () => prepareAllSamples(prep); }
   document.querySelectorAll("#rate-seg button").forEach((b) => {
     b.classList.toggle("on", Number(b.dataset.rate) === RATE);
     b.onclick = () => {

@@ -24,7 +24,7 @@ function cors(origin) {
   const ok = list.includes("*") || list.includes(origin);
   return {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
@@ -117,6 +117,74 @@ async function callAnthropic(key, payload) {
 
 const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-lite-tts"];
 
+// Генерация речи через Gemini; модели пробуем по очереди — у каждой свой лимит в минуту
+async function geminiTTS(text, voiceIn, modelIn) {
+  const gkey = env("GEMINI_KEY");
+  if (!gkey) return { error: "Голос Gemini не настроен", status: 501 };
+  const voice = /^[A-Za-z]{3,20}$/.test(voiceIn || "") ? voiceIn : env("GEMINI_VOICE", "Sulafat");
+  const first = TTS_MODELS.includes(modelIn) ? modelIn : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts");
+  const order = [first, ...TTS_MODELS.filter((m) => m !== first)];
+  let r = null, lastErr = "";
+  for (const model of order) {
+    r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      method: "POST",
+      headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [{ type: "user_input", content: [{ type: "text", text,
+          annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
+        response_format: { type: "audio" },
+        generation_config: { speech_config: [{ voice }] },
+      }),
+    });
+    if (r.ok) break;
+    lastErr = `${model}: ${r.status} ${(await r.text()).slice(0, 300)}`;
+    console.log("TTS error", lastErr);
+  }
+  if (!r.ok) {
+    const wait = Number((lastErr.match(/retry in (\d+)s/) || [])[1]) || 0;
+    return r.status === 429
+      ? { error: "Слишком много запросов озвучки, подождите минуту", retryAfter: wait, details: lastErr, status: 429 }
+      : { error: "Gemini не смог озвучить", details: lastErr, status: 502 };
+  }
+  const audio = findAudio(await r.json());
+  if (!audio) return { error: "Gemini вернул ответ без звука", status: 502 };
+  let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
+  if (!/wav/i.test(audio.mime || "") && !(bytes[0] === 0x52 && bytes[1] === 0x49)) bytes = pcmToWav(bytes, 24000);
+  return { bytes };
+}
+
+// Хранилище образцов голосов (Deno KV). Значение в KV — до 64 КБ, поэтому режем на части
+const SAMPLE_TEXT = "Здравствуйте! Так звучит мой голос. Я буду читать вам ответы.";
+const SAMPLE_VER = "v1";
+let KV = null, KV_TRIED = false;
+async function kvOpen() {
+  if (KV || KV_TRIED) return KV;
+  KV_TRIED = true;
+  try { if (typeof Deno !== "undefined" && Deno.openKv) KV = await Deno.openKv(); } catch (e) { console.log("KV недоступен", String(e)); }
+  return KV;
+}
+async function sampleGet(voice) {
+  const kv = await kvOpen();
+  if (!kv) return null;
+  const n = (await kv.get(["sample", SAMPLE_VER, voice, "n"])).value;
+  if (!n) return null;
+  const parts = [];
+  for (let i = 0; i < n; i++) { const p = (await kv.get(["sample", SAMPLE_VER, voice, i])).value; if (!p) return null; parts.push(p); }
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+async function samplePut(voice, bytes) {
+  const kv = await kvOpen();
+  if (!kv) return;
+  const size = 60000, n = Math.ceil(bytes.length / size);
+  try {
+    for (let i = 0; i < n; i++) await kv.set(["sample", SAMPLE_VER, voice, i], bytes.slice(i * size, (i + 1) * size));
+    await kv.set(["sample", SAMPLE_VER, voice, "n"], n);
+  } catch (e) { console.log("KV запись не удалась", String(e)); }
+}
+
 // Ищем в ответе Gemini звук в base64 (поле data рядом с mime_type/audio)
 function findAudio(o, depth = 0) {
   if (!o || typeof o !== "object" || depth > 8) return null;
@@ -148,6 +216,19 @@ export async function handler(req, info) {
   const url = new URL(req.url);
   if (req.method === "GET" && url.pathname === "/") {
     return json({ ok: true, service: "pomoshnik-proxy" }, 200, h);
+  }
+  // готовый образец голоса отдаём без пароля — генерировать новые может только вошедший пользователь
+  if (req.method === "GET" && url.pathname === "/sample") {
+    const voice = url.searchParams.get("voice") || "";
+    const bytes = /^[A-Za-z]{3,20}$/.test(voice) ? await sampleGet(voice) : null;
+    if (!bytes) return json({ error: "Образца пока нет" }, 404, h);
+    return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000" } });
+  }
+  if (url.pathname === "/samples") {
+    const have = [];
+    const kv = await kvOpen();
+    if (kv) { for await (const e of kv.list({ prefix: ["sample", SAMPLE_VER] })) if (e.key[3] === "n") have.push(e.key[2]); }
+    return json({ have }, 200, h);
   }
   if (req.method !== "POST") return json({ error: "Метод не поддерживается" }, 405, h);
 
@@ -183,43 +264,29 @@ export async function handler(req, info) {
   }
 
   // Озвучка ответа голосом Gemini. Ключ — переменная GEMINI_KEY
+  // Озвучка ответа голосом Gemini. Ключ — переменная GEMINI_KEY
   if (url.pathname === "/tts") {
-    const gkey = env("GEMINI_KEY");
-    if (!gkey) return json({ error: "Голос Gemini не настроен" }, 501, h);
     const text = String(body.text || "").slice(0, 5000);
     if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
-    const voice = /^[A-Za-z]{3,20}$/.test(body.voice || "") ? body.voice : env("GEMINI_VOICE", "Sulafat");
-    // пробуем модели по очереди: выбранную, затем запасные — и пишем причину ошибок в журнал
-    const first = TTS_MODELS.includes(body.model) ? body.model : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts");
-    const order = [first, ...TTS_MODELS.filter((m) => m !== first)];
-    let r = null, lastErr = "";
-    for (const model of order) {
-      r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
-        body: JSON.stringify({
-          model,
-          input: [{ type: "user_input", content: [{ type: "text", text,
-            annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
-          response_format: { type: "audio" },
-          generation_config: { speech_config: [{ voice }] },
-        }),
-      });
-      if (r.ok) break;
-      lastErr = `${model}: ${r.status} ${(await r.text()).slice(0, 300)}`;
-      console.log("TTS error", lastErr);
-      // у каждой модели свой лимит в минуту — при 429 просто пробуем следующую
-    }
-    if (!r.ok) {
-      const wait = Number((lastErr.match(/retry in (\d+)s/) || [])[1]) || 0;
-      return json({ error: r.status === 429 ? "Слишком много запросов озвучки, подождите минуту" : "Gemini не смог озвучить", retryAfter: wait, details: lastErr }, r.status === 429 ? 429 : 502, h);
-    }
-    const audio = findAudio(await r.json());
-    if (!audio) return json({ error: "Gemini вернул ответ без звука" }, 502, h);
-    let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
-    if (!/wav/i.test(audio.mime || "") && !(bytes[0] === 0x52 && bytes[1] === 0x49)) bytes = pcmToWav(bytes, 24000);
-    return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
+    const res = await geminiTTS(text, body.voice, body.model);
+    if (res.error) return json(res, res.status, h);
+    return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
   }
+
+  // Образец голоса: генерируется один раз и хранится на сервере для всех
+  if (url.pathname === "/sample") {
+    const voice = /^[A-Za-z]{3,20}$/.test(body.voice || "") ? body.voice : null;
+    if (!voice) return json({ error: "Не указан голос" }, 400, h);
+    let bytes = await sampleGet(voice);
+    if (!bytes) {
+      const res = await geminiTTS(SAMPLE_TEXT, voice);
+      if (res.error) return json(res, res.status, h);
+      bytes = res.bytes;
+      await samplePut(voice, bytes);
+    }
+    return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000" } });
+  }
+
 
   if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
 

@@ -192,3 +192,4 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .seg button { flex: 1; min-height: 50px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; }
 .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .logout { margin-top: 28px; border: 1px solid var(--line); color: var(--danger); }
+.prep { border: 1px dashed var(--accent); color: var(--accent); margin-bottom: 10px; }
