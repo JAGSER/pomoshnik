@@ -29,6 +29,14 @@
       "presets": ["ask"],
       "readAloud": false,
       "bigText": false
+    },
+    "yuri": {
+      "name": "Юрий",
+      "avatar": "🛠",
+      "model": "claude-sonnet-5-5",
+      "presets": ["ask", "example"],
+      "readAloud": false,
+      "bigText": false
     }
   },
 
