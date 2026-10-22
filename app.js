@@ -371,7 +371,11 @@ function actions(text, msg) {
     catch (_) { copy.textContent = "Не вышло"; }
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
-  a.append(speak, copy);
+  const vid = el("button");
+  vid.textContent = "🎬 Видео";
+  vid.title = "Сохранить ответ как видео с озвучкой (9:16)";
+  vid.onclick = () => videoButton(vid, text, msg);
+  a.append(speak, copy, vid);
   return a;
 }
 // Две скорости: «1×» на деле читает в 1,2 раза быстрее (так приятнее на слух), «1,5×» — как написано
@@ -729,17 +733,17 @@ const VOICES = [
 function userVoice() {
   return (SESSION && store.get("voice:" + SESSION.user)) || me().voice || (CFG.voice || {}).name || "Algieba";
 }
-async function ttsFetch(chunk, voice) {
-  const v = CFG.voice || {};
+async function ttsBlob(chunk, voice) {
   voice = voice || userVoice();
   const key = ttsKey(chunk, voice);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
-  if (blob) { TTS_MEM.set(key, blob); return URL.createObjectURL(blob); }
+  if (blob) { TTS_MEM.set(key, blob); return blob; }
   blob = await ttsLoad(chunk, voice);
   TTS_MEM.set(key, blob);
   ADB.put(key, blob);
-  return URL.createObjectURL(blob);
+  return blob;
 }
+async function ttsFetch(chunk, voice) { return URL.createObjectURL(await ttsBlob(chunk, voice)); }
 // Не больше двух запросов озвучки одновременно — у Google лимит в минуту
 let TTS_ACTIVE = 0;
 const TTS_WAIT = [];
@@ -1173,3 +1177,280 @@ function fmtDate(t) {
 }
 
 init();
+
+/* ===== Видео 9:16 из ответа: озвучка + эмодзи и тема разговора + субтитры ===== */
+const VW = 1080, VH = 1920, VFPS = 15, VRATE = 48000;
+
+// Режем текст так же, как при чтении вслух, — тогда уже записанные куски берутся из кэша
+function planChunks(full, prev) {
+  const t = plain(full);
+  const out = [];
+  let pos = 0;
+  if (prev) for (const c of prev) { if (t.slice(pos, pos + c.length) !== c) break; out.push(c); pos += c.length; }
+  let rest = t.slice(pos);
+  while (rest.trim()) {
+    const max = out.length === 0 ? 260 : 2000;
+    const re = /[.!?…]+["»)]*\s+/g;
+    let end = -1, m;
+    while ((m = re.exec(rest))) { const e = m.index + m[0].length; if (e <= max || end < 0) end = e; if (e >= max) break; }
+    if (end < 0) { out.push(rest); break; }
+    out.push(rest.slice(0, end)); rest = rest.slice(end);
+  }
+  return out.filter((c) => c.trim());
+}
+
+let VIDEO_BUSY = false;
+async function videoButton(btn, text, msg) {
+  if (btn._ready) return saveVideo(btn._ready, btn);
+  if (VIDEO_BUSY) { toast("Подождите, видео ещё собирается"); return; }
+  if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
+  VIDEO_BUSY = true;
+  btn.disabled = true;
+  const label = (s) => { btn.textContent = s; };
+  try {
+    const chat = CHAT;
+    const p = CFG.presets[chat.preset] || {};
+    const emoji = chat.emoji || p.icon || "💬";
+    const title = chat.title || p.title || "Разговор";
+    const chunks = planChunks(text, msg && msg.tts);
+    // 1) озвучка всех кусков (уже записанные берутся из памяти бесплатно)
+    const ac = new OfflineAudioContext(1, 1, VRATE);
+    const parts = [];
+    let done = 0;
+    label(`🎬 Озвучка 0/${chunks.length}`);
+    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c).then((b) => { done++; label(`🎬 Озвучка ${done}/${chunks.length}`); return b; })));
+    for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
+    if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
+    const total = parts.reduce((n, a) => n + a.length, 0);
+    const pcm = new Float32Array(total + Math.round(VRATE * 0.6)); // небольшая тишина в конце
+    const subs = [];
+    let off = 0;
+    parts.forEach((a, i) => {
+      pcm.set(a, off);
+      subTimes(chunks[i], off / VRATE, (off + a.length) / VRATE, subs);
+      off += a.length;
+    });
+    // 2) сборка видео
+    label("🎬 Видео 0%");
+    const scene = makeScene(emoji, title, subs, pcm.length / VRATE);
+    const blob = await encodeVideo(scene, pcm, (k) => label(`🎬 Видео ${Math.round(k * 100)}%`));
+    const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
+    btn._ready = new File([blob], name, { type: blob.type });
+    btn.disabled = false;
+    label("💾 Сохранить видео");
+    toast("Видео готово — нажмите «Сохранить видео»");
+  } catch (err) {
+    console.error(err);
+    btn.disabled = false;
+    label("🎬 Видео");
+    toast("Не получилось сделать видео: " + (err.message || err));
+  } finally { VIDEO_BUSY = false; }
+}
+
+async function saveVideo(file, btn) {
+  // на телефоне — меню «Поделиться» (сохранить в галерею, отправить в мессенджер); иначе — скачивание
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+// Субтитры: кусок делится на фразы, время — пропорционально длине фраз
+function subTimes(chunk, t0, t1, out) {
+  const sent = chunk.match(/[^.!?…]+[.!?…]*["»)]*\s*/g) || [chunk];
+  const blocks = [];
+  let cur = "";
+  sent.forEach((s) => { if ((cur + s).length > 170 && cur) { blocks.push(cur.trim()); cur = s; } else cur += s; });
+  if (cur.trim()) blocks.push(cur.trim());
+  const len = blocks.reduce((n, b) => n + b.length, 0) || 1;
+  let t = t0;
+  blocks.forEach((b) => { const d = (t1 - t0) * b.length / len; out.push({ t0: t, t1: t + d, text: b[0].toUpperCase() + b.slice(1) }); t += d; });
+}
+
+function wrapLines(g, text, maxW) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const tryL = cur ? cur + " " + w : w;
+    if (g.measureText(tryL).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tryL;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+const VFONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+function makeScene(emoji, title, subs, duration) {
+  const cv = document.createElement("canvas");
+  cv.width = VW; cv.height = VH;
+  const g = cv.getContext("2d");
+  // неподвижный фон с названием рисуем один раз
+  const base = document.createElement("canvas");
+  base.width = VW; base.height = VH;
+  const b = base.getContext("2d");
+  const grad = b.createLinearGradient(0, 0, 0, VH);
+  grad.addColorStop(0, "#F8F3EB"); grad.addColorStop(1, "#EADCC8");
+  b.fillStyle = grad; b.fillRect(0, 0, VW, VH);
+  b.fillStyle = "rgba(181,83,46,0.08)";
+  b.beginPath(); b.arc(VW / 2, 330, 250, 0, Math.PI * 2); b.fill();
+  b.fillStyle = "#1F1B16"; b.textAlign = "center"; b.textBaseline = "alphabetic";
+  let fs = 76;
+  b.font = `700 ${fs}px ${VFONT}`;
+  let tl = wrapLines(b, title, 940);
+  while (tl.length > 3 && fs > 48) { fs -= 6; b.font = `700 ${fs}px ${VFONT}`; tl = wrapLines(b, title, 940); }
+  tl = tl.slice(0, 3);
+  tl.forEach((l, i) => b.fillText(l, VW / 2, 700 + i * fs * 1.25));
+  const titleEnd = 700 + (tl.length - 1) * fs * 1.25 + 40;
+  b.fillStyle = "#B5532E"; b.fillRect(VW / 2 - 60, titleEnd, 120, 6);
+  b.fillStyle = "#6E655A"; b.font = `500 40px ${VFONT}`;
+  b.fillText("✦ Помощник", VW / 2, VH - 90);
+  const subTop = titleEnd + 120, subBottom = VH - 260;
+  // заранее раскладываем субтитры по строкам
+  subs.forEach((s) => {
+    let f = 62;
+    g.font = `500 ${f}px ${VFONT}`;
+    let lines = wrapLines(g, s.text, 940);
+    while (lines.length * f * 1.4 > subBottom - subTop && f > 36) { f -= 4; g.font = `500 ${f}px ${VFONT}`; lines = wrapLines(g, s.text, 940); }
+    s.f = f; s.lines = lines;
+  });
+  let si = 0, level = 0;
+  return {
+    canvas: cv, duration,
+    draw(t, amp) {
+      level = level * 0.6 + Math.min(1, amp * 5) * 0.4;
+      g.drawImage(base, 0, 0);
+      // эмодзи «дышит» в такт голосу
+      const sc = 1 + level * 0.1;
+      g.save(); g.translate(VW / 2, 330); g.scale(sc, sc);
+      g.font = `260px ${VFONT}`; g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(emoji, 0, 10); g.restore();
+      while (si < subs.length - 1 && t >= subs[si].t1) si++;
+      while (si > 0 && t < subs[si].t0) si--;
+      const s = subs[si];
+      if (s) {
+        g.fillStyle = "#1F1B16"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+        g.font = `500 ${s.f}px ${VFONT}`;
+        const h = s.lines.length * s.f * 1.4;
+        const y0 = subTop + Math.max(0, (subBottom - subTop - h) / 2) + s.f;
+        s.lines.forEach((l, i) => g.fillText(l, VW / 2, y0 + i * s.f * 1.4));
+      }
+      // полоска прогресса
+      g.fillStyle = "rgba(31,27,22,0.12)"; g.fillRect(140, VH - 190, VW - 280, 10);
+      g.fillStyle = "#B5532E"; g.fillRect(140, VH - 190, (VW - 280) * Math.min(1, t / duration), 10);
+    },
+  };
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("нет связи")); document.head.append(s); });
+}
+function rmsAt(pcm, t) {
+  const n = Math.round(VRATE / VFPS), i0 = Math.floor(t * VRATE);
+  let sum = 0, c = 0;
+  for (let i = i0; i < i0 + n && i < pcm.length; i += 4) { sum += pcm[i] * pcm[i]; c++; }
+  return c ? Math.sqrt(sum / c) : 0;
+}
+
+async function encodeVideo(scene, pcm, progress) {
+  if (window.VideoEncoder && window.AudioEncoder) {
+    try { return await encodeFast(scene, pcm, progress); }
+    catch (e) { console.warn("WebCodecs:", e); }
+  }
+  return await encodeRealtime(scene, pcm, progress);
+}
+
+// Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
+async function encodeFast(scene, pcm, progress) {
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=21");
+  // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
+  let vcfg = null, vcodec = null;
+  for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
+    const c = { codec, width: VW, height: VH, bitrate: 2_500_000, framerate: VFPS };
+    try { if ((await VideoEncoder.isConfigSupported(c)).supported) { vcfg = c; vcodec = mc; break; } } catch (_) {}
+  }
+  if (!vcfg) throw new Error("кодек видео не поддерживается");
+  let acfg = null, acodec = null;
+  for (const [codec, mc] of [["mp4a.40.2", "aac"], ["opus", "opus"]]) {
+    const c = { codec, sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 };
+    try { if ((await AudioEncoder.isConfigSupported(c)).supported) { acfg = c; acodec = mc; break; } } catch (_) {}
+  }
+  if (!acfg) throw new Error("кодек звука не поддерживается");
+  const muxer = new Mp4Muxer.Muxer({
+    target: new Mp4Muxer.ArrayBufferTarget(),
+    video: { codec: vcodec, width: VW, height: VH, frameRate: VFPS },
+    audio: { codec: acodec, sampleRate: VRATE, numberOfChannels: 1 },
+    fastStart: "in-memory",
+  });
+  let fail = null;
+  const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => (fail = e) });
+  ve.configure(vcfg);
+  const ae = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (fail = e) });
+  ae.configure(acfg);
+  // звук
+  const step = VRATE / 10;
+  for (let i = 0; i < pcm.length; i += step) {
+    const data = pcm.slice(i, Math.min(pcm.length, i + step));
+    const ad = new AudioData({ format: "f32", sampleRate: VRATE, numberOfFrames: data.length, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / VRATE), data });
+    ae.encode(ad); ad.close();
+  }
+  // кадры
+  const frames = Math.ceil(scene.duration * VFPS);
+  for (let i = 0; i < frames; i++) {
+    if (fail) throw fail;
+    const t = i / VFPS;
+    scene.draw(t, rmsAt(pcm, t));
+    const f = new VideoFrame(scene.canvas, { timestamp: Math.round(i * 1e6 / VFPS), duration: Math.round(1e6 / VFPS) });
+    ve.encode(f, { keyFrame: i % (VFPS * 2) === 0 });
+    f.close();
+    while (ve.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+    if (i % 15 === 0) { progress(i / frames); await new Promise((r) => setTimeout(r, 0)); }
+  }
+  await ve.flush(); await ae.flush();
+  if (fail) throw fail;
+  muxer.finalize();
+  progress(1);
+  return new Blob([muxer.target.buffer], { type: "video/mp4" });
+}
+
+// Запасной путь (старые телефоны): записываем видео в реальном времени
+async function encodeRealtime(scene, pcm, progress) {
+  if (!window.MediaRecorder || !scene.canvas.captureStream) throw new Error("этот браузер не умеет записывать видео");
+  const mime = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+  const ctx = new AudioContext({ sampleRate: VRATE });
+  const buf = ctx.createBuffer(1, pcm.length, VRATE);
+  buf.copyToChannel(pcm, 0);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const dest = ctx.createMediaStreamDestination(); src.connect(dest);
+  const stream = new MediaStream([...scene.canvas.captureStream(VFPS).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 2_500_000 } : {});
+  const parts = [];
+  rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  scene.draw(0, 0);
+  rec.start(1000);
+  await ctx.resume();
+  const t0 = ctx.currentTime, w0 = performance.now();
+  src.start();
+  await new Promise((res) => {
+    let fin = false;
+    src.onended = () => { fin = true; res(); };
+    const tick = () => {
+      if (fin) return;
+      // время звука; если звуковой часы «встали» — по обычным часам
+      const t = Math.max(ctx.currentTime - t0, (performance.now() - w0) / 1000 - 0.3);
+      if (t > scene.duration + 0.5) { fin = true; return res(); }
+      scene.draw(t, rmsAt(pcm, t)); progress(Math.min(1, t / scene.duration));
+      setTimeout(tick, 1000 / VFPS);
+    };
+    tick();
+  });
+  rec.stop();
+  await Promise.race([stopped, new Promise((r) => setTimeout(r, 3000))]);
+  ctx.close().catch(() => {});
+  return new Blob(parts, { type: (mime || "video/webm").split(";")[0] });
+}
