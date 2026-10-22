@@ -60,12 +60,20 @@ function tooManyFails(id) {
 }
 function addFail(id) { (fails.get(id) || fails.set(id, []).get(id)).push(Date.now()); }
 
+// Пароль сравниваем без пробелов по краям и в единой форме букв (й/ё и т.п.)
+const norm = (s) => String(s ?? "").trim().normalize("NFC");
+
+// Возвращает пользователя или { err, status } с понятной причиной
 function auth(body) {
-  const users = loadUsers();
+  let users;
+  try { users = JSON.parse(env("USERS", "")); }
+  catch (_) { return { err: "Ошибка в настройке USERS: сбиты кавычки или скобки. Сообщите Юре.", status: 500 }; }
+  if (!users || typeof users !== "object") return { err: "Настройка USERS пустая. Сообщите Юре.", status: 500 };
   const id = String(body.user || "").toLowerCase();
   const u = users[id];
-  if (!u || tooManyFails(id)) return null;
-  if (!safeEqual(u.password, body.password)) { addFail(id); return null; }
+  if (!u) return { err: `В настройке USERS нет пользователя «${id}». Сообщите Юре.`, status: 401 };
+  if (tooManyFails(id)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
+  if (!safeEqual(norm(u.password), norm(body.password))) { addFail(id); return { err: "Неверный пароль", status: 401 }; }
   return { id, ...u };
 }
 
@@ -96,7 +104,7 @@ export async function handler(req) {
   try { body = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
 
   const user = auth(body);
-  if (!user) return json({ error: "Неверное имя или пароль" }, 401, h);
+  if (user.err) return json({ error: user.err }, user.status, h);
 
   const models = user.models && user.models.length ? user.models : ["claude-sonnet-5-5"];
 
