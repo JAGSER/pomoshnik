@@ -17,10 +17,12 @@ const DB = {
   db: null,
   open() {
     return new Promise((res, rej) => {
-      const r = indexedDB.open("pomoshnik", 1);
+      const r = indexedDB.open("pomoshnik", 2);
       r.onupgradeneeded = () => {
-        const s = r.result.createObjectStore("chats", { keyPath: "id" });
-        s.createIndex("user", "user");
+        const db = r.result;
+        if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "id" }).createIndex("user", "user");
+        // готовый звук озвучки, чтобы повторно не генерировать
+        if (!db.objectStoreNames.contains("tts")) db.createObjectStore("tts", { keyPath: "k" }).createIndex("t", "t");
       };
       r.onsuccess = () => { this.db = r.result; res(); };
       r.onerror = () => rej(r.error);
@@ -32,6 +34,25 @@ const DB = {
   },
   del(id) {
     return new Promise((res) => { const r = this.tx("readwrite").delete(id); r.onsuccess = res; r.onerror = res; });
+  },
+  ttsGet(k) {
+    return new Promise((res) => {
+      try { const r = this.db.transaction("tts").objectStore("tts").get(k); r.onsuccess = () => res(r.result ? r.result.blob : null); r.onerror = () => res(null); }
+      catch (_) { res(null); }
+    });
+  },
+  ttsPut(k, blob) {
+    try {
+      const st = this.db.transaction("tts", "readwrite").objectStore("tts");
+      st.put({ k, blob, t: Date.now() });
+      // храним не больше 80 последних кусков, старые удаляем
+      const c = st.count();
+      c.onsuccess = () => {
+        let extra = c.result - 80;
+        if (extra <= 0) return;
+        st.index("t").openCursor().onsuccess = (e) => { const cur = e.target.result; if (cur && extra-- > 0) { cur.delete(); cur.continue(); } };
+      };
+    } catch (_) {}
   },
   byUser(user) {
     return new Promise((res) => {
@@ -183,6 +204,8 @@ function openChat(chat) {
   $("#btn-attach").hidden = p.allowFiles === false;
 
   $("#think").checked = false; // «Подумать» по умолчанию выключено
+  const ar = store.get(autoReadKey());
+  $("#autoread").checked = ar === null ? !!me().readAloud : !!ar;
 
   show("screen-chat");
   const box = $("#messages");
@@ -266,7 +289,7 @@ function renderMessage(m) {
     const t = el("div", "md");
     t.innerHTML = md(textOf(m));
     d.append(t);
-    d.append(actions(textOf(m)));
+    d.append(actions(textOf(m), m));
   }
   $("#messages").append(d);
   return d;
@@ -274,23 +297,14 @@ function renderMessage(m) {
 
 function chip(text) { const s = el("span", "file-chip"); s.textContent = text; return s; }
 
-function actions(text) {
+function actions(text, msg) {
   const a = el("div", "msg-actions");
   const speak = el("button", "speak-btn");
   setSpeakBtn(speak, "idle");
   speak.onclick = () => {
     // та же кнопка: пауза / продолжить, если сейчас читается именно этот ответ
     if (SPEAKER && SPEAKER.owner === speak) { SPEAKER.paused ? SPEAKER.resume() : SPEAKER.pause(); return; }
-    speakText(text, speak);
-  };
-  const rate = el("button", "rate-btn");
-  rate.textContent = rateLabel();
-  rate.title = "Скорость чтения";
-  rate.onclick = () => {
-    RATE = RATES[(RATES.indexOf(RATE) + 1) % RATES.length];
-    store.set("rate", RATE);
-    document.querySelectorAll(".rate-btn").forEach((b) => (b.textContent = rateLabel()));
-    if (SPEAKER && SPEAKER.setRate) SPEAKER.setRate(RATE);
+    speakText(text, speak, msg);
   };
   const copy = el("button");
   copy.textContent = "📋 Копия";
@@ -299,12 +313,25 @@ function actions(text) {
     catch (_) { copy.textContent = "Не вышло"; }
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
-  a.append(speak, rate, copy);
+  a.append(speak, copy);
   return a;
 }
 const RATES = [0.8, 1, 1.2, 1.5];
 let RATE = RATES.includes(Number(store.get("rate"))) ? Number(store.get("rate")) : 1;
 function rateLabel() { return "⏩ " + String(RATE).replace(".", ",") + "×"; }
+$("#rate-btn").textContent = rateLabel();
+$("#rate-btn").onclick = () => {
+  RATE = RATES[(RATES.indexOf(RATE) + 1) % RATES.length];
+  store.set("rate", RATE);
+  $("#rate-btn").textContent = rateLabel();
+  if (SPEAKER && SPEAKER.setRate) SPEAKER.setRate(RATE);
+};
+// «Читать вслух»: запоминается для каждого человека; по умолчанию — как в настройках
+function autoReadKey() { return "autoread:" + (SESSION ? SESSION.user : ""); }
+$("#autoread").onchange = () => {
+  store.set(autoReadKey(), $("#autoread").checked);
+  if (!$("#autoread").checked) stopSpeaking();
+};
 function setSpeakBtn(btn, state) {
   if (!btn) return;
   btn.textContent = state === "playing" ? "⏸ Пауза" : state === "paused" ? "▶ Дальше" : "🔊 Вслух";
@@ -363,7 +390,8 @@ async function ask() {
   let full = "";
   // Чтение вслух начинается, пока Claude ещё пишет ответ
   stopSpeaking();
-  const live = u.readAloud && useGemini() ? new Speaker() : null;
+  const autoRead = $("#autoread").checked;
+  const live = autoRead && useGemini() ? new Speaker() : null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
@@ -409,13 +437,13 @@ async function ask() {
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     CHAT.messages.push(msg);
-    const acts = actions(full);
+    const acts = actions(full, msg);
     bubble.append(acts);
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
-    if (live) { live.end(); if (SPEAKER === live) live.setOwner(btn); }
-    else if (u.readAloud) speakText(full, btn);
+    if (live) { live.end(); rememberChunks(msg, live); if (SPEAKER === live) live.setOwner(btn); }
+    else if (autoRead && $("#autoread").checked) speakText(full, btn, msg);
   } catch (err) {
     if (live) live.stop();
     if (full) {
@@ -595,17 +623,38 @@ let GEMINI_OFF = false;
 function isSpeaking() { return !!SPEAKER; }
 function useGemini() { return (CFG.voice || {}).engine === "gemini" && !GEMINI_OFF; }
 
-function speakText(text, owner) {
+function speakText(text, owner, msg) {
   stopSpeaking();
   const t = plain(text).trim();
   if (!t) return;
   const sp = useGemini() ? new Speaker() : new BrowserSpeaker();
   sp.setOwner(owner);
+  if (sp.preset && msg && msg.tts) sp.preset(text, msg.tts);
   sp.push(text);
   sp.end();
+  rememberChunks(msg, sp);
+}
+// запоминаем, как текст был разрезан, — для повторного воспроизведения из кэша
+function rememberChunks(msg, sp) {
+  if (!msg || !sp.all || !sp.all.length) return;
+  const same = msg.tts && msg.tts.join("") === sp.all.join("");
+  if (same) return;
+  msg.tts = sp.all.slice();
+  save();
 }
 
+const TTS_MEM = new Map();
 async function ttsFetch(chunk) {
+  const v = CFG.voice || {};
+  const key = [me().voice || v.name || "", v.model || "", chunk.trim()].join("|");
+  let blob = TTS_MEM.get(key) || (DB.db ? await DB.ttsGet(key) : null);
+  if (blob) { TTS_MEM.set(key, blob); return URL.createObjectURL(blob); }
+  blob = await ttsLoad(chunk);
+  TTS_MEM.set(key, blob);
+  if (DB.db) DB.ttsPut(key, blob);
+  return URL.createObjectURL(blob);
+}
+async function ttsLoad(chunk) {
   const v = CFG.voice || {};
   const r = await fetch(CFG.proxy + "/tts", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -613,14 +662,14 @@ async function ttsFetch(chunk) {
   });
   if (r.status === 501) GEMINI_OFF = true;
   if (!r.ok) throw new Error("tts " + r.status);
-  return URL.createObjectURL(await r.blob());
+  return await r.blob();
 }
 
 class Speaker {
   constructor() {
     this.full = ""; this.used = 0; this.queue = []; this.ended = false;
     this.stopped = false; this.audio = null; this.wake = null; this.count = 0;
-    this.paused = false; this.owner = null; this.resumeWait = null; this.fallback = null;
+    this.paused = false; this.owner = null; this.resumeWait = null; this.fallback = null; this.all = [];
     SPEAKER = this;
     this.run();
   }
@@ -660,7 +709,15 @@ class Speaker {
     // будим очередь, только когда есть что читать или текст закончился
     if (this.wake && (this.queue.length || this.ended)) { const w = this.wake; this.wake = null; w(); }
   }
-  add(chunk) { if (chunk.trim()) { this.queue.push(chunk); this.count++; } }
+  add(chunk) { if (chunk.trim()) { this.queue.push(chunk); this.all.push(chunk); this.count++; } }
+  // повтор: режем текст так же, как в прошлый раз, чтобы взять звук из кэша
+  preset(full, chunks) {
+    this.full = full;
+    const t = plain(full);
+    let pos = 0;
+    for (const c of chunks) { if (t.slice(pos, pos + c.length) !== c) break; this.add(c); pos += c.length; }
+    this.used = pos;
+  }
   next() {
     if (this.queue.length) return Promise.resolve(this.queue.shift());
     if (this.ended || this.stopped) return Promise.resolve(null);

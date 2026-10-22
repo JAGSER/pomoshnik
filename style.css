@@ -165,3 +165,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .history .hdel.on { filter: none; }
 .history .hdel:not(.on)[aria-label^="Закрепить"] { filter: grayscale(1); opacity: .55; }
 .msg-actions { flex-wrap: wrap; }
+
+.chat-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 8px 12px 0; width: 100%; max-width: 780px; margin: 0 auto; }
+.chat-tools .think-toggle { font-size: .8em; min-height: 40px; padding: 6px 12px; white-space: nowrap; color: var(--ink); }
+button.think-toggle { font: inherit; font-size: .8em; }
+.chat-tools { gap: 6px; }
+.chat-tools .think-toggle { padding: 4px 10px; gap: 6px; font-size: .76em; min-height: 38px; }
+.chat-tools .think-toggle input { width: 18px; height: 18px; }
