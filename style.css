@@ -151,3 +151,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .pass-row { display: flex; gap: 8px; align-items: stretch; }
 .pass-row #login-pass { flex: 1; min-width: 0; }
 .pass-toggle { flex: none; border: 2px solid var(--line); }
+
+.think-toggle { display: inline-flex; align-items: center; gap: 8px; flex: none; cursor: pointer; user-select: none;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; font-size: .85em; min-height: 44px; }
+.think-toggle input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.think-toggle:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.chat-title { cursor: pointer; }
+.hemoji { font-size: 1.3em; width: 1.6em; text-align: center; flex: none; }

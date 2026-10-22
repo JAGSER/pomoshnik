@@ -6,7 +6,6 @@ let SESSION = null;      // { user, password, models, webSearch }
 let CHAT = null;         // текущий разговор
 let PENDING = [];        // приложенные файлы до отправки
 let ABORT = null;        // остановка ответа
-let MODEL = null;
 
 const $ = (s) => document.querySelector(s);
 const show = (id) => {
@@ -138,8 +137,12 @@ async function startHome() {
     const p = CFG.presets[c.preset] || {};
     const li = document.createElement("li");
     const open = el("button", "hopen");
-    open.innerHTML = `<span>${esc(p.icon || "💬")}</span><span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${fmtDate(c.updated)}</span></span>`;
+    open.innerHTML = `<span class="hemoji">${esc(c.emoji || p.icon || "💬")}</span><span style="min-width:0"><span class="htitle">${esc(c.title || p.title || "Разговор")}</span><span class="hdate">${fmtDate(c.updated)}</span></span>`;
     open.onclick = () => openChat(c);
+    const ren = el("button", "icon-btn hdel");
+    ren.textContent = "✏️";
+    ren.setAttribute("aria-label", "Переименовать разговор");
+    ren.onclick = async () => { if (await renameChat(c)) startHome(); };
     const del = el("button", "icon-btn hdel");
     del.textContent = "✕";
     del.setAttribute("aria-label", "Удалить разговор");
@@ -148,7 +151,7 @@ async function startHome() {
       await DB.del(c.id);
       startHome();
     };
-    li.append(open, del);
+    li.append(open, ren, del);
     list.append(li);
   });
 }
@@ -169,18 +172,10 @@ function openChat(chat) {
   PENDING = [];
   renderAttachments();
   const p = CFG.presets[chat.preset] || {};
-  $("#chat-title").textContent = `${p.icon || ""} ${p.title || "Разговор"}`;
+  $("#chat-title").textContent = chatTitle(chat);
   $("#btn-attach").hidden = p.allowFiles === false;
 
-  const models = SESSION.models || [];
-  const sel = $("#model-select");
-  MODEL = models.includes(me().model) ? me().model : models[0];
-  if (models.length > 1) {
-    sel.hidden = false;
-    sel.innerHTML = models.map((m) => `<option value="${esc(m)}">${esc(modelName(m))}</option>`).join("");
-    sel.value = MODEL;
-    sel.onchange = () => (MODEL = sel.value);
-  } else sel.hidden = true;
+  $("#think").checked = false; // «Подумать» по умолчанию выключено
 
   show("screen-chat");
   const box = $("#messages");
@@ -192,11 +187,46 @@ function openChat(chat) {
 }
 $("#btn-back").onclick = () => { if (ABORT) ABORT.abort(); stopListening(); startHome(); };
 
-function modelName(m) {
-  if (m.includes("opus")) return "Opus — самый умный";
-  if (m.includes("sonnet")) return "Sonnet — обычный";
-  if (m.includes("haiku")) return "Haiku — быстрый";
-  return m;
+/* ===== Названия разговоров ===== */
+function chatTitle(c) {
+  const p = CFG.presets[c.preset] || {};
+  if (c.emoji || c.renamed) return `${c.emoji || p.icon || "💬"} ${c.title || p.title || "Разговор"}`;
+  return `${p.icon || "💬"} ${p.title || "Разговор"}`;
+}
+const EMOJI_RE = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u;
+// Переименование: можно поменять и эмодзи — он берётся из начала строки
+async function renameChat(c) {
+  const p = CFG.presets[c.preset] || {};
+  const cur = `${c.emoji || p.icon || "💬"} ${c.title || p.title || "Разговор"}`;
+  const v = prompt("Название разговора (в начале можно поставить свой эмодзи):", cur);
+  if (v == null || !v.trim()) return false;
+  const m = v.trim().match(EMOJI_RE);
+  c.emoji = m ? m[1] : (c.emoji || p.icon || "💬");
+  c.title = (m ? v.trim().slice(m[0].length) : v.trim()).slice(0, 60) || c.title;
+  c.renamed = true;
+  c.updated = c.updated || Date.now();
+  if (DB.db) { try { await DB.put(c); } catch (_) {} }
+  return true;
+}
+$("#chat-title").onclick = async () => { if (CHAT && await renameChat(CHAT)) $("#chat-title").textContent = chatTitle(CHAT); };
+// После первого ответа Claude сам придумывает эмодзи и короткое название
+async function autoTitle(chat) {
+  if (chat.emoji || chat.renamed) return;
+  const q = textOf(chat.messages.find((m) => m.role === "user") || { content: [] });
+  const a = textOf(chat.messages.find((m) => m.role === "assistant") || { content: [] });
+  try {
+    const r = await fetch(CFG.proxy + "/title", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: `Вопрос: ${q}\n\nНачало ответа: ${a.slice(0, 600)}` }),
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (chat.renamed) return;
+    chat.emoji = d.emoji || "💬";
+    if (d.title) chat.title = d.title;
+    if (DB.db) { try { await DB.put(chat); } catch (_) {} }
+    if (CHAT === chat && !$("#screen-chat").hidden) $("#chat-title").textContent = chatTitle(chat);
+  } catch (_) {}
 }
 
 /* ===== Отображение ===== */
@@ -313,7 +343,7 @@ async function ask() {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: MODEL, system, messages: contextMessages() }),
+      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: me().model, think: $("#think").checked, system, messages: contextMessages() }),
       signal: ABORT.signal,
     });
     if (!r.ok) {
@@ -338,6 +368,8 @@ async function ask() {
         try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
         if (ev.type === "content_block_start" && ev.content_block?.type === "server_tool_use") {
           if (!started) body.textContent = "Ищу в интернете…";
+        } else if (ev.type === "content_block_start" && ev.content_block?.type === "thinking") {
+          if (!started) body.textContent = "Обдумываю…";
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (!started) { started = true; body.classList.remove("typing"); }
           full += ev.delta.text;
@@ -353,6 +385,7 @@ async function ask() {
     CHAT.messages.push(msg);
     bubble.append(actions(full));
     await save();
+    autoTitle(CHAT);
     if (u.readAloud) speakText(full);
   } catch (err) {
     if (full) {

@@ -139,22 +139,44 @@ export async function handler(req, info) {
     return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch }, 200, h);
   }
 
-  if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
-
   const key = user.key || env("ANTHROPIC_KEY");
   if (!key) return json({ error: "Ключ не настроен" }, 500, h);
+
+  // Название и эмодзи для разговора — коротко и дёшево, через Haiku
+  if (url.pathname === "/title") {
+    const text = String(body.text || "").slice(0, 3000);
+    const r = await callAnthropic(key, {
+      model: env("TITLE_MODEL", "claude-haiku-5-5"),
+      max_tokens: 60,
+      system: "Придумай для разговора одно подходящее по смыслу эмодзи и короткое название из 2–5 слов на русском. Ответь строго одной строкой: эмодзи, пробел, название. Без кавычек и точки.",
+      messages: [{ role: "user", content: text }],
+    });
+    if (!r.ok) return json({ error: "Не удалось придумать название" }, 502, h);
+    const d = await r.json();
+    const line = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().split("\n")[0];
+    const m = line.match(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*(.*)$/u);
+    return json({ emoji: m ? m[1] : "💬", title: (m ? m[2] : line).replace(/^["«]|["».]$/g, "").slice(0, 60) }, 200, h);
+  }
+
+  if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
 
   const model = models.includes(body.model) ? body.model : models[0];
   if (!Array.isArray(body.messages) || !body.messages.length) {
     return json({ error: "Пустой разговор" }, 400, h);
   }
 
+  const think = !!body.think;
   const payload = {
     model,
-    max_tokens: Math.min(Number(user.maxTokens) || 8000, 32000),
+    max_tokens: Math.min(Math.max(Number(user.maxTokens) || 8000, think ? 16000 : 0), 32000),
     stream: true,
     messages: body.messages,
   };
+  // «Подумать»: модель сначала рассуждает, сама решая, сколько думать
+  if (think) {
+    payload.thinking = { type: "adaptive" };
+    payload.output_config = { effort: "high" };
+  }
   if (body.system) payload.system = String(body.system).slice(0, 20000);
   if (user.webSearch && body.web !== false) {
     payload.tools = [{
@@ -165,15 +187,13 @@ export async function handler(req, info) {
   }
 
   let res = await callAnthropic(key, payload);
-  // Если поиск не принят (например, сменилась версия инструмента) — повторяем без него
-  if (res.status === 400 && payload.tools) {
+  // Если что-то из дополнительных настроек не принято — повторяем без него
+  for (let i = 0; i < 2 && res.status === 400; i++) {
     const text = await res.text();
-    if (/tool/i.test(text)) {
-      delete payload.tools;
-      res = await callAnthropic(key, payload);
-    } else {
-      return json({ error: "Ошибка запроса", details: text.slice(0, 500) }, 400, h);
-    }
+    if (payload.thinking && /thinking|effort|output_config/i.test(text)) { delete payload.thinking; delete payload.output_config; }
+    else if (payload.tools && /tool/i.test(text)) delete payload.tools;
+    else return json({ error: "Ошибка запроса", details: text.slice(0, 500) }, 400, h);
+    res = await callAnthropic(key, payload);
   }
 
   if (!res.ok) {

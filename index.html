@@ -45,8 +45,8 @@
 <section id="screen-chat" class="screen chat-screen" hidden>
   <header class="topbar">
     <button id="btn-back" class="icon-btn" aria-label="Назад">←</button>
-    <h1 class="chat-title" id="chat-title"></h1>
-    <select id="model-select" class="model-select" hidden aria-label="Модель"></select>
+    <h1 class="chat-title" id="chat-title" title="Нажмите, чтобы переименовать"></h1>
+    <label class="think-toggle" title="Claude сначала обдумает ответ — дольше, но глубже"><input type="checkbox" id="think"><span>Подумать</span></label>
   </header>
   <main id="messages" class="messages" aria-live="polite"></main>
   <div id="attachments" class="attachments"></div>
