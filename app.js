@@ -65,7 +65,7 @@ async function init() {
   if (SESSION && CFG.users[SESSION.user]) startHome();
   else startLogin();
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
 
 /* ===== Вход (только пароль — прослойка сама находит человека) ===== */
