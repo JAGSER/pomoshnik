@@ -324,9 +324,11 @@ function actions(text, msg) {
   a.append(speak, copy);
   return a;
 }
-const RATES = [0.8, 1, 1.2, 1.5];
-let RATE = RATES.includes(Number(store.get("rate"))) ? Number(store.get("rate")) : 1;
-function rateLabel() { return "⏩ " + String(RATE).replace(".", ",") + "×"; }
+// Две скорости: «1×» на деле читает в 1,2 раза быстрее (так приятнее на слух), «1,5×» — как написано
+const RATES = [1.2, 1.5];
+const RATE_LABELS = { 1.2: "1", 1.5: "1,5" };
+let RATE = RATES.includes(Number(store.get("rate"))) ? Number(store.get("rate")) : 1.2;
+function rateLabel() { return "⏩ " + RATE_LABELS[RATE] + "×"; }
 $("#rate-btn").textContent = rateLabel();
 $("#rate-btn").onclick = () => {
   RATE = RATES[(RATES.indexOf(RATE) + 1) % RATES.length];

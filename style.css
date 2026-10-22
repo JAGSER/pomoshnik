@@ -172,3 +172,5 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .chat-tools { gap: 6px; }
 .chat-tools .think-toggle { padding: 4px 10px; gap: 6px; font-size: .76em; min-height: 38px; }
 .chat-tools .think-toggle input { width: 18px; height: 18px; }
+.install-icon { font-size: 1.4em; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 50%; width: 48px; height: 48px; min-width: 48px; min-height: 48px; padding: 0; }
+.install-login { align-self: center; margin-top: 4px; }
