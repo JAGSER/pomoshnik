@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Помощник</title>
+<meta name="theme-color" content="#F6F1E9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B1814" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Помощник">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Вход -->
+<section id="screen-login" class="screen" hidden>
+  <div class="login-wrap">
+    <div class="brand"><span class="brand-mark">✦</span><h1 id="app-name">Помощник</h1></div>
+    <p class="lead">Кто вы?</p>
+    <div id="user-tiles" class="user-tiles"></div>
+    <form id="login-form" class="login-form" hidden>
+      <p class="login-who"><span id="login-avatar"></span> <span id="login-name"></span></p>
+      <label for="login-pass" class="label">Пароль</label>
+      <input id="login-pass" type="password" autocomplete="current-password" inputmode="text" required>
+      <button type="submit" class="btn btn-primary btn-wide">Войти</button>
+      <button type="button" id="login-back" class="btn btn-ghost btn-wide">Это не я</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </div>
+</section>
+
+<!-- Главная -->
+<section id="screen-home" class="screen" hidden>
+  <header class="topbar">
+    <h1 class="hello" id="hello"></h1>
+    <button id="btn-logout" class="btn btn-ghost small" aria-label="Выйти">Выйти</button>
+  </header>
+  <main class="home-main">
+    <div id="preset-grid" class="preset-grid"></div>
+    <h2 class="section-title" id="history-title" hidden>Прошлые разговоры</h2>
+    <ul id="history" class="history"></ul>
+  </main>
+</section>
+
+<!-- Чат -->
+<section id="screen-chat" class="screen chat-screen" hidden>
+  <header class="topbar">
+    <button id="btn-back" class="icon-btn" aria-label="Назад">←</button>
+    <h1 class="chat-title" id="chat-title"></h1>
+    <select id="model-select" class="model-select" hidden aria-label="Модель"></select>
+  </header>
+  <main id="messages" class="messages" aria-live="polite"></main>
+  <div id="attachments" class="attachments"></div>
+  <form id="composer" class="composer">
+    <button type="button" id="btn-attach" class="icon-btn round" aria-label="Приложить фото или файл">＋</button>
+    <input id="file-input" type="file" accept="image/*,application/pdf,.txt,.md,.csv" multiple hidden>
+    <textarea id="input" rows="1" placeholder="Ваш вопрос…"></textarea>
+    <button type="button" id="btn-mic" class="icon-btn round mic" aria-label="Сказать голосом">🎤</button>
+    <button type="submit" id="btn-send" class="icon-btn round send" aria-label="Отправить">➤</button>
+  </form>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>
