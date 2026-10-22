@@ -733,7 +733,29 @@ async function ttsFetch(chunk, voice) {
   ADB.put(key, blob);
   return URL.createObjectURL(blob);
 }
+// Не больше двух запросов озвучки одновременно — у Google лимит в минуту
+let TTS_ACTIVE = 0;
+const TTS_WAIT = [];
+async function ttsSlot() {
+  if (TTS_ACTIVE < 2) { TTS_ACTIVE++; return; }
+  await new Promise((r) => TTS_WAIT.push(r));
+  TTS_ACTIVE++;
+}
+function ttsRelease() { TTS_ACTIVE--; const n = TTS_WAIT.shift(); if (n) n(); }
 async function ttsLoad(chunk, voice) {
+  await ttsSlot();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try { return await ttsLoadOnce(chunk, voice); }
+      catch (err) {
+        // лимит в минуту: один раз ждём, сколько просит Google (не дольше 25 секунд), и пробуем снова
+        if (err.retryAfter && attempt === 0 && err.retryAfter <= 25) { await new Promise((r) => setTimeout(r, err.retryAfter * 1000)); continue; }
+        throw err;
+      }
+    }
+  } finally { ttsRelease(); }
+}
+async function ttsLoadOnce(chunk, voice) {
   const v = CFG.voice || {};
   const r = await fetch(CFG.proxy + "/tts", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -742,7 +764,9 @@ async function ttsLoad(chunk, voice) {
   if (r.status === 501) GEMINI_OFF = true;
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
-    throw new Error(d.error || "Голос Gemini недоступен");
+    const e = new Error(d.error || "Голос Gemini недоступен");
+    if (r.status === 429) e.retryAfter = Math.max(3, Number(d.retryAfter) || 20);
+    throw e;
   }
   return await r.blob();
 }
@@ -789,8 +813,8 @@ class Speaker {
     for (;;) {
       // первый кусок короткий (голос стартует быстрее), остальные крупные (меньше пауз)
       const first = this.count === 0;
-      const min = first ? 50 : 300, max = first ? 260 : 900;
-      if (!final && rest.length < (first ? min : 600)) break;
+      const min = first ? 50 : 300, max = first ? 260 : 2000;
+      if (!final && rest.length < (first ? min : 1200)) break;
       const re = /[.!?…]+["»)]*\s+/g;
       let end = -1, m;
       while ((m = re.exec(rest))) {

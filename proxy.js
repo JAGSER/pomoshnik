@@ -208,9 +208,12 @@ export async function handler(req, info) {
       if (r.ok) break;
       lastErr = `${model}: ${r.status} ${(await r.text()).slice(0, 300)}`;
       console.log("TTS error", lastErr);
-      if (r.status === 429) break; // лимит ключа — другие модели не помогут
+      // у каждой модели свой лимит в минуту — при 429 просто пробуем следующую
     }
-    if (!r.ok) return json({ error: r.status === 429 ? "Закончился лимит озвучки Gemini" : "Gemini не смог озвучить", details: lastErr }, 502, h);
+    if (!r.ok) {
+      const wait = Number((lastErr.match(/retry in (\d+)s/) || [])[1]) || 0;
+      return json({ error: r.status === 429 ? "Слишком много запросов озвучки, подождите минуту" : "Gemini не смог озвучить", retryAfter: wait, details: lastErr }, r.status === 429 ? 429 : 502, h);
+    }
     const audio = findAudio(await r.json());
     if (!audio) return json({ error: "Gemini вернул ответ без звука" }, 502, h);
     let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
