@@ -24,8 +24,15 @@ const DB = {
         // готовый звук озвучки, чтобы повторно не генерировать
         if (!db.objectStoreNames.contains("tts")) db.createObjectStore("tts", { keyPath: "k" }).createIndex("t", "t");
       };
-      r.onsuccess = () => { this.db = r.result; res(); };
+      r.onsuccess = () => {
+        this.db = r.result;
+        // если откроется новая версия приложения — освобождаем хранилище, а не блокируем его
+        this.db.onversionchange = () => { try { this.db.close(); } catch (_) {} this.db = null; location.reload(); };
+        res();
+      };
       r.onerror = () => rej(r.error);
+      // другая открытая копия приложения держит старую версию хранилища — не ждём её
+      r.onblocked = () => rej(new Error("blocked"));
     });
   },
   tx(mode) { return this.db.transaction("chats", mode).objectStore("chats"); },
@@ -80,7 +87,8 @@ async function init() {
   }
   document.title = CFG.appName || "Помощник";
   $("#app-name").textContent = CFG.appName || "Помощник";
-  try { await DB.open(); } catch (_) { /* без истории тоже работаем */ }
+  // не ждём хранилище дольше 3 секунд — без истории приложение тоже работает
+  try { await Promise.race([DB.open(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); } catch (_) {}
 
   SESSION = store.get("session");
   if (SESSION && CFG.users[SESSION.user]) startHome();
