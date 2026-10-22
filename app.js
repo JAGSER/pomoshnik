@@ -418,6 +418,7 @@ async function ask() {
   stopSpeaking();
   const autoRead = $("#autoread").checked;
   const live = autoRead && useGemini() ? new Speaker() : null;
+  let pre = null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
@@ -454,6 +455,8 @@ async function ask() {
           full += ev.delta.text;
           body.innerHTML = md(full);
           if (live) live.push(full);
+          // предзапись первой фразы, даже если чтение вслух выключено, — чтобы «Вслух» звучал сразу
+          else if (!pre && useGemini()) { const c = firstChunk(plain(full), false); if (c) { pre = c; ttsFetch(c).catch(() => {}); } }
           scrollDown();
         } else if (ev.type === "error") {
           throw new Error(ev.error?.type === "overloaded_error" ? "Claude перегружен, попробуйте через минуту" : "Ошибка при ответе");
@@ -468,6 +471,10 @@ async function ask() {
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
+    if (!live && useGemini()) {
+      if (!pre) { pre = firstChunk(plain(full), true); if (pre) ttsFetch(pre).catch(() => {}); }
+      if (pre && !msg.tts) { msg.tts = [pre]; save(); }
+    }
     if (live) { live.end(); rememberChunks(msg, live); if (SPEAKER === live) live.setOwner(btn); }
     else if (autoRead && $("#autoread").checked) speakText(full, btn, msg);
   } catch (err) {
@@ -698,6 +705,16 @@ async function ttsLoad(chunk) {
     throw new Error(d.error || "Голос Gemini недоступен");
   }
   return await r.blob();
+}
+
+// Первый кусок ответа — по тем же правилам, что и при чтении (50–260 символов, до конца предложения)
+function firstChunk(t, final) {
+  if (t.length < 50) return final && t.trim() ? t : null;
+  const re = /[.!?…]+["»)]*\s+/g;
+  let end = -1, m;
+  while ((m = re.exec(t))) { const e = m.index + m[0].length; if (e <= 260 || end < 0) end = e; if (e >= 260) break; }
+  if (end >= 50) return t.slice(0, end);
+  return final ? t : null;
 }
 
 class Speaker {
