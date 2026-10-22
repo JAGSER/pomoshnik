@@ -1,6 +1,6 @@
 // Кэш оболочки приложения: открывается даже при плохом интернете.
 // Сначала берём свежую версию из сети, при её отсутствии — из кэша.
-const CACHE = "pomoshnik-v1";
+const CACHE = "pomoshnik-v2";
 const SHELL = ["./", "index.html", "style.css", "app.js", "config.json", "icon.svg", "manifest.webmanifest"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {

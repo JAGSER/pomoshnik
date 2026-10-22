@@ -94,9 +94,20 @@ function pickUser(id) {
   $("#login-name").textContent = u.name;
   $("#login-error").textContent = "";
   $("#login-pass").value = "";
+  $("#login-pass").type = "password";
+  $("#pass-toggle").textContent = "Показать";
   $("#login-pass").focus();
 }
 $("#login-back").onclick = startLogin;
+// В поле пароля многие Android-клавиатуры дают только английскую раскладку.
+// «Показать» делает поле обычным — тогда доступна и русская.
+$("#pass-toggle").onclick = () => {
+  const f = $("#login-pass");
+  const show = f.type === "password";
+  f.type = show ? "text" : "password";
+  $("#pass-toggle").textContent = show ? "Скрыть" : "Показать";
+  f.blur(); setTimeout(() => f.focus(), 50);
+};
 $("#login-form").onsubmit = async (e) => {
   e.preventDefault();
   const password = $("#login-pass").value.trim();

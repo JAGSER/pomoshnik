@@ -24,7 +24,7 @@
     <form id="login-form" class="login-form" hidden>
       <p class="login-who"><span id="login-avatar"></span> <span id="login-name"></span></p>
       <label for="login-pass" class="label">Пароль</label>
-      <input id="login-pass" type="password" autocomplete="current-password" inputmode="text" required>
+      <div class="pass-row"><input id="login-pass" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required><button type="button" id="pass-toggle" class="btn btn-ghost small pass-toggle">Показать</button></div>
       <button type="submit" class="btn btn-primary btn-wide">Войти</button>
       <button type="button" id="login-back" class="btn btn-ghost btn-wide">Это не я</button>
       <p id="login-error" class="error" role="alert"></p>

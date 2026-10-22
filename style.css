@@ -148,3 +148,6 @@ button, input, textarea, select { font: inherit; color: inherit; }
 #input:focus { outline: none; border-color: var(--accent); }
 
 .btn.small { min-height: 44px; padding: 8px 14px; font-size: .85em; }
+.pass-row { display: flex; gap: 8px; align-items: stretch; }
+.pass-row #login-pass { flex: 1; min-width: 0; }
+.pass-toggle { flex: none; border: 2px solid var(--line); }
