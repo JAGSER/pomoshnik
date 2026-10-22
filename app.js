@@ -127,8 +127,8 @@ async function init() {
     document.body.innerHTML = "<p style='padding:24px'>Не удалось загрузить настройки. Проверьте интернет и обновите страницу.</p>";
     return;
   }
-  document.title = CFG.appName || "Помощник";
-  $("#app-name").textContent = CFG.appName || "Помощник";
+  document.title = CFG.appName || "Помощник AI";
+  $("#app-name").textContent = CFG.appName || "Помощник AI";
   // не ждём хранилище дольше 3 секунд — без истории приложение тоже работает
   try { await Promise.race([DB.open(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); } catch (_) {}
   ADB.open();
@@ -1311,15 +1311,19 @@ function makeScene(emoji, title, subs, duration) {
   const titleEnd = 700 + (tl.length - 1) * fs * 1.25 + 40;
   b.fillStyle = "#B5532E"; b.fillRect(VW / 2 - 60, titleEnd, 120, 6);
   b.fillStyle = "#6E655A"; b.font = `500 40px ${VFONT}`;
-  b.fillText("Помощник", VW / 2 + 30, VH - 90);
-  // маленький значок приложения слева от подписи
-  const lx = VW / 2 - b.measureText("Помощник").width / 2 - 34, ly = VH - 103, k = 44 / 512;
-  b.save(); b.translate(lx - 22, ly - 22); b.scale(k, k);
+  // значок приложения и название — одной группой по центру
+  const brand = CFG.appName || "Помощник AI", isz = 48, gap = 14;
+  const bw = isz + gap + b.measureText(brand).width;
+  const lx = (VW - bw) / 2, ly = VH - 90 - 38, k = isz / 512;
+  b.textAlign = "left";
+  b.fillText(brand, lx + isz + gap, VH - 90);
+  b.save(); b.translate(lx, ly); b.scale(k, k);
   b.fillStyle = "#B5532E"; b.beginPath(); b.roundRect(0, 0, 512, 512, 112); b.fill();
   b.strokeStyle = "#FFFDF9"; b.lineWidth = 34; b.lineCap = "round";
   b.beginPath(); b.arc(256, 250, 110, 0, Math.PI); b.stroke();
   b.fillStyle = "#FFFDF9"; b.beginPath(); b.arc(256, 186, 48, 0, Math.PI * 2); b.fill();
   b.restore();
+  b.textAlign = "center";
   const subTop = titleEnd + 120, subBottom = VH - 260;
   // заранее раскладываем субтитры по строкам
   subs.forEach((s) => {
@@ -1377,7 +1381,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=24");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=25");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

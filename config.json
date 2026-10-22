@@ -1,5 +1,5 @@
 {
-  "appName": "Помощник",
+  "appName": "Помощник AI",
   "proxy": "https://pomoshnik.jagser.deno.net",
   "voice": { "engine": "gemini", "name": "Algieba" },
 

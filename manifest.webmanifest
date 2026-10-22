@@ -1,6 +1,6 @@
 {
-  "name": "Помощник",
-  "short_name": "Помощник",
+  "name": "Помощник AI",
+  "short_name": "Помощник AI",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
