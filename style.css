@@ -174,3 +174,6 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .chat-tools .think-toggle input { width: 18px; height: 18px; }
 .install-icon { font-size: 1.4em; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 50%; width: 48px; height: 48px; min-width: 48px; min-height: 48px; padding: 0; }
 .install-login { align-self: center; margin-top: 4px; }
+.toast { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: .85em; max-width: calc(100% - 32px); text-align: center; transition: .25s; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

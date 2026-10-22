@@ -115,7 +115,7 @@ async function callAnthropic(key, payload) {
   });
 }
 
-const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
+const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-lite-tts"];
 
 // Ищем в ответе Gemini звук в base64 (поле data рядом с mime_type/audio)
 function findAudio(o, depth = 0) {
@@ -189,18 +189,28 @@ export async function handler(req, info) {
     const text = String(body.text || "").slice(0, 5000);
     if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
     const voice = /^[A-Za-z]{3,20}$/.test(body.voice || "") ? body.voice : env("GEMINI_VOICE", "Sulafat");
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
-      body: JSON.stringify({
-        model: TTS_MODELS.includes(body.model) ? body.model : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts"),
-        input: [{ type: "user_input", content: [{ type: "text", text,
-          annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
-        response_format: { type: "audio" },
-        generation_config: { speech_config: [{ voice }] },
-      }),
-    });
-    if (!r.ok) return json({ error: "Gemini не смог озвучить", details: (await r.text()).slice(0, 500) }, 502, h);
+    // пробуем модели по очереди: выбранную, затем запасные — и пишем причину ошибок в журнал
+    const first = TTS_MODELS.includes(body.model) ? body.model : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts");
+    const order = [first, ...TTS_MODELS.filter((m) => m !== first)];
+    let r = null, lastErr = "";
+    for (const model of order) {
+      r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST",
+        headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+        body: JSON.stringify({
+          model,
+          input: [{ type: "user_input", content: [{ type: "text", text,
+            annotations: [{ type: "speech_metadata", style: env("GEMINI_STYLE", "спокойно, тепло и неторопливо, как добрый собеседник") }] }] }],
+          response_format: { type: "audio" },
+          generation_config: { speech_config: [{ voice }] },
+        }),
+      });
+      if (r.ok) break;
+      lastErr = `${model}: ${r.status} ${(await r.text()).slice(0, 300)}`;
+      console.log("TTS error", lastErr);
+      if (r.status === 429) break; // лимит ключа — другие модели не помогут
+    }
+    if (!r.ok) return json({ error: r.status === 429 ? "Закончился лимит озвучки Gemini" : "Gemini не смог озвучить", details: lastErr }, 502, h);
     const audio = findAudio(await r.json());
     if (!audio) return json({ error: "Gemini вернул ответ без звука" }, 502, h);
     let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));

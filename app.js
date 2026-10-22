@@ -17,22 +17,20 @@ const DB = {
   db: null,
   open() {
     return new Promise((res, rej) => {
-      const r = indexedDB.open("pomoshnik", 2);
+      // без номера версии: открываем то, что уже есть на устройстве, — так обновления не конфликтуют
+      const r = indexedDB.open("pomoshnik");
       r.onupgradeneeded = () => {
         const db = r.result;
         if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "id" }).createIndex("user", "user");
-        // готовый звук озвучки, чтобы повторно не генерировать
-        if (!db.objectStoreNames.contains("tts")) db.createObjectStore("tts", { keyPath: "k" }).createIndex("t", "t");
       };
       r.onsuccess = () => {
         this.db = r.result;
-        // если откроется новая версия приложения — освобождаем хранилище, а не блокируем его
         this.db.onversionchange = () => { try { this.db.close(); } catch (_) {} this.db = null; location.reload(); };
         res();
+        // если хранилище открылось позже, чем показалась главная, — обновляем список разговоров
+        if (SESSION && !$("#screen-home").hidden) startHome();
       };
       r.onerror = () => rej(r.error);
-      // другая открытая копия приложения держит старую версию хранилища — не ждём её
-      r.onblocked = () => rej(new Error("blocked"));
     });
   },
   tx(mode) { return this.db.transaction("chats", mode).objectStore("chats"); },
@@ -42,13 +40,37 @@ const DB = {
   del(id) {
     return new Promise((res) => { const r = this.tx("readwrite").delete(id); r.onsuccess = res; r.onerror = res; });
   },
-  ttsGet(k) {
+  byUser(user) {
     return new Promise((res) => {
+      const r = this.tx("readonly").index("user").getAll(user);
+      r.onsuccess = () => res(r.result.sort((a, b) => b.updated - a.updated));
+      r.onerror = () => res([]);
+    });
+  },
+};
+
+// Отдельное хранилище для готового звука озвучки
+const ADB = {
+  db: null,
+  open() {
+    return new Promise((res) => {
+      try {
+        const r = indexedDB.open("pomoshnik-audio", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("tts", { keyPath: "k" }).createIndex("t", "t");
+        r.onsuccess = () => { this.db = r.result; res(); };
+        r.onerror = r.onblocked = () => res();
+      } catch (_) { res(); }
+    });
+  },
+  get(k) {
+    return new Promise((res) => {
+      if (!this.db) return res(null);
       try { const r = this.db.transaction("tts").objectStore("tts").get(k); r.onsuccess = () => res(r.result ? r.result.blob : null); r.onerror = () => res(null); }
       catch (_) { res(null); }
     });
   },
-  ttsPut(k, blob) {
+  put(k, blob) {
+    if (!this.db) return;
     try {
       const st = this.db.transaction("tts", "readwrite").objectStore("tts");
       st.put({ k, blob, t: Date.now() });
@@ -60,13 +82,6 @@ const DB = {
         st.index("t").openCursor().onsuccess = (e) => { const cur = e.target.result; if (cur && extra-- > 0) { cur.delete(); cur.continue(); } };
       };
     } catch (_) {}
-  },
-  byUser(user) {
-    return new Promise((res) => {
-      const r = this.tx("readonly").index("user").getAll(user);
-      r.onsuccess = () => res(r.result.sort((a, b) => b.updated - a.updated));
-      r.onerror = () => res([]);
-    });
   },
 };
 
@@ -89,6 +104,7 @@ async function init() {
   $("#app-name").textContent = CFG.appName || "Помощник";
   // не ждём хранилище дольше 3 секунд — без истории приложение тоже работает
   try { await Promise.race([DB.open(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); } catch (_) {}
+  ADB.open();
 
   SESSION = store.get("session");
   if (SESSION && CFG.users[SESSION.user]) startHome();
@@ -657,11 +673,11 @@ const TTS_MEM = new Map();
 async function ttsFetch(chunk) {
   const v = CFG.voice || {};
   const key = [me().voice || v.name || "", v.model || "", chunk.trim()].join("|");
-  let blob = TTS_MEM.get(key) || (DB.db ? await DB.ttsGet(key) : null);
+  let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return URL.createObjectURL(blob); }
   blob = await ttsLoad(chunk);
   TTS_MEM.set(key, blob);
-  if (DB.db) DB.ttsPut(key, blob);
+  ADB.put(key, blob);
   return URL.createObjectURL(blob);
 }
 async function ttsLoad(chunk) {
@@ -671,7 +687,10 @@ async function ttsLoad(chunk) {
     body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: me().voice || v.name, model: v.model }),
   });
   if (r.status === 501) GEMINI_OFF = true;
-  if (!r.ok) throw new Error("tts " + r.status);
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || "Голос Gemini недоступен");
+  }
   return await r.blob();
 }
 
@@ -739,8 +758,9 @@ class Speaker {
     while (chunk && !this.stopped) {
       let url;
       try { url = await pending; }
-      catch (_) {
+      catch (err) {
         if (this.stopped) return;
+        toast((err && err.message ? err.message : "Голос Gemini недоступен") + " — читаю голосом телефона");
         // Gemini не ответил — дочитываем встроенным голосом
         const left = [chunk, ...this.queue].join(" ");
         this.queue = [];
@@ -870,6 +890,15 @@ document.querySelectorAll(".install-btn").forEach((b) => (b.onclick = async () =
 updateInstall();
 
 /* ===== Мелочи ===== */
+let TOAST_T = null;
+function toast(text) {
+  let t = document.querySelector(".toast");
+  if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.append(t); }
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(TOAST_T);
+  TOAST_T = setTimeout(() => t.classList.remove("show"), 5000);
+}
 function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
 function fmtDate(t) {
   const d = new Date(t);
