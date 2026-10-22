@@ -23,7 +23,7 @@
       "bigText": true
     },
     "sister": {
-      "name": "Сестра",
+      "name": "Юля",
       "avatar": "🎬",
       "model": "claude-opus-5-5",
       "presets": ["ask"],
