@@ -168,6 +168,15 @@ const EN = {
   "Готово {0} из {1}": "Done {0} of {1}",
   "Все образцы готовы ✓": "All samples ready ✓",
   "Готово {0} из {1} — нажмите ещё раз": "Done {0} of {1} — tap again",
+  // творческие видео
+  "⚠️ Творческое видео не получилось: {0}. Сделано обычное. Подробности — в ⚙️ → Видео.": "⚠️ The creative video didn't work out: {0}. A regular one was made instead. Details — in ⚙️ → Video.",
+  "ℹ️ Обычное видео: {0}.": "ℹ️ Regular video: {0}.",
+  "творческий режим выключен в настройках": "creative mode is turned off in settings",
+  "этот браузер не умеет творческие видео (нет WebCodecs/OffscreenCanvas)": "this browser can't make creative videos (no WebCodecs/OffscreenCanvas)",
+  "Идея": "Idea", "Проверка": "Checking", "Кадры": "Frames", "Код": "Code", "Правка": "Fixing", "Улучшаю": "Improving",
+  "Claude не прислал код": "Claude didn't send any code",
+  "код ролика не заработал": "the video code didn't work",
+  "Claude не ответил": "Claude didn't respond",
   // характеры голосов
   "тёплый": "warm", "нежный": "gentle", "дружелюбный": "friendly", "зрелый": "mature", "ровный": "even",
   "спокойный": "calm", "плавный": "smooth", "мягкий": "soft", "дикторский": "announcer", "чёткий": "clear",

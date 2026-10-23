@@ -35,6 +35,7 @@
       "name": "Vie",
       "avatar": "🌺",
       "lang": "en",
+      "creative": true,
       "model": "claude-sonnet-5-5",
       "presets": ["ask"],
       "readAloud": false,
