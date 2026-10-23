@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник AI">
-<link rel="stylesheet" href="style.css?v=51">
+<link rel="stylesheet" href="style.css?v=52">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="cb0ec999-076a-4bd0-ad61-49313a08c950" data-domains="pomoshnik.ai"></script>
 </head>
 <body>
@@ -129,6 +129,7 @@
     <label class="think-toggle" title="Читать ответы вслух автоматически"><input type="checkbox" id="autoread"><span>Читать вслух</span></label>
     <button type="button" class="think-toggle rate-btn" id="rate-btn" title="Скорость чтения"></button>
   </div>
+  <div id="helper-chip" class="helper-chip" hidden></div>
   <form id="composer" class="composer">
     <button type="button" id="btn-attach" class="icon-btn round" aria-label="Приложить фото или файл">＋</button>
     <input id="file-input" type="file" accept="image/*,application/pdf,.txt,.md,.csv" multiple hidden>
@@ -136,6 +137,14 @@
     <button type="button" id="btn-mic" class="icon-btn round mic" aria-label="Сказать голосом">🎤</button>
     <button type="submit" id="btn-send" class="icon-btn round send" aria-label="Отправить">➤</button>
   </form>
+  <div id="helpers-bar" class="helpers-bar" hidden><button type="button" id="btn-helpers" class="helpers-btn">⭐ Помощники</button></div>
+  <div id="helpers-sheet" class="sheet" hidden>
+    <div class="sheet-card">
+      <div class="sheet-head"><h2>⭐ Помощники</h2><button type="button" id="helpers-close" class="icon-btn" aria-label="Закрыть">✕</button></div>
+      <p class="sheet-hint">Выберите, с чем помочь. Помощник останется включён в этом разговоре.</p>
+      <div id="helpers-grid" class="helpers-grid"></div>
+    </div>
+  </div>
 </section>
 
 <!-- Живой режим: камера + разговор голосом -->
@@ -154,7 +163,7 @@
   </div>
 </div>
 
-<script src="i18n.js?v=51"></script>
-<script src="app.js?v=51"></script>
+<script src="i18n.js?v=52"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>
