@@ -2116,7 +2116,7 @@ async function aacSelfTest(pcm) {
       let d = new Uint8Array(c.byteLength); c.copyTo(d);
       if (d[0] === 0xff && (d[1] & 0xf6) === 0xf0) d = d.subarray(d[1] & 1 ? 7 : 9);
       chunks.push({ ts: c.timestamp, d });
-      if (!desc && m && m.decoderConfig && m.decoderConfig.description && m.decoderConfig.description.byteLength) desc = m.decoderConfig.description;
+      if (!desc && m && m.decoderConfig && m.decoderConfig.description && m.decoderConfig.description.byteLength) desc = ascFrom(m.decoderConfig.description);
     }, error: () => {} });
     enc.configure({ codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 });
     const step = VRATE / 10;
@@ -2141,6 +2141,22 @@ async function aacSelfTest(pcm) {
     return { ok: outPeak > Math.min(0.01, inPeak / 5), inPeak, outPeak };
   } catch (e) { console.warn("Проверка AAC:", e); return null; }
 }
+// iPhone отдаёт настройку AAC завёрнутой в ES-дескриптор (03…04…05…) — достаём из неё саму AudioSpecificConfig (тег 05)
+function ascFrom(desc) {
+  try {
+    const b = desc instanceof Uint8Array ? desc : new Uint8Array(desc.buffer ? desc.buffer.slice(desc.byteOffset, desc.byteOffset + desc.byteLength) : desc);
+    const okAsc = (x) => x.length >= 2 && x.length <= 5 && (x[0] >> 3) >= 1 && (x[0] >> 3) <= 5;
+    if (okAsc(b)) return b;
+    for (let i = 0; i < b.length - 2; i++) {
+      if (b[i] !== 0x05) continue;
+      let j = i + 1, len = 0;
+      for (let k = 0; k < 4; k++) { const v = b[j++]; len = (len << 7) | (v & 0x7f); if (!(v & 0x80)) break; }
+      const asc = b.subarray(j, j + len);
+      if (okAsc(asc)) return asc;
+    }
+  } catch (_) {}
+  return null;
+}
 // AudioSpecificConfig для AAC-LC: тип 2, частота, каналы
 function aacConfig(rate, ch) {
   const idx = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000].indexOf(rate);
@@ -2156,7 +2172,7 @@ async function audioInFile(blob) {
     if (has("mp4a")) {
       // в esds должна быть настройка звука (тег 05) — без неё iPhone молчит
       const e = [...b].length && (() => { for (let i = 0; i < b.length - 4; i++) if (b[i] === 0x65 && b[i + 1] === 0x73 && b[i + 2] === 0x64 && b[i + 3] === 0x73) return i; return -1; })();
-      if (e >= 0) { for (let i = e; i < Math.min(b.length - 1, e + 80); i++) if (b[i] === 0x05) { let j = i + 1; while (b[j] === 0x80) j++; if (b[j] >= 2 && b[j] < 0x80) return "AAC"; } return "AAC-nocfg"; }
+      if (e >= 0) { for (let i = e; i < Math.min(b.length - 1, e + 80); i++) if (b[i] === 0x05) { let j = i + 1; while (b[j] === 0x80) j++; const L = b[j]; if (L >= 2 && L <= 5 && (b[j + 1] >> 3) >= 1 && (b[j + 1] >> 3) <= 5 && ((((b[j + 1] & 7) << 1) | (b[j + 2] >> 7)) <= 11) && ((b[j + 2] >> 3) & 15) >= 1) return "AAC"; return "AAC-nocfg"; } return "AAC-nocfg"; }
       return "AAC";
     }
     if (has("A_AAC")) return "AAC";
@@ -2188,7 +2204,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=50");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=51");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2225,7 +2241,7 @@ async function encodeFast(scene, pcm, progress, noAudio) {
     if (aFirst) {
       aFirst = false;
       const d = (m && m.decoderConfig) || {};
-      const desc = d.description && d.description.byteLength ? d.description : aacConfig(VRATE, 1);
+      const desc = (d.description && d.description.byteLength && ascFrom(d.description)) || aacConfig(VRATE, 1);
       m = { decoderConfig: { codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, ...d, description: desc } };
     } else m = undefined;
     muxer.addAudioChunk(c, m);
