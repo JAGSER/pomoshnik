@@ -298,7 +298,8 @@ export async function handler(req, info) {
   const think = !!body.think;
   const payload = {
     model,
-    max_tokens: Math.min(Math.max(Number(user.maxTokens) || 8000, think ? 16000 : 0), 32000),
+    // творческое видео: длинный код ролика — даём больший запас длины ответа
+    max_tokens: body.purpose === "video" ? 32000 : Math.min(Math.max(Number(user.maxTokens) || 8000, think ? 16000 : 0), 32000),
     stream: true,
     messages: body.messages,
   };

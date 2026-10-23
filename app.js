@@ -1132,6 +1132,8 @@ function openSettings() {
   outroBox.onchange = () => store.set("outro:" + SESSION.user, outroBox.checked);
   $("#creative-block").hidden = !me().admin;
   if (me().admin) {
+    const lg = store.get("creativeLog:" + SESSION.user);
+    $("#creative-log").textContent = lg ? `Последний творческий ролик (${new Date(lg.at).toLocaleString("ru")}, ${lg.model.includes("opus") ? "Opus" : "Sonnet"}):\n` + lg.steps.join("\n") : "";
     const cr = $("#set-creative");
     cr.checked = store.get("creative:" + SESSION.user) !== false;
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
@@ -1409,7 +1411,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=26");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=27");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -1810,16 +1812,17 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - У каждой сцены появление (0,3–0,6 с), жизнь (лёгкое движение) и уход. Плавно, через k.ease. Разные приёмы в разных сценах.
 - Первые 1–2 секунды — цепляющее появление темы.
 - Кадр рисуется быстро (<10 мс): не больше ~300 фигур, без тяжёлых циклов.
+- Код компактный (до ~350 строк): сцены описывай массивом данных и общими функциями, без копирования одинаковых кусков.
 - Если пришлют замечания или кадры — ответь исправленным кодом целиком.`;
 
 async function directorCall(messages, onChars) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: creativeModel(), web: false, system: DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: creativeModel(), web: false, purpose: "video", system: DIRECTOR_PROMPT, messages }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = "", out = "";
+  let buf = "", out = "", stop = null;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -1830,10 +1833,11 @@ async function directorCall(messages, onChars) {
       if (!line.startsWith("data:")) continue;
       let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
       if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { out += ev.delta.text; if (onChars) onChars(out.length); }
+      else if (ev.type === "message_delta" && ev.delta?.stop_reason) stop = ev.delta.stop_reason;
       else if (ev.type === "error") throw new Error("Claude прервал ответ");
     }
   }
-  return out;
+  return { text: out, stop };
 }
 function extractCode(s) {
   const m = s.match(/```(?:js|javascript)?\s*\n([\s\S]*?)```/i) || s.match(/```(?:js|javascript)?\s*\n([\s\S]*)$/i);
@@ -1849,34 +1853,49 @@ async function makeCreativeScene(v, label) {
     `Ролик 9:16 по ответу помощника. Тема: ${v.emoji} ${v.title}. Длительность речи: ${v.speech.toFixed(1)} с (k.duration).`,
     `Фразы озвучки с таймингом (секунды):`,
     ...brief.subs.map((s) => `[${s.t0.toFixed(2)}–${s.t1.toFixed(2)}] ${s.text}`),
+    brief.subs.length > 14 ? `Фраз много — объединяй соседние в 8–14 сцен и держи код компактным.` : ``,
     `Придумай идею и запрограммируй ролик.`,
   ].join("\n");
+  const log = { at: new Date().toISOString(), model: creativeModel(), steps: [] };
+  const note = (x) => { log.steps.push(x); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
   const msgs = [{ role: "user", content: ask }];
+  let cut = false;
   const write = async (what) => {
-    const txt = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
+    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
+    cut = stop === "max_tokens";
     const code = extractCode(txt);
+    note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}`);
     msgs.push({ role: "assistant", content: txt });
     return code;
   };
-  const sb = new Sandbox();
+  let sb = new Sandbox();
   try {
     label("✨ Идея…");
     let code = await write("Код");
     if (!code) throw new Error("Claude не прислал код");
     // запуск и автопроверка: до двух исправлений, запоминаем лучший вариант
-    const times = []; for (let t = 0.3; t < v.speech; t += 0.5) times.push(+t.toFixed(2));
+    // точки проверки: каждые 0,5 с, но не больше ~120 на ролик
+    const step = Math.max(0.5, v.speech / 120);
+    const times = []; for (let t = 0.3; t < v.speech; t += step) times.push(+t.toFixed(2));
     const test = async (c) => {
-      const r = await sb.load(c, brief, v.outro);
-      if (!r.ok) return { problem: `Код упал с ошибкой: ${r.error}` };
-      if (r.ms > 60) return { problem: `Кадр рисуется слишком долго (${Math.round(r.ms)} мс) — упрости.` };
-      const ch = await sb.call({ cmd: "check", times }, 30000);
-      if (ch.error) return { problem: `Во время ролика ошибка: ${ch.error}` };
-      return { n: ch.issues.length, problem: ch.issues.length ? "Автопроверка нашла проблемы:\n- " + ch.issues.join("\n- ") : null };
+      try {
+        const r = await sb.load(c, brief, v.outro);
+        if (!r.ok) return { problem: (cut ? "Код оборвался по лимиту длины — напиши короче, через данные и циклы. " : "") + `Код упал с ошибкой: ${r.error}` };
+        const ch = await sb.call({ cmd: "check", times }, Math.max(30000, times.length * Math.max(400, r.ms * 3)));
+        if (ch.error) return { problem: `Во время ролика ошибка: ${ch.error}` };
+        const slow = r.ms > 150; // на телефоне кадр рисуется медленнее — это не провал, а повод упростить
+        const issues = ch.issues.concat(slow ? [`кадр рисуется долго (${Math.round(r.ms)} мс) — упрости тяжёлые места`] : []);
+        return { n: issues.length + (slow ? 4 : 0), problem: issues.length ? "Автопроверка нашла проблемы:\n- " + issues.join("\n- ") : null };
+      } catch (e) {
+        if (/завис/.test(e.message)) { sb.destroy(); sb = new Sandbox(); }
+        return { problem: `Код ролика завис или работает слишком медленно (${e.message}) — упрости.` };
+      }
     };
     let best = null;
     for (let round = 0; round < 3; round++) {
       label("✨ Проверка…");
       const r = await test(code);
+      note(`проверка ${round + 1}: ${r.problem ? r.problem.slice(0, 140) : "чисто"}`);
       if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n };
       if (!r.problem || round === 2) break;
       msgs.push({ role: "user", content: r.problem + "\nИсправь и пришли код целиком." });
@@ -1896,7 +1915,8 @@ async function makeCreativeScene(v, label) {
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
         { type: "text", text: `Кадры ролика в моменты ${shotTimes.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
-      const txt = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`));
+      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`));
+      note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
       const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
       if (better) {
         const r = await test(better);
@@ -1904,10 +1924,11 @@ async function makeCreativeScene(v, label) {
         else await sb.load(good, brief, v.outro);
       }
     }
+    note("готово");
     return {
       duration: v.duration,
-      frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 5000)).bmp,
+      frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 8000)).bmp,
       destroy: () => sb.destroy(),
     };
-  } catch (e) { sb.destroy(); throw e; }
+  } catch (e) { note("ошибка: " + (e.message || e)); sb.destroy(); throw e; }
 }
