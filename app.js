@@ -1684,7 +1684,7 @@ function openSettings() {
     const lg = store.get("creativeLog:" + SESSION.user);
     $("#creative-log").textContent = lg ? `Последний творческий ролик (${new Date(lg.at).toLocaleString(LOCALE())}, ${lg.model.includes("opus") ? "Opus" : "Sonnet"}):\n` + lg.steps.join("\n") : "";
     const cr = $("#set-creative");
-    cr.checked = store.get("creative:" + SESSION.user) !== false;
+    cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
     document.querySelectorAll("#creative-model button").forEach((b) => {
       b.classList.toggle("on", b.dataset.model === creativeModel());
@@ -1862,8 +1862,8 @@ async function videoButton(btn, text, msg) {
         console.warn("Творческий режим:", e);
         vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
       }
-    } else if (creativeAllowed()) {
-      const why = store.get("creative:" + SESSION.user) === false ? "творческий режим выключен в настройках"
+    } else if (creativeAllowed() && creativePref()) {
+      const why = !creativePref() ? "творческий режим выключен в настройках"
         : !window.VideoEncoder || !window.OffscreenCanvas || !window.Worker ? "этот браузер не умеет творческие видео (нет WebCodecs/OffscreenCanvas)" : "неизвестно";
       vidNote(btn, "ℹ️ Обычное видео: " + why + ".");
     }
@@ -2188,7 +2188,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=49");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=50");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2353,7 +2353,9 @@ async function aacSupported() {
 const OUTRO_SEC = 3;
 function videoOutroOn() { return !SESSION || store.get("outro:" + SESSION.user) !== false; }
 function creativeAllowed() { return !!(me().admin || me().creative); }
-function creativeOn() { return !!(creativeAllowed() && store.get("creative:" + SESSION.user) !== false && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
+// творческий режим включён по умолчанию только у администратора; остальным — простое видео, пока сами не включат
+function creativePref() { const v = store.get("creative:" + SESSION.user); return v === null || v === undefined ? !!me().admin : v !== false; }
+function creativeOn() { return !!(creativeAllowed() && creativePref() && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
 function creativeModel() { return store.get("creativeModel:" + SESSION.user) || "claude-opus-5-5"; }
 
 // Талисман и заставка — обычные функции без внешних зависимостей: их же получает песочница
