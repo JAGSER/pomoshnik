@@ -722,7 +722,9 @@ function contextMessages() {
 function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.contains("compact")) { ec.classList.add("compact"); $("#messages").prepend(ec); } }
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
-function helpersOn() { return !!(me().helpers && CFG.helpers && Object.keys(CFG.helpers).length); }
+// помощники, которые положены этому человеку (в config.json у каждого есть список "for")
+function myHelpers() { return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(SESSION.user)); }
+function helpersOn() { return myHelpers().length > 0; }
 function activeHelper() { return CHAT && CHAT.helper && CFG.helpers ? CFG.helpers[CHAT.helper] || null : null; }
 function renderHelperChip() {
   const c = $("#helper-chip"), h = activeHelper();
@@ -736,7 +738,7 @@ function renderHelperChip() {
 }
 function openHelpers() {
   const g = $("#helpers-grid"); g.innerHTML = "";
-  Object.entries(CFG.helpers).forEach(([id, h]) => {
+  myHelpers().forEach(([id, h]) => {
     const b = el("button", "helper-tile" + (CHAT && CHAT.helper === id ? " on" : "")); b.type = "button";
     b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(h.title)}</span>`;
     b.onclick = () => pickHelper(id);
@@ -751,7 +753,7 @@ function pickHelper(id) {
   track("Помощник", { helper: id });
   // новый разговор, в котором Claude уже работает как выбранный помощник
   const chat = newChat("ask");
-  chat.helper = id; chat.title = h.title; chat.emoji = h.icon;
+  chat.helper = id; chat.title = T(h.title); chat.emoji = h.icon;
   openChat(chat);
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
@@ -2253,7 +2255,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=53");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=54");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
