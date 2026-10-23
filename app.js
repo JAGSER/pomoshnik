@@ -1419,10 +1419,11 @@ async function videoButton(btn, text, msg) {
       subTimes(chunks[i], off / VRATE, (off + a.length) / VRATE, subs);
       off += a.length;
     });
-    // 2) сборка видео
+    // 2) сборка видео (если в разговоре есть фото — получится слайдшоу из них)
+    const photos = await chatPhotos(msg);
     let scene = null;
     if (creativeOn()) {
-      try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro }, label); }
+      try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
       catch (e) {
         console.warn("Творческий режим:", e);
         vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
@@ -1433,7 +1434,7 @@ async function videoButton(btn, text, msg) {
       vidNote(btn, "ℹ️ Обычное видео: " + why + ".");
     }
     label("⏳ 0%");
-    if (!scene) scene = makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
+    if (!scene) scene = photos.length ? makePhotoScene(emoji, title, subs, pcm.length / VRATE, speech, outro, photos) : makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
     let blob;
     try { blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`)); }
     finally { if (scene.destroy) scene.destroy(); }
@@ -1492,6 +1493,90 @@ function wrapLines(g, text, maxW) {
 }
 
 const VFONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+// Фото, которые человек прикладывал в этом разговоре до этого ответа (не больше 20)
+async function chatPhotos(msg) {
+  const idx = CHAT.messages.indexOf(msg);
+  const src = [];
+  CHAT.messages.slice(0, idx < 0 ? CHAT.messages.length : idx).forEach((m) => {
+    if (m.role === "user") (m.content || []).forEach((b) => { if (b.type === "image" && b.source && b.source.data) src.push(b.source); });
+  });
+  const out = [];
+  for (const s of src.slice(-20)) {
+    try { out.push(await createImageBitmap(await (await fetch(`data:${s.media_type};base64,${s.data}`)).blob())); } catch (_) {}
+  }
+  return out;
+}
+
+// Слайдшоу: фото с плавным наездом и панорамой, переходы, заголовок, субтитры, заставка в конце
+function makePhotoScene(emoji, title, subs, duration, speech, outro, photos) {
+  const cv = document.createElement("canvas"); cv.width = VW; cv.height = VH;
+  const g = cv.getContext("2d");
+  // размытый фон для каждого фото (маленький холст — дёшево и красиво)
+  const bgs = photos.map((img) => {
+    const c = document.createElement("canvas"); c.width = 135; c.height = 240;
+    const x = c.getContext("2d"); x.filter = "blur(6px) brightness(.55)";
+    const k = Math.max(c.width / img.width, c.height / img.height);
+    x.drawImage(img, (c.width - img.width * k) / 2, (c.height - img.height * k) / 2, img.width * k, img.height * k);
+    return c;
+  });
+  const n = photos.length, per = speech / n, FADE = Math.min(0.6, per / 3);
+  g.font = `700 58px ${VFONT}`;
+  subs.forEach((s) => { s.plines = wrapLines(g, s.text, 940).slice(0, 4); });
+  function photo(i, p, alpha) {
+    const img = photos[i];
+    g.save(); g.globalAlpha = alpha;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(bgs[i], 0, 0, VW, VH);
+    const portrait = img.height / img.width > 1.3;
+    const zoom = 1 + 0.12 * p, dir = [[-1, 0], [1, 0], [0, -1], [0, 1]][i % 4];
+    let k = portrait ? Math.max(VW / img.width, VH / img.height) : Math.min(1000 / img.width, 1400 / img.height);
+    k *= zoom;
+    const w = img.width * k, h = img.height * k;
+    const x = (VW - w) / 2 + dir[0] * 40 * (p - 0.5), y = (VH - h) / 2 - (portrait ? 0 : 60) + dir[1] * 40 * (p - 0.5);
+    if (!portrait) { g.shadowColor = "rgba(0,0,0,.45)"; g.shadowBlur = 40; }
+    g.drawImage(img, x, y, w, h);
+    g.restore();
+  }
+  let si = 0;
+  return {
+    canvas: cv, duration,
+    draw(t) {
+      if (outro && t >= speech) { outroDraw(g, t - speech, CFG.appName || "Помощник AI"); return; }
+      g.fillStyle = "#000"; g.fillRect(0, 0, VW, VH);
+      const i = Math.min(n - 1, Math.floor(t / per)), tt = t - i * per;
+      photo(i, tt / per, 1);
+      if (i < n - 1 && tt > per - FADE) photo(i + 1, 0, (tt - (per - FADE)) / FADE);
+      // заголовок в первые секунды
+      const ta = Math.min(1, t / 0.4) * (1 - Math.max(0, Math.min(1, (t - 2.6) / 0.5)));
+      if (ta > 0) {
+        g.save(); g.globalAlpha = ta;
+        const gr = g.createLinearGradient(0, 0, 0, 520); gr.addColorStop(0, "rgba(0,0,0,.65)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = gr; g.fillRect(0, 0, VW, 520);
+        g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#000";
+        g.font = `120px ${VFONT}`; g.fillText(emoji, VW / 2, 190);
+        g.fillStyle = "#FFFDF9"; g.font = `800 64px ${VFONT}`;
+        wrapLines(g, title, 960).slice(0, 2).forEach((l, j) => g.fillText(l, VW / 2, 330 + j * 76));
+        g.restore();
+      }
+      // субтитры снизу
+      while (si < subs.length - 1 && t >= subs[si].t1) si++;
+      while (si > 0 && t < subs[si].t0) si--;
+      const s = subs[si];
+      if (s && s.plines.length) {
+        const gr = g.createLinearGradient(0, VH - 760, 0, VH); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(.45, "rgba(0,0,0,.6)"); gr.addColorStop(1, "rgba(0,0,0,.8)");
+        g.fillStyle = gr; g.fillRect(0, VH - 760, VW, 760);
+        g.font = `700 58px ${VFONT}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#FFFDF9";
+        const y0 = VH - 290 - (s.plines.length - 1) * 74;
+        s.plines.forEach((l, j) => g.fillText(l, VW / 2, y0 + j * 74));
+      }
+      g.fillStyle = "rgba(255,255,255,.25)"; g.fillRect(140, VH - 150, VW - 280, 8);
+      g.fillStyle = "#E07A50"; g.fillRect(140, VH - 150, (VW - 280) * Math.min(1, t / speech), 8);
+      g.font = `500 36px ${VFONT}`; g.fillStyle = "rgba(255,253,249,.8)"; g.textAlign = "center";
+      g.fillText(CFG.appName || "Помощник AI", VW / 2, VH - 90);
+    },
+  };
+}
 function makeScene(emoji, title, subs, duration, speech, outro) {
   speech = speech || duration;
   const cv = document.createElement("canvas");
@@ -1587,7 +1672,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=35");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=36");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -1813,8 +1898,20 @@ function WORKER_MAIN() {
     const s = subs[i] || { t0: 0, t1: speech, text: "" };
     return { i, text: s.text, t0: s.t0, t1: s.t1, p: clamp((t - s.t0) / Math.max(0.01, s.t1 - s.t0)) };
   }
+  let PH = [];
+  function photo(i, x, y, w, h, o = {}) {
+    const img = PH[i]; if (!img) return;
+    g.save(); g.globalAlpha *= o.alpha == null ? 1 : o.alpha;
+    if (o.r) { g.beginPath(); g.roundRect(x, y, w, h, o.r); g.clip(); } else { g.beginPath(); g.rect(x, y, w, h); g.clip(); }
+    const z = o.zoom || 1, fit = o.fit === "contain" ? Math.min(w / img.width, h / img.height) : Math.max(w / img.width, h / img.height);
+    const k = fit * z, iw = img.width * k, ih = img.height * k;
+    const px = o.panX || 0, py = o.panY || 0;
+    g.drawImage(img, x + (w - iw) / 2 + px * (iw - w) / 2, y + (h - ih) / 2 + py * (ih - h) / 2, iw, ih);
+    g.restore();
+  }
   const K = {
-    W, H, SAFE, text, path, card, emoji, sub, ease, clamp, rand,
+    W, H, SAFE, text, path, card, emoji, sub, ease, clamp, rand, photo,
+    get photos() { return PH.length; }, photoSize: (i) => (PH[i] ? { w: PH[i].width, h: PH[i].height } : null),
     prog: (t, a, b) => clamp((t - a) / (b - a)),
     lerp: (a, b, x) => a + (b - a) * x,
     mascot: (cx, cy, size, talk) => { mascotDraw(g, cx, cy, size, curT, talk); record("icon", cx - size / 2, cy - size / 2, size, size, "талисман"); },
@@ -1866,7 +1963,10 @@ function WORKER_MAIN() {
   onmessage = async (e) => {
     const m = e.data;
     try {
-      if (m.cmd === "load") {
+      if (m.cmd === "photos") {
+        PH = m.bitmaps || [];
+        postMessage({ id: m.id, ok: true });
+      } else if (m.cmd === "load") {
         brief = m.brief; outro = m.outro; speech = m.brief.speech; lastErr = null; level = 0;
         K.title = brief.title; K.emojiMain = brief.emojiMain; K.duration = speech; K.subs = brief.subs;
         userDraw = new Function(m.code + "\n;return typeof draw === 'function' ? draw : null;")();
@@ -1924,7 +2024,7 @@ function FRAME_MAIN(workerSrc) {
     parent.postMessage(m, "*", m.bmp ? [m.bmp] : []);
   };
   w.onerror = (e) => parent.postMessage({ id: -2, ok: false, error: e.message || "ошибка в коде ролика" }, "*");
-  onmessage = (e) => { if (e.source === parent) w.postMessage(e.data); };
+  onmessage = (e) => { if (e.source === parent) w.postMessage(e.data, e.data && e.data.bitmaps ? e.data.bitmaps : []); };
 }
 
 class Sandbox {
@@ -1947,13 +2047,13 @@ class Sandbox {
     this.ready = new Promise((r) => (this.frameEl.onload = r));
     document.body.append(this.frameEl);
   }
-  async call(msg, ms = 8000) {
+  async call(msg, ms = 8000, transfer) {
     await this.ready;
     const id = ++this.id;
     return new Promise((res, rej) => {
       const timer = setTimeout(() => { this.wait.delete(id); rej(new Error("код ролика завис")); }, ms);
       this.wait.set(id, { res, rej, timer });
-      this.frameEl.contentWindow.postMessage({ ...msg, id }, "*");
+      this.frameEl.contentWindow.postMessage({ ...msg, id }, "*", transfer || []);
     });
   }
   async load(code, brief, outro) {
@@ -1981,6 +2081,8 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - k.prog(t,a,b) → 0…1; k.ease.out / inOut / back / elastic; k.lerp; k.clamp; k.rand(seed) → генератор 0…1.
 - k.palette = {bg:'#F6F1E9', ink:'#1F1B16', accent:'#B5532E', soft:'#F3E1D6', white:'#FFFDF9', muted:'#6E655A'} — фирменная; можно придумать свою под тему, но текст должен хорошо читаться.
 - k.title, k.emojiMain — тема ролика; k.duration — длина в секундах.
+
+ФОТО (если пришли): k.photos — сколько фото, k.photoSize(i) → {w,h}. k.photo(i, x, y, w, h, {fit:'cover'|'contain', zoom, panX, panY (-1…1), alpha, r}) рисует фото i в рамку (обрезает по рамке, r — скругление). Фото — главный материал ролика: показывай их крупно, оживляй наездом и панорамой (zoom/panX/panY от t), монтируй под фразы, подписи и оформление — вокруг фото. Текст поверх фото — на тёмной плашке или с обводкой, чтобы читался.
 
 КАЧЕСТВО:
 - Текст на экране — короткие ключевые слова, числа, заголовки (до ~7 слов), а не полные фразы озвучки.
@@ -2025,8 +2127,10 @@ async function makeCreativeScene(v, label) {
     title: v.title, emojiMain: v.emoji, speech: v.speech, app: CFG.appName || "Помощник AI",
     subs: v.subs.map((s) => ({ t0: +s.t0.toFixed(2), t1: +s.t1.toFixed(2), text: s.text })),
   };
+  const photos = v.photos || [];
   const ask = [
     `Ролик 9:16 по ответу помощника. Тема: ${v.emoji} ${v.title}. Длительность речи: ${v.speech.toFixed(1)} с (k.duration).`,
+    photos.length ? `Фото от пользователя: ${photos.length} шт. (k.photo(0…${photos.length - 1})) — уменьшенные копии приложены выше по порядку. Сделай ролик из этих фото.` : ``,
     `Фразы озвучки с таймингом (секунды):`,
     ...brief.subs.map((s) => `[${s.t0.toFixed(2)}–${s.t1.toFixed(2)}] ${s.text}`),
     brief.subs.length > 14 ? `Фраз много — объединяй соседние в 8–14 сцен и держи код компактным.` : ``,
@@ -2034,7 +2138,24 @@ async function makeCreativeScene(v, label) {
   ].join("\n");
   const log = { at: new Date().toISOString(), model: creativeModel(), steps: [] };
   const note = (x) => { log.steps.push(x); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
-  const msgs = [{ role: "user", content: ask }];
+  // уменьшенные копии фото, чтобы Claude видел, что на них
+  const thumbs = [];
+  for (const b of photos.slice(0, 12)) {
+    try {
+      const k = Math.min(1, 384 / Math.max(b.width, b.height)), c = new OffscreenCanvas(Math.round(b.width * k), Math.round(b.height * k));
+      c.getContext("2d").drawImage(b, 0, 0, c.width, c.height);
+      const bytes = new Uint8Array(await (await c.convertToBlob({ type: "image/jpeg", quality: 0.7 })).arrayBuffer());
+      let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      thumbs.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: btoa(s) } });
+    } catch (_) {}
+  }
+  const msgs = [{ role: "user", content: thumbs.length ? [...thumbs, { type: "text", text: ask }] : ask }];
+  // фото в песочницу (копии — оригиналы нужны для обычного видео, если творческое не выйдет)
+  const sendPhotos = async (box) => {
+    if (!photos.length) return;
+    const copies = await Promise.all(photos.map((b) => createImageBitmap(b)));
+    await box.call({ cmd: "photos", bitmaps: copies }, 10000, copies);
+  };
   let cut = false;
   const write = async (what) => {
     const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
@@ -2046,6 +2167,7 @@ async function makeCreativeScene(v, label) {
   };
   let sb = new Sandbox();
   try {
+    await sendPhotos(sb);
     label("✨ Идея…");
     let code = await write("Код");
     if (!code) throw new Error("Claude не прислал код");
@@ -2063,7 +2185,7 @@ async function makeCreativeScene(v, label) {
         const issues = ch.issues.concat(slow ? [`кадр рисуется долго (${Math.round(r.ms)} мс) — упрости тяжёлые места`] : []);
         return { n: issues.length + (slow ? 4 : 0), problem: issues.length ? "Автопроверка нашла проблемы:\n- " + issues.join("\n- ") : null };
       } catch (e) {
-        if (/завис/.test(e.message)) { sb.destroy(); sb = new Sandbox(); }
+        if (/завис/.test(e.message)) { sb.destroy(); sb = new Sandbox(); await sendPhotos(sb); }
         return { problem: `Код ролика завис или работает слишком медленно (${e.message}) — упрости.` };
       }
     };
