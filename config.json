@@ -7,7 +7,7 @@
 
   "users": {
     "mama": {
-      "name": "Мама",
+      "name": "Светлана",
       "avatar": "🌷",
       "model": "claude-sonnet-5-5",
       "presets": ["ask", "example"],
@@ -16,7 +16,7 @@
       "note": "Пароль и ключ задаются в прослойке, не здесь"
     },
     "papa": {
-      "name": "Папа",
+      "name": "Игорь",
       "avatar": "🌲",
       "model": "claude-sonnet-5-5",
       "presets": ["ask", "example"],

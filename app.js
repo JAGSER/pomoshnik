@@ -12,6 +12,24 @@ const show = (id) => {
   document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
 };
 
+/* ===== Персонализация: что Claude знает о собеседнике ===== */
+function profile() {
+  const u = me();
+  const pf = (SESSION && store.get("profile:" + SESSION.user)) || {};
+  return { name: pf.name || u.name, form: pf.form ?? (u.form || ""), about: pf.about || u.about || "", style: pf.style || u.style || "" };
+}
+function personalOn() { return !SESSION || store.get("personal:" + SESSION.user) !== false; }
+function personalSystem() {
+  if (!personalOn()) return "Не обращайся к собеседнику по имени и не делай предположений о нём.";
+  const pf = profile();
+  return [
+    `Собеседник: ${pf.name}.`,
+    pf.form === "вы" ? "Обращайся на «вы»." : pf.form === "ты" ? "Обращайся на «ты»." : "",
+    pf.about ? `О собеседнике: ${pf.about}` : "",
+    pf.style ? `Пожелания к ответам: ${pf.style}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 /* ===== Статистика (Umami): только события, без текста разговоров ===== */
 function track(name, data) {
   try { if (window.umami && umami.track) umami.track(name, Object.assign({ who: SESSION ? SESSION.user : "гость" }, data || {})); } catch (_) {}
@@ -217,7 +235,7 @@ async function startHome() {
   const u = me();
   document.documentElement.classList.toggle("big", !!u.bigText);
   show("screen-home");
-  $("#hello").textContent = `Здравствуйте, ${u.name}!`;
+  $("#hello").textContent = personalOn() ? `Здравствуйте, ${profile().name}!` : "Здравствуйте!";
 
   const grid = $("#preset-grid");
   grid.innerHTML = "";
@@ -476,7 +494,7 @@ async function ask() {
   const p = CFG.presets[CHAT.preset] || {};
   const u = me();
   const today = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", weekday: "long" });
-  const system = [CFG.baseSystem, `Сегодня ${today}. Собеседник: ${u.name}.`, p.system].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -1222,6 +1240,10 @@ function openSettings() {
   const prep = $("#prep-samples");
   prep.hidden = !me().admin;
   if (!prep.disabled) { prep.textContent = "Подготовить все образцы голосов"; prep.onclick = () => prepareAllSamples(prep); }
+  const pBox = $("#set-personal");
+  pBox.checked = personalOn();
+  pBox.onchange = () => store.set("personal:" + SESSION.user, pBox.checked);
+  $("#btn-profile").onclick = openProfile;
   const outroBox = $("#set-outro");
   outroBox.checked = videoOutroOn();
   outroBox.onchange = () => store.set("outro:" + SESSION.user, outroBox.checked);
@@ -1250,6 +1272,33 @@ function openSettings() {
     };
   });
 }
+
+/* ===== Экран «Обо мне» ===== */
+let PF_FORM = "";
+function openProfile() {
+  stopPreview();
+  show("screen-profile");
+  const pf = profile();
+  $("#pf-name").value = pf.name;
+  $("#pf-about").value = pf.about;
+  $("#pf-style").value = pf.style;
+  PF_FORM = pf.form;
+  document.querySelectorAll("#pf-form button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.form === PF_FORM);
+    b.onclick = () => { PF_FORM = b.dataset.form; document.querySelectorAll("#pf-form button").forEach((x) => x.classList.toggle("on", x === b)); };
+  });
+}
+$("#profile-back").onclick = () => openSettings();
+$("#pf-save").onclick = () => {
+  store.set("profile:" + SESSION.user, {
+    name: $("#pf-name").value.trim() || me().name,
+    form: PF_FORM,
+    about: $("#pf-about").value.trim(),
+    style: $("#pf-style").value.trim(),
+  });
+  toast("Сохранено — Claude будет это учитывать");
+  openSettings();
+};
 
 /* ===== Установка на рабочий стол ===== */
 let INSTALL_EVT = null;
@@ -1538,7 +1587,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=34");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=35");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

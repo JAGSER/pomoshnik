@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник AI">
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="cb0ec999-076a-4bd0-ad61-49313a08c950" data-domains="pomoshnik.ai"></script>
 </head>
 <body>
@@ -63,6 +63,9 @@
       <button type="button" data-rate="1.2">1×</button>
       <button type="button" data-rate="1.5">1,5×</button>
     </div>
+    <h2 class="section-title">Персонализация</h2>
+    <label class="set-row"><input type="checkbox" id="set-personal"><span>Учитывать данные обо мне<small>Claude обращается по имени и учитывает то, что указано в «Обо мне». Если выключить — отвечает без обращения и без личных данных</small></span></label>
+    <button id="btn-profile" class="btn btn-ghost btn-wide prep">👤 Обо мне — настроить</button>
     <h2 class="section-title">Видео</h2>
     <label class="set-row"><input type="checkbox" id="set-outro"><span>Заставка в конце видео<small>Талисман и «Спросите о своём в «Помощник AI»», 3 секунды</small></span></label>
     <div id="creative-block" hidden>
@@ -74,6 +77,28 @@
       <pre id="creative-log" class="creative-log"></pre>
     </div>
     <button id="btn-logout" class="btn btn-ghost btn-wide logout">Выйти</button>
+  </main>
+</section>
+
+<!-- Обо мне -->
+<section id="screen-profile" class="screen" hidden>
+  <header class="topbar">
+    <button id="profile-back" class="icon-btn" aria-label="Назад">←</button>
+    <h1 class="chat-title">Обо мне</h1>
+  </header>
+  <main class="home-main settings profile">
+    <p class="hint">Это видит только Claude, чтобы отвечать вам лично. Хранится на этом устройстве.</p>
+    <label class="fld"><span>Как ко мне обращаться</span><input id="pf-name" type="text" maxlength="60" placeholder="Например: Светлана Петровна"></label>
+    <div class="fld"><span>Обращение</span>
+      <div class="seg" id="pf-form">
+        <button type="button" data-form="вы">На «вы»</button>
+        <button type="button" data-form="ты">На «ты»</button>
+        <button type="button" data-form="">Без разницы</button>
+      </div>
+    </div>
+    <label class="fld"><span>Обо мне</span><textarea id="pf-about" rows="4" maxlength="1500" placeholder="Город, возраст, чем занимаетесь, увлечения, здоровье — всё, что поможет отвечать точнее"></textarea></label>
+    <label class="fld"><span>Как мне отвечать</span><textarea id="pf-style" rows="3" maxlength="800" placeholder="Например: коротко и по делу; объясняй простыми словами; давай пошаговые инструкции"></textarea></label>
+    <button id="pf-save" class="btn btn-primary btn-wide">Сохранить</button>
   </main>
 </section>
 
@@ -99,6 +124,6 @@
   </form>
 </section>
 
-<script src="app.js?v=34"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>

@@ -240,3 +240,7 @@ button.think-toggle { font: inherit; font-size: .8em; }
 @keyframes sp-draw { to { stroke-dashoffset: 0; } }
 @keyframes sp-pop { 0% { transform: scale(0); } 40% { transform: scale(1.4); } 70% { transform: scale(.9); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { #splash .sp-arc, #splash .sp-dot { animation: none; stroke-dashoffset: 0; transform: none; } }
+/* экран «Обо мне» */
+.profile .fld { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-weight: 600; }
+.profile .fld input, .profile .fld textarea { font: inherit; font-weight: 400; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); resize: vertical; }
+.profile .fld .seg { font-weight: 400; }
