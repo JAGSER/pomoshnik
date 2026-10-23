@@ -285,6 +285,17 @@ async function startHome() {
     li.append(emo, open, pin, ren, del);
     list.append(li);
   });
+  // один раз показываем, что эмодзи можно нажать: пульсирует, как во время воспроизведения
+  const hintKey = "emojiHint:" + SESSION.user;
+  if (!store.get(hintKey)) {
+    const shown = chats.slice(0, 40);
+    const i = shown.findIndex((c) => (c.messages || []).some((m) => m.role === "assistant"));
+    const emo = i >= 0 ? list.querySelectorAll(".hemoji")[i] : null;
+    if (emo) {
+      store.set(hintKey, true);
+      setTimeout(() => { emo.classList.add("hint"); emo.addEventListener("animationend", () => emo.classList.remove("hint"), { once: true }); }, 500);
+    }
+  }
 }
 $("#btn-logout").onclick = () => {
   if (!confirm("Выйти? Потом нужно будет снова ввести пароль.")) return;
@@ -317,6 +328,16 @@ function openChat(chat) {
   box.innerHTML = "";
   if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
+  $("#chat-tools").hidden = true; $("#btn-tools").setAttribute("aria-expanded", "false");
+  if (!chat.messages.length && p.allowFiles !== false) {
+    const ec = el("div", "empty-chat"); ec.id = "empty-chat";
+    const b1 = el("button", "ec-btn"); b1.type = "button"; b1.innerHTML = `<span class="ec-ico">📷</span><span>Фото</span>`;
+    const b2 = el("button", "ec-btn"); b2.type = "button"; b2.innerHTML = `<span class="ec-ico">📄</span><span>Документ</span>`;
+    b1.onclick = () => pickFiles("image/*");
+    b2.onclick = () => pickFiles("application/pdf,.pdf,.txt,.md,.csv");
+    ec.append(b1, b2);
+    box.append(ec);
+  }
   scrollDown();
   if (!matchMedia("(pointer: coarse)").matches) $("#input").focus();
 }
@@ -478,6 +499,7 @@ async function send() {
   if (text) content.push({ type: "text", text });
   else content.push({ type: "text", text: "Посмотри, пожалуйста, что я приложил(а)." });
   const userMsg = { role: "user", content };
+  $("#empty-chat")?.remove();
   CHAT.messages.push(userMsg);
   if (!CHAT.title) CHAT.title = (text || PENDING[0]?.name || "Разговор").slice(0, 60);
   renderMessage(userMsg);
@@ -633,7 +655,18 @@ async function save() {
 }
 
 /* ===== Файлы ===== */
-$("#btn-attach").onclick = () => $("#file-input").click();
+const FILE_ACCEPT = "image/*,application/pdf,.txt,.md,.csv";
+function pickFiles(accept) { const fi = $("#file-input"); fi.accept = accept || FILE_ACCEPT; fi.click(); setTimeout(() => { fi.accept = FILE_ACCEPT; }, 1000); }
+$("#btn-attach").onclick = () => pickFiles();
+$("#btn-tools").onclick = (e) => {
+  e.stopPropagation();
+  const t = $("#chat-tools"); t.hidden = !t.hidden;
+  $("#btn-tools").setAttribute("aria-expanded", String(!t.hidden));
+};
+document.addEventListener("click", (e) => {
+  const t = $("#chat-tools");
+  if (!t.hidden && !t.contains(e.target) && e.target.id !== "btn-tools") { t.hidden = true; $("#btn-tools").setAttribute("aria-expanded", "false"); }
+});
 $("#file-input").onchange = async (e) => {
   for (const f of e.target.files) {
     try {
@@ -1676,7 +1709,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=37");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=38");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

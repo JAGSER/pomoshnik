@@ -244,3 +244,24 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .profile .fld { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-weight: 600; }
 .profile .fld input, .profile .fld textarea { font: inherit; font-weight: 400; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); resize: vertical; }
 .profile .fld .seg { font-weight: 400; }
+
+/* Шапка разговора: название по центру, настройки — в меню «⋯» */
+#screen-chat .topbar { position: sticky; }
+#screen-chat .chat-title { text-align: center; }
+#btn-tools { font-size: 1.4em; line-height: 1; }
+#btn-tools[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.chat-tools[hidden] { display: none !important; }
+#chat-tools { position: fixed; z-index: 20; top: calc(max(10px, env(safe-area-inset-top)) + 58px); right: 12px; left: auto; width: auto; max-width: calc(100vw - 24px);
+  margin: 0; padding: 10px; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+#chat-tools .think-toggle { justify-content: flex-start; min-height: 46px; font-size: .9em; padding: 8px 14px; }
+
+/* Пустой разговор: крупные кнопки фото и документа */
+.empty-chat { flex: 1; display: flex; gap: 14px; justify-content: center; align-items: center; padding: 24px 12px; min-height: 40vh; }
+.ec-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 140px; height: 140px;
+  border: 2px dashed var(--accent); border-radius: 24px; background: var(--accent-soft); color: var(--accent); font: inherit; font-weight: 700; font-size: 1.05em; cursor: pointer; }
+.ec-btn:active { transform: scale(.97); }
+.ec-ico { font-size: 2.6em; line-height: 1; }
+
+/* Подсказка: эмодзи в истории можно нажать */
+.history .hemoji.hint { background: var(--accent-soft); animation: pulse 1.2s 4; }
