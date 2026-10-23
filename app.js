@@ -12,6 +12,11 @@ const show = (id) => {
   document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
 };
 
+/* ===== Статистика (Umami): только события, без текста разговоров ===== */
+function track(name, data) {
+  try { if (window.umami && umami.track) umami.track(name, Object.assign({ who: SESSION ? SESSION.user : "гость" }, data || {})); } catch (_) {}
+}
+
 /* ===== Хранилище (IndexedDB) ===== */
 const DB = {
   db: null,
@@ -158,7 +163,7 @@ async function importMigration(code) {
       });
     }
     store.set("migrated-v2", true);
-    setTimeout(() => toast("Добро пожаловать на новый адрес — pomoshnik.ai. Разговоры перенесены."), 800);
+    setTimeout(() => { toast("Добро пожаловать на новый адрес — pomoshnik.ai. Разговоры перенесены."); track("Переезд", { chats: (d.chats || []).length }); }, 800);
   } catch (_) {}
 }
 
@@ -196,6 +201,7 @@ $("#login-form").onsubmit = async (e) => {
     if (!CFG.users[d.user]) { $("#login-error").textContent = "Пользователь не найден в настройках приложения"; return; }
     SESSION = { user: d.user, password, models: d.models, webSearch: d.webSearch };
     store.set("session", SESSION);
+    track("Вход");
     startHome();
   } catch (_) {
     $("#login-error").textContent = "Нет связи с помощником. Проверьте интернет.";
@@ -276,6 +282,7 @@ function newChat(presetId) {
 
 function openChat(chat) {
   stopSnippet();
+  track(chat.messages && chat.messages.length ? "Открыт разговор" : "Новый разговор", { preset: chat.preset });
   CHAT = chat;
   PENDING = [];
   renderAttachments();
@@ -385,6 +392,7 @@ function actions(text, msg) {
     // та же кнопка: пауза / продолжить, если сейчас читается именно этот ответ
     if (SPEAKER && SPEAKER.owner === speak) { SPEAKER.paused ? SPEAKER.resume() : SPEAKER.pause(); return; }
     speakText(text, speak, msg);
+    track("Вслух");
   };
   const copy = el("button");
   copy.textContent = "📋 Копия";
@@ -446,6 +454,7 @@ async function send() {
   stopListening();
   const text = $("#input").value.trim();
   if (!text && !PENDING.length) return;
+  track("Вопрос", { preset: CHAT.preset, think: $("#think").checked, files: PENDING.length });
 
   const content = [...PENDING.map((p) => p.block)];
   if (text) content.push({ type: "text", text });
@@ -1255,7 +1264,7 @@ window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstal
 document.querySelectorAll(".install-btn").forEach((b) => (b.onclick = async () => {
   if (INSTALL_EVT) {
     INSTALL_EVT.prompt();
-    try { await INSTALL_EVT.userChoice; } catch (_) {}
+    try { const c = await INSTALL_EVT.userChoice; track("Установка", { result: c && c.outcome }); } catch (_) {}
     INSTALL_EVT = null;
     updateInstall();
   } else if (IS_IOS) {
@@ -1322,7 +1331,7 @@ function vidNote(btn, text) {
   n.textContent = text;
 }
 async function videoButton(btn, text, msg) {
-  if (btn._ready) return saveVideo(btn._ready, btn);
+  if (btn._ready) { track("Видео сохранено"); return saveVideo(btn._ready, btn); }
   if (VIDEO_BUSY) { toast("Подождите, видео ещё собирается"); return; }
   if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
   VIDEO_BUSY = true;
@@ -1381,6 +1390,7 @@ async function videoButton(btn, text, msg) {
     finally { if (scene.destroy) scene.destroy(); }
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
+    track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
     label("💾 Видео");
     btn.classList.add("ready");
@@ -1528,7 +1538,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=33");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=34");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
