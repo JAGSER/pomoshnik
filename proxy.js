@@ -160,6 +160,7 @@ async function geminiTTS(text, voiceIn, modelIn) {
 
 // Хранилище образцов голосов (Deno KV). Значение в KV — до 64 КБ, поэтому режем на части
 const SAMPLE_TEXT = "Здравствуйте! Так звучит мой голос. Я буду читать вам ответы.";
+const SAMPLE_TEXT_EN = "Hello! This is how my voice sounds. I will read the answers to you.";
 const SAMPLE_VER = "v1";
 let KV = null, KV_TRIED = false;
 async function kvOpen() {
@@ -224,7 +225,8 @@ export async function handler(req, info) {
   // готовый образец голоса отдаём без пароля — генерировать новые может только вошедший пользователь
   if (req.method === "GET" && url.pathname === "/sample") {
     const voice = url.searchParams.get("voice") || "";
-    const bytes = /^[A-Za-z]{3,20}$/.test(voice) ? await sampleGet(voice) : null;
+    const en = url.searchParams.get("lang") === "en";
+    const bytes = /^[A-Za-z]{3,20}$/.test(voice) ? await sampleGet(en ? voice + "@en" : voice) : null;
     if (!bytes) return json({ error: "Образца пока нет" }, 404, h);
     return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000" } });
   }
@@ -331,12 +333,13 @@ export async function handler(req, info) {
   if (url.pathname === "/sample") {
     const voice = /^[A-Za-z]{3,20}$/.test(body.voice || "") ? body.voice : null;
     if (!voice) return json({ error: "Не указан голос" }, 400, h);
-    let bytes = await sampleGet(voice);
+    const en = body.lang === "en", skey = en ? voice + "@en" : voice;
+    let bytes = await sampleGet(skey);
     if (!bytes) {
-      const res = await geminiTTS(SAMPLE_TEXT, voice);
+      const res = await geminiTTS(en ? SAMPLE_TEXT_EN : SAMPLE_TEXT, voice);
       if (res.error) return json(res, res.status, h);
       bytes = res.bytes;
-      await samplePut(voice, bytes);
+      await samplePut(skey, bytes);
     }
     return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000" } });
   }

@@ -168,6 +168,12 @@ const EN = {
   "Готово {0} из {1}": "Done {0} of {1}",
   "Все образцы готовы ✓": "All samples ready ✓",
   "Готово {0} из {1} — нажмите ещё раз": "Done {0} of {1} — tap again",
+  "🔊 Звук в файле: AAC ✓": "🔊 Sound in file: AAC ✓",
+  "🔊 Звук в файле: AAC ✓ ({0})": "🔊 Sound in file: AAC ✓ ({0})",
+  "⚠️ Звук в файле: Opus — iPhone его не проигрывает": "⚠️ Sound in file: Opus — iPhone can't play it",
+  "⚠️ В файле нет звука": "⚠️ The file has no sound",
+  "⚠️ В файле нет звука ({0})": "⚠️ The file has no sound ({0})",
+  "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
   // творческие видео
   "⚠️ Творческое видео не получилось: {0}. Сделано обычное. Подробности — в ⚙️ → Видео.": "⚠️ The creative video didn't work out: {0}. A regular one was made instead. Details — in ⚙️ → Video.",
   "ℹ️ Обычное видео: {0}.": "ℹ️ Regular video: {0}.",

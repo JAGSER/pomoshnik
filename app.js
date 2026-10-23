@@ -41,6 +41,8 @@ function sharedAC() {
   return AC_SHARED;
 }
 function unlockAudio() {
+  // iPhone (iOS 17+): звук сайта не глушится переключателем «без звука»
+  try { if (navigator.audioSession && navigator.audioSession.type !== "playback") navigator.audioSession.type = "playback"; } catch (_) {}
   const ac = sharedAC(); if (ac && ac.state === "suspended") ac.resume().catch(() => {});
   if (AUDIO_UNLOCKED) return;
   AUDIO_UNLOCKED = true;
@@ -1564,17 +1566,17 @@ async function playSnippet(chat, btn) {
 
 /* ===== Образцы голосов: общие для всех, хранятся на сервере ===== */
 async function sampleUrl(voice) {
-  const key = "sample|" + voice;
+  const key = "sample|" + voice + (LANG === "en" ? "|en" : "");
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (!blob) {
-    let r = await fetch(CFG.proxy + "/sample?voice=" + encodeURIComponent(voice)).catch(() => null);
+    let r = await fetch(CFG.proxy + "/sample?voice=" + encodeURIComponent(voice) + (LANG === "en" ? "&lang=en" : "")).catch(() => null);
     if (!r || !r.ok) {
       // образца ещё нет — создаём его (один раз для всех)
       await ttsSlot();
       try {
         r = await fetch(CFG.proxy + "/sample", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user: SESSION.user, password: SESSION.password, voice }),
+          body: JSON.stringify({ user: SESSION.user, password: SESSION.password, voice, lang: LANG }),
         });
       } finally { ttsRelease(); }
       if (!r.ok) {
@@ -1874,6 +1876,10 @@ async function videoButton(btn, text, msg) {
     if (scene.log) scene.log(`видео собрано за ${Math.round((Date.now() - tEnc) / 1000)} с; озвучка заняла ${tVoice} с; всего ${Math.round((Date.now() - tStart) / 1000)} с`);
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
+    if (IS_APPLE || me().admin || me().creative) {
+      const a = await audioInFile(blob);
+      vidNote(btn, a === "AAC" ? `🔊 Звук в файле: AAC ✓${VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""}` : a === "Opus" ? "⚠️ Звук в файле: Opus — iPhone его не проигрывает" : "⚠️ В файле нет звука" + (VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""));
+    }
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
     label("💾 Видео");
@@ -2096,10 +2102,24 @@ function rmsAt(pcm, t) {
   return c ? Math.sqrt(sum / c) : 0;
 }
 
+let VIDEO_PATH = "";
+// какой звук оказался в готовом файле — чтобы видеть, где он теряется
+async function audioInFile(blob) {
+  try {
+    const head = new Uint8Array(await blob.slice(0, 2e6).arrayBuffer()), tail = new Uint8Array(await blob.slice(Math.max(0, blob.size - 2e6)).arrayBuffer());
+    const b = new Uint8Array(head.length + tail.length); b.set(head); b.set(tail, head.length);
+    const has = (t) => { const c = [...t].map((x) => x.charCodeAt(0)); outer: for (let i = 0; i < b.length - c.length; i++) { for (let j = 0; j < c.length; j++) if (b[i + j] !== c[j]) continue outer; return true; } return false; };
+    if (has("mp4a") || has("A_AAC")) return "AAC";
+    if (has("Opus") || has("A_OPUS")) return "Opus";
+    return "";
+  } catch (_) { return "?"; }
+}
 async function encodeVideo(scene, pcm, progress) {
+  VIDEO_PATH = "";
   // iPhone без AAC в быстром кодировщике: картинка быстро, звук — записью самого iPhone
   const appleRemux = window.VideoEncoder && window.MediaRecorder && (store.get("forceRemux") || (IS_APPLE && !(window.AudioEncoder && await aacSupported())));
   if (appleRemux) {
+    VIDEO_PATH = "картинка — быстро, звук — записью iPhone";
     const silent = await encodeFast(scene, pcm, (k) => progress(k * 0.6), true);
     return await addAudioRealtime(silent, pcm, (k) => progress(0.6 + k * 0.4));
   }
@@ -2112,7 +2132,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=46");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=47");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
