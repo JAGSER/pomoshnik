@@ -209,3 +209,4 @@ button.think-toggle { font: inherit; font-size: .8em; }
 #creative-model { margin-bottom: 10px; }
 .creative-log { white-space: pre-wrap; font: .75em/1.4 ui-monospace, monospace; color: var(--muted); margin: 0 0 12px; }
 .creative-log:empty { display: none; }
+.vid-note { font-size: .8em; color: var(--muted); margin-top: 6px; }

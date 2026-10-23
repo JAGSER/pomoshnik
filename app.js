@@ -1220,6 +1220,12 @@ function planChunks(full, prev) {
 }
 
 let VIDEO_BUSY = false;
+function vidNote(btn, text) {
+  const row = btn.closest(".msg-actions");
+  let n = row.nextElementSibling;
+  if (!n || !n.classList.contains("vid-note")) { n = el("div", "vid-note"); row.after(n); }
+  n.textContent = text;
+}
 async function videoButton(btn, text, msg) {
   if (btn._ready) return saveVideo(btn._ready, btn);
   if (VIDEO_BUSY) { toast("Подождите, видео ещё собирается"); return; }
@@ -1257,7 +1263,14 @@ async function videoButton(btn, text, msg) {
     let scene = null;
     if (creativeOn()) {
       try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro }, label); }
-      catch (e) { console.warn("Творческий режим:", e); toast("Творческое видео не получилось (" + (e.message || e) + ") — делаю обычное"); }
+      catch (e) {
+        console.warn("Творческий режим:", e);
+        vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
+      }
+    } else if (me().admin) {
+      const why = store.get("creative:" + SESSION.user) === false ? "творческий режим выключен в настройках"
+        : !window.VideoEncoder || !window.OffscreenCanvas || !window.Worker ? "этот браузер не умеет творческие видео (нет WebCodecs/OffscreenCanvas)" : "неизвестно";
+      vidNote(btn, "ℹ️ Обычное видео: " + why + ".");
     }
     label("⏳ 0%");
     if (!scene) scene = makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
@@ -1411,7 +1424,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=27");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=28");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
