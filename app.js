@@ -1399,6 +1399,7 @@ async function videoButton(btn, text, msg) {
     const emoji = chat.emoji || p.icon || "💬";
     const title = chat.title || p.title || "Разговор";
     const chunks = planChunks(text, msg && msg.tts);
+    const tStart = Date.now();
     // 1) озвучка всех кусков (уже записанные берутся из памяти бесплатно)
     const ac = new OfflineAudioContext(1, 1, VRATE);
     const parts = [];
@@ -1408,6 +1409,7 @@ async function videoButton(btn, text, msg) {
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
+    const tVoice = Math.round((Date.now() - tStart) / 1000);
     const outro = videoOutroOn();
     const speech = total / VRATE;
     // в конце — тишина под финальную заставку (или короткая пауза, если заставка выключена)
@@ -1436,8 +1438,10 @@ async function videoButton(btn, text, msg) {
     label("⏳ 0%");
     if (!scene) scene = photos.length ? makePhotoScene(emoji, title, subs, pcm.length / VRATE, speech, outro, photos) : makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
     let blob;
+    const tEnc = Date.now();
     try { blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`)); }
     finally { if (scene.destroy) scene.destroy(); }
+    if (scene.log) scene.log(`видео собрано за ${Math.round((Date.now() - tEnc) / 1000)} с; озвучка заняла ${tVoice} с; всего ${Math.round((Date.now() - tStart) / 1000)} с`);
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
@@ -1672,7 +1676,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=36");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=37");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2093,10 +2097,10 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Код компактный (до ~350 строк): сцены описывай массивом данных и общими функциями, без копирования одинаковых кусков.
 - Если пришлют замечания или кадры — ответь исправленным кодом целиком.`;
 
-async function directorCall(messages, onChars) {
+async function directorCall(messages, onChars, model) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: creativeModel(), web: false, purpose: "video", system: DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", system: DIRECTOR_PROMPT, messages }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -2137,7 +2141,10 @@ async function makeCreativeScene(v, label) {
     `Придумай идею и запрограммируй ролик.`,
   ].join("\n");
   const log = { at: new Date().toISOString(), model: creativeModel(), steps: [] };
-  const note = (x) => { log.steps.push(x); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
+  const T0 = Date.now(), sec = () => Math.round((Date.now() - T0) / 1000);
+  // бюджет на работу Claude: после него правки и просмотр кадров пропускаются, берём лучшее, что есть
+  const BUDGET = 150;
+  const note = (x) => { log.steps.push(`[${sec()} с] ${x}`); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
   // уменьшенные копии фото, чтобы Claude видел, что на них
   const thumbs = [];
   for (const b of photos.slice(0, 12)) {
@@ -2157,8 +2164,9 @@ async function makeCreativeScene(v, label) {
     await box.call({ cmd: "photos", bitmaps: copies }, 10000, copies);
   };
   let cut = false;
-  const write = async (what) => {
-    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
+  // правки пишет быстрый Sonnet: он только чинит готовый код
+  const write = async (what, fast) => {
+    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null);
     cut = stop === "max_tokens";
     const code = extractCode(txt);
     note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}`);
@@ -2196,8 +2204,9 @@ async function makeCreativeScene(v, label) {
       note(`проверка ${round + 1}: ${r.problem ? r.problem.slice(0, 140) : "чисто"}`);
       if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n };
       if (!r.problem || round === 2) break;
+      if (best && sec() > BUDGET) { note("время вышло — беру лучший вариант"); break; }
       msgs.push({ role: "user", content: r.problem + "\nИсправь и пришли код целиком." });
-      code = (await write("Правка")) || code;
+      code = (await write("Правка", true)) || code;
     }
     if (!best) throw new Error("код ролика не заработал");
     let good = best.code;
@@ -2205,7 +2214,8 @@ async function makeCreativeScene(v, label) {
     // взгляд арт-директора на кадры
     label("✨ Кадры…");
     const shotTimes = [0.8, v.speech * 0.2, v.speech * 0.4, v.speech * 0.6, v.speech * 0.8, Math.max(0, v.speech - 0.4)].map((t) => +t.toFixed(2));
-    const sh = await sb.call({ cmd: "shots", times: shotTimes }, 30000);
+    const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotTimes }, 30000);
+    if (!sh.ok && sec() > BUDGET) note("просмотр кадров пропущен — время вышло");
     if (sh.ok) {
       if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + good + "\n```" });
       else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + good + "\n```" }, { role: "assistant", content: "Хорошо." });
@@ -2213,7 +2223,7 @@ async function makeCreativeScene(v, label) {
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
         { type: "text", text: `Кадры ролика в моменты ${shotTimes.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
-      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`));
+      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), "claude-sonnet-5-5");
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
       const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
       if (better) {
@@ -2222,8 +2232,9 @@ async function makeCreativeScene(v, label) {
         else await sb.load(good, brief, v.outro);
       }
     }
-    note("готово");
+    note("код готов, дальше сборка видео");
     return {
+      log: (x) => note(x),
       duration: v.duration,
       frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 8000)).bmp,
       destroy: () => sb.destroy(),
