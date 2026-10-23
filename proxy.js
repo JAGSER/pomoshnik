@@ -73,6 +73,8 @@ function loadAll() {
     // Пароль и ключ хранятся отдельными переменными: PASSWORD_MAMA, KEY_MAMA
     if (env("PASSWORD_" + ID)) u.password = env("PASSWORD_" + ID);
     if (env("KEY_" + ID)) u.key = env("KEY_" + ID).trim();
+    // можно пользоваться ключом другого человека: "keyFrom":"yuri"
+    if (!u.key && cfg.keyFrom && env("KEY_" + String(cfg.keyFrom).toUpperCase())) u.key = env("KEY_" + String(cfg.keyFrom).toUpperCase()).trim();
     all[id.toLowerCase()] = u;
   }
   return { all };
