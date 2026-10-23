@@ -231,7 +231,7 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .msg-actions.tighter button { font-size: .64em; padding: 6px 5px; }
 .msg-actions.tighter { gap: 3px; }
 /* заставка при запуске */
-#splash { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; align-items: center; justify-content: center; transition: opacity .15s ease; }
+#splash { position: fixed; inset: 0; z-index: 1000; background: #F6F1E9; display: flex; align-items: center; justify-content: center; transition: opacity .15s ease; }
 #splash.out { opacity: 0; pointer-events: none; }
 #splash svg { width: 128px; height: 128px; overflow: visible; }
 #splash svg * { transform-box: fill-box; transform-origin: center; }
