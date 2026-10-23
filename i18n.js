@@ -176,6 +176,7 @@ const EN = {
   "⚠️ Звук AAC без настройки — iPhone может его не проиграть": "⚠️ AAC sound without its config — iPhone may not play it",
   "⚠️ В файле нет звука ({0})": "⚠️ The file has no sound ({0})",
   "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
+  "проверка: быстрый кодировщик дал тишину → звук записью iPhone": "check: the fast encoder produced silence → sound recorded by iPhone",
   // творческие видео
   "⚠️ Творческое видео не получилось: {0}. Сделано обычное. Подробности — в ⚙️ → Видео.": "⚠️ The creative video didn't work out: {0}. A regular one was made instead. Details — in ⚙️ → Video.",
   "ℹ️ Обычное видео: {0}.": "ℹ️ Regular video: {0}.",

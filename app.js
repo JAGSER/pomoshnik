@@ -2104,6 +2104,43 @@ function rmsAt(pcm, t) {
 }
 
 let VIDEO_PATH = "";
+async function aacSelfTest(pcm) {
+  if (!window.AudioDecoder) return null;
+  try {
+    let s0 = 0; while (s0 < pcm.length && Math.abs(pcm[s0]) < 0.05) s0++;
+    if (s0 >= pcm.length) return null;
+    const seg = pcm.slice(s0, Math.min(pcm.length, s0 + VRATE * 2));
+    let inPeak = 0; for (const x of seg) inPeak = Math.max(inPeak, Math.abs(x));
+    const chunks = []; let desc = null;
+    const enc = new AudioEncoder({ output: (c, m) => {
+      let d = new Uint8Array(c.byteLength); c.copyTo(d);
+      if (d[0] === 0xff && (d[1] & 0xf6) === 0xf0) d = d.subarray(d[1] & 1 ? 7 : 9);
+      chunks.push({ ts: c.timestamp, d });
+      if (!desc && m && m.decoderConfig && m.decoderConfig.description && m.decoderConfig.description.byteLength) desc = m.decoderConfig.description;
+    }, error: () => {} });
+    enc.configure({ codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 });
+    const step = VRATE / 10;
+    for (let i = 0; i < seg.length; i += step) {
+      const data = seg.slice(i, Math.min(seg.length, i + step));
+      const ad = new AudioData({ format: "f32-planar", sampleRate: VRATE, numberOfFrames: data.length, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / VRATE), data });
+      enc.encode(ad); ad.close();
+    }
+    await Promise.race([enc.flush(), new Promise((r) => setTimeout(r, 5000))]);
+    try { enc.close(); } catch (_) {}
+    if (!chunks.length) return { ok: false, inPeak, outPeak: 0 };
+    let outPeak = 0;
+    const dec = new AudioDecoder({ output: (a) => {
+      const n = a.numberOfFrames, buf = new Float32Array(n);
+      try { a.copyTo(buf, { planeIndex: 0, format: "f32-planar" }); for (const x of buf) outPeak = Math.max(outPeak, Math.abs(x)); } catch (_) {}
+      a.close();
+    }, error: () => {} });
+    dec.configure({ codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, description: desc || aacConfig(VRATE, 1) });
+    for (const c of chunks) dec.decode(new EncodedAudioChunk({ type: "key", timestamp: c.ts, data: c.d }));
+    await Promise.race([dec.flush(), new Promise((r) => setTimeout(r, 5000))]);
+    try { dec.close(); } catch (_) {}
+    return { ok: outPeak > Math.min(0.01, inPeak / 5), inPeak, outPeak };
+  } catch (e) { console.warn("Проверка AAC:", e); return null; }
+}
 // AudioSpecificConfig для AAC-LC: тип 2, частота, каналы
 function aacConfig(rate, ch) {
   const idx = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000].indexOf(rate);
@@ -2131,8 +2168,14 @@ async function encodeVideo(scene, pcm, progress) {
   VIDEO_PATH = "";
   // iPhone без AAC в быстром кодировщике: картинка быстро, звук — записью самого iPhone
   const appleRemux = window.VideoEncoder && window.MediaRecorder && (store.get("forceRemux") || (IS_APPLE && !(window.AudioEncoder && await aacSupported())));
-  if (appleRemux) {
-    VIDEO_PATH = "картинка — быстро, звук — записью iPhone";
+  // самопроверка: кодируем кусочек голоса в AAC и декодируем обратно — если вышла тишина, кодировщик сломан
+  let remux = appleRemux;
+  if (!remux && window.VideoEncoder && window.AudioEncoder && window.MediaRecorder && await aacSupported()) {
+    const t = await aacSelfTest(pcm);
+    if (t && !t.ok) { remux = true; VIDEO_PATH = "проверка: быстрый кодировщик дал тишину → звук записью iPhone"; }
+  }
+  if (remux) {
+    VIDEO_PATH = VIDEO_PATH || "картинка — быстро, звук — записью iPhone";
     const silent = await encodeFast(scene, pcm, (k) => progress(k * 0.6), true);
     return await addAudioRealtime(silent, pcm, (k) => progress(0.6 + k * 0.4));
   }
@@ -2145,7 +2188,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=48");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=49");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2193,7 +2236,7 @@ async function encodeFast(scene, pcm, progress, noAudio) {
   const step = VRATE / 10;
   for (let i = 0; ae && i < pcm.length; i += step) {
     const data = pcm.slice(i, Math.min(pcm.length, i + step));
-    const ad = new AudioData({ format: "f32", sampleRate: VRATE, numberOfFrames: data.length, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / VRATE), data });
+    const ad = new AudioData({ format: "f32-planar", sampleRate: VRATE, numberOfFrames: data.length, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / VRATE), data });
     ae.encode(ad); ad.close();
   }
   // кадры
