@@ -328,16 +328,16 @@ function openChat(chat) {
   box.innerHTML = "";
   if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
-  if (!chat.messages.length && p.allowFiles !== false) {
-    const ec = el("div", "empty-chat"); ec.id = "empty-chat";
-    const mk = (ico, label, fn, cls) => { const b = el("button", "ec-btn" + (cls ? " " + cls : "")); b.type = "button"; b.innerHTML = `<span class="ec-ico">${ico}</span><span>${label}</span>`; b.onclick = fn; return b; };
+  if (p.allowFiles !== false) {
+    const ec = el("div", "empty-chat" + (chat.messages.length ? " compact" : "")); ec.id = "empty-chat";
+    const mk = (ico, label, fn, cls) => { const b = el("button", "ec-btn" + (cls ? " " + cls : "")); b.type = "button"; b.innerHTML = `<span class="ec-ico">${ico}</span><span class="ec-full">${label}</span><span class="ec-short">${label.split(" ")[0]}</span>`; b.onclick = fn; return b; };
     ec.append(
       mk("🎥", "Живой режим", startLive, "ec-live"),
       mk("🖼️", "Фото", () => pickFiles("image/*")),
       mk("📄", "Документ", () => pickFiles("application/pdf,.pdf,.txt,.md,.csv")),
       mk("🎬", "Видео", () => pickFiles("video/*")),
     );
-    box.append(ec);
+    if (chat.messages.length) box.prepend(ec); else box.append(ec);
   }
   scrollDown();
   if (!matchMedia("(pointer: coarse)").matches) $("#input").focus();
@@ -503,7 +503,7 @@ async function send() {
   if (text) content.push({ type: "text", text });
   else content.push({ type: "text", text: "Посмотри, пожалуйста, что я приложил(а)." });
   const userMsg = { role: "user", content };
-  $("#empty-chat")?.remove();
+  liftPanel();
   CHAT.messages.push(userMsg);
   if (!CHAT.title) CHAT.title = (text || PENDING[0]?.name || "Разговор").slice(0, 60);
   renderMessage(userMsg);
@@ -659,6 +659,9 @@ function contextMessages() {
     };
   });
 }
+
+// четыре кнопки не исчезают: после первого вопроса поднимаются наверх в один ряд
+function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.contains("compact")) { ec.classList.add("compact"); $("#messages").prepend(ec); } }
 
 /* ===== Видео: кадры для Claude + расшифровка звука ===== */
 async function videoToBlocks(file) {
@@ -949,7 +952,7 @@ async function liveAsk(text) {
   if (frame) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame } });
   content.push({ type: "text", text });
   const userMsg = { role: "user", content, live: true };
-  $("#empty-chat")?.remove();
+  liftPanel();
   CHAT.messages.push(userMsg);
   if (!CHAT.title) CHAT.title = text.slice(0, 60);
   renderMessage(userMsg);
@@ -2053,7 +2056,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=41");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=42");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

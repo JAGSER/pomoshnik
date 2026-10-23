@@ -282,3 +282,9 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .live-state.listening { background: var(--accent); animation: pulse 1.4s infinite; }
 .live-state.speaking { background: #2f7d4f; }
 .live-time { text-align: center; font-size: 1em; font-weight: 700; opacity: .75; min-height: 1.2em; }
+.empty-chat.compact { flex: none; min-height: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 0 4px; width: 100%; }
+.empty-chat.compact .ec-btn { aspect-ratio: auto; height: 68px; gap: 2px; border-width: 1.5px; border-radius: 16px; font-size: .78em; }
+.empty-chat.compact .ec-ico { font-size: 1.7em; }
+.ec-short { display: none; }
+.empty-chat.compact .ec-full { display: none; }
+.empty-chat.compact .ec-short { display: inline; white-space: nowrap; }
