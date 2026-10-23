@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник AI">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="cb0ec999-076a-4bd0-ad61-49313a08c950" data-domains="pomoshnik.ai"></script>
 </head>
 <body>
@@ -55,9 +55,12 @@
   </header>
   <main class="home-main settings">
     <h2 class="section-title">Голос</h2>
-    <p class="hint">Нажмите ▶, чтобы послушать, и выберите понравившийся.</p>
-    <button id="prep-samples" class="btn btn-ghost btn-wide prep" hidden>Подготовить все образцы голосов</button>
-    <ul id="voice-list" class="voice-list"></ul>
+    <button id="voice-toggle" class="voice-toggle" type="button" aria-expanded="false"></button>
+    <div id="voice-box" hidden>
+      <p class="hint">Нажмите ▶, чтобы послушать, и выберите понравившийся.</p>
+      <button id="prep-samples" class="btn btn-ghost btn-wide prep" hidden>Подготовить все образцы голосов</button>
+      <ul id="voice-list" class="voice-list"></ul>
+    </div>
     <h2 class="section-title">Скорость чтения</h2>
     <div class="seg" id="rate-seg">
       <button type="button" data-rate="1.2">1×</button>
@@ -107,11 +110,10 @@
   <header class="topbar">
     <button id="btn-back" class="icon-btn" aria-label="Назад">←</button>
     <h1 class="chat-title" id="chat-title" title="Нажмите, чтобы переименовать"></h1>
-    <button id="btn-tools" class="icon-btn" aria-label="Настройки разговора" aria-expanded="false">⋯</button>
   </header>
   <main id="messages" class="messages" aria-live="polite"></main>
   <div id="attachments" class="attachments"></div>
-  <div class="chat-tools" id="chat-tools" hidden>
+  <div class="chat-tools" id="chat-tools">
     <label class="think-toggle" title="Claude сначала обдумает ответ — дольше, но глубже"><input type="checkbox" id="think"><span>Подумать</span></label>
     <label class="think-toggle" title="Читать ответы вслух автоматически"><input type="checkbox" id="autoread"><span>Читать вслух</span></label>
     <button type="button" class="think-toggle rate-btn" id="rate-btn" title="Скорость чтения"></button>
@@ -125,6 +127,20 @@
   </form>
 </section>
 
-<script src="app.js?v=38"></script>
+<!-- Живой режим: камера + разговор голосом -->
+<div id="live" class="live" hidden>
+  <video id="live-video" autoplay playsinline muted></video>
+  <div class="live-top">
+    <button id="live-flip" class="live-round" type="button" aria-label="Другая камера">🔄</button>
+    <button id="live-close" class="live-round" type="button" aria-label="Завершить">✕</button>
+  </div>
+  <div class="live-bottom">
+    <div id="live-heard" class="live-heard"></div>
+    <div id="live-answer" class="live-answer"></div>
+    <button id="live-state" class="live-state" type="button">Включаю камеру…</button>
+  </div>
+</div>
+
+<script src="app.js?v=39"></script>
 </body>
 </html>

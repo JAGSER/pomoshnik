@@ -328,14 +328,15 @@ function openChat(chat) {
   box.innerHTML = "";
   if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
-  $("#chat-tools").hidden = true; $("#btn-tools").setAttribute("aria-expanded", "false");
   if (!chat.messages.length && p.allowFiles !== false) {
     const ec = el("div", "empty-chat"); ec.id = "empty-chat";
-    const b1 = el("button", "ec-btn"); b1.type = "button"; b1.innerHTML = `<span class="ec-ico">📷</span><span>Фото</span>`;
-    const b2 = el("button", "ec-btn"); b2.type = "button"; b2.innerHTML = `<span class="ec-ico">📄</span><span>Документ</span>`;
-    b1.onclick = () => pickFiles("image/*");
-    b2.onclick = () => pickFiles("application/pdf,.pdf,.txt,.md,.csv");
-    ec.append(b1, b2);
+    const mk = (ico, label, fn, cls) => { const b = el("button", "ec-btn" + (cls ? " " + cls : "")); b.type = "button"; b.innerHTML = `<span class="ec-ico">${ico}</span><span>${label}</span>`; b.onclick = fn; return b; };
+    ec.append(
+      mk("🎥", "Живой режим", startLive, "ec-live"),
+      mk("🖼️", "Фото", () => pickFiles("image/*")),
+      mk("📄", "Документ", () => pickFiles("application/pdf,.pdf,.txt,.md,.csv")),
+      mk("🎬", "Видео", () => pickFiles("video/*")),
+    );
     box.append(ec);
   }
   scrollDown();
@@ -395,7 +396,10 @@ function addNotice(text) {
 function renderMessage(m) {
   const d = el("div", "msg " + m.role);
   if (m.role === "user") {
+    const nImg = m.content.filter((b) => b.type === "image").length;
+    let iImg = 0;
     m.content.forEach((b) => {
+      if (b.type === "image" && nImg > 4 && ++iImg > 3) { if (iImg === 4) d.append(chip(`+${nImg - 3} кадров`)); return; }
       if (b.type === "image") {
         const img = el("img", "thumb");
         img.src = `data:${b.source.media_type};base64,${b.source.data}`;
@@ -404,7 +408,7 @@ function renderMessage(m) {
       } else if (b.type === "document") {
         d.append(chip("📄 " + (b.title || "Документ")));
       } else if (b.type === "text" && b._file) {
-        d.append(chip("📄 " + b._file));
+        d.append(chip((b.text.startsWith("Видео «") ? "🎬 " : "📄 ") + b._file));
       } else if (b.type === "text") {
         const t = el("div");
         t.textContent = b.text;
@@ -516,7 +520,7 @@ async function ask() {
   const p = CFG.presets[CHAT.preset] || {};
   const u = me();
   const today = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", weekday: "long" });
-  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system, LIVE ? LIVE_SYSTEM : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -530,14 +534,14 @@ async function ask() {
   let full = "";
   // Чтение вслух начинается, пока Claude ещё пишет ответ
   stopSpeaking();
-  const autoRead = $("#autoread").checked;
+  const autoRead = LIVE ? true : $("#autoread").checked;
   const live = autoRead && useGemini() ? new Speaker() : null;
   let pre = null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: me().model, think: $("#think").checked, system, messages: contextMessages() }),
+      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: LIVE ? "claude-sonnet-5-5" : me().model, think: LIVE ? false : $("#think").checked, system, messages: contextMessages() }),
       signal: ABORT.signal,
     });
     if (!r.ok) {
@@ -569,6 +573,7 @@ async function ask() {
           full += ev.delta.text;
           body.innerHTML = md(full);
           if (live) live.push(full);
+          if (LIVE) $("#live-answer").textContent = plain(full).slice(-160);
           // предзапись первой фразы, даже если чтение вслух выключено, — чтобы «Вслух» звучал сразу
           else if (!pre && useGemini()) { const c = firstChunk(plain(full), false); if (c) { pre = c; ttsFetch(c).catch(() => {}); } }
           scrollDown();
@@ -590,7 +595,7 @@ async function ask() {
       if (pre && !msg.tts) { msg.tts = [pre]; save(); }
     }
     if (live) { live.end(); rememberChunks(msg, live); if (SPEAKER === live) live.setOwner(btn); }
-    else if (autoRead && $("#autoread").checked) speakText(full, btn, msg);
+    else if (autoRead && (LIVE || $("#autoread").checked)) speakText(full, btn, msg);
   } catch (err) {
     if (live) live.stop();
     if (full) {
@@ -649,28 +654,173 @@ function contextMessages() {
   });
 }
 
+/* ===== Видео: кадры для Claude + расшифровка звука ===== */
+async function videoToBlocks(file) {
+  toast("Готовлю видео: беру кадры и звук…");
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error("не открылось")); });
+  const dur = isFinite(v.duration) ? v.duration : 0;
+  const n = Math.max(1, Math.min(16, Math.ceil(dur / 3)));
+  const k = Math.min(1, 768 / Math.max(v.videoWidth || 768, v.videoHeight || 768));
+  const c = document.createElement("canvas"); c.width = Math.round((v.videoWidth || 768) * k); c.height = Math.round((v.videoHeight || 432) * k);
+  const g = c.getContext("2d");
+  const frames = [];
+  for (let i = 0; i < n; i++) {
+    const t = dur ? Math.min(dur - 0.05, (i + 0.5) * dur / n) : 0;
+    await new Promise((res) => { const done = () => { v.onseeked = null; res(); }; v.onseeked = done; v.currentTime = t; setTimeout(done, 3000); });
+    g.drawImage(v, 0, 0, c.width, c.height);
+    frames.push({ t, data: c.toDataURL("image/jpeg", 0.75) });
+  }
+  URL.revokeObjectURL(url);
+  const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  let speech = "";
+  try { speech = await transcribeVideo(file); } catch (e) { speech = `(звук не расшифрован: ${e.message || e})`; }
+  const blocks = [];
+  frames.forEach((f, i) => {
+    const item = { name: i === 0 ? file.name : `${file.name} · ${fmt(f.t)}`, block: { type: "image", source: { type: "base64", media_type: "image/jpeg", data: f.data.split(",")[1] } } };
+    if (i === 0) item.preview = f.data; else item.hiddenChip = true;
+    blocks.push(item);
+  });
+  blocks.push({ name: "🎬 " + file.name, hiddenChip: true, block: { type: "text", _file: file.name, text:
+    `Видео «${file.name}», длительность ${fmt(dur)}. Выше по порядку кадры из видео (${frames.length} шт.) (моменты: ${frames.map((f) => fmt(f.t)).join(", ")}).\nРечь и звук из видео:\n${speech || "(тишина)"}` } });
+  return blocks;
+}
+async function transcribeVideo(file) {
+  if (file.size > 300 * 1024 * 1024) throw new Error("видео слишком большое");
+  const buf = await file.arrayBuffer();
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  let au;
+  try { au = await ac.decodeAudioData(buf); } finally { ac.close && ac.close(); }
+  const RATE16 = 16000, secs = Math.min(au.duration, 600);
+  const off = new OfflineAudioContext(1, Math.ceil(secs * RATE16), RATE16);
+  const src = off.createBufferSource(); src.buffer = au; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const wav = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) wav.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); wav.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt "); wav.setUint32(16, 16, true);
+  wav.setUint16(20, 1, true); wav.setUint16(22, 1, true); wav.setUint32(24, RATE16, true); wav.setUint32(28, RATE16 * 2, true);
+  wav.setUint16(32, 2, true); wav.setUint16(34, 16, true); w(36, "data"); wav.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) wav.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  const b64 = await toBase64(new Blob([wav.buffer], { type: "audio/wav" }));
+  const r = await fetch(CFG.proxy + "/transcribe", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, audio: b64, mime: "audio/wav" }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "сервер не ответил");
+  return d.text;
+}
+
+/* ===== Живой режим: камера + голос, ответы сразу вслух ===== */
+const LIVE_SYSTEM = "Сейчас живой режим: человек говорит с тобой голосом и показывает камеру телефона. К каждой реплике приложен кадр — это то, что камера видит прямо сейчас. Отвечай как в живом разговоре: коротко (1–3 предложения), просто, без списков и разметки. Если на кадре не видно того, о чём спрашивают, попроси показать поближе или повернуть камеру.";
+let LIVE = null;
+async function startLive() {
+  if (!SR) { alert("В этом браузере нет распознавания речи. Откройте приложение в Chrome."); return; }
+  if (!navigator.mediaDevices?.getUserMedia) { alert("Этот браузер не даёт доступ к камере."); return; }
+  stopSpeaking();
+  track("Живой режим");
+  LIVE = { facing: "environment", stream: null, rec: null, busy: false, closed: false };
+  $("#live").hidden = false;
+  $("#live-heard").textContent = ""; $("#live-answer").textContent = "";
+  try { await liveCamera(); } catch (e) { stopLive(); alert("Нет доступа к камере. Разрешите камеру для сайта в настройках браузера."); return; }
+  liveListen();
+}
+async function liveCamera() {
+  if (LIVE.stream) LIVE.stream.getTracks().forEach((t) => t.stop());
+  LIVE.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: LIVE.facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  const v = $("#live-video"); v.srcObject = LIVE.stream; v.classList.toggle("mirror", LIVE.facing === "user");
+  await v.play().catch(() => {});
+}
+function liveState(t, cls) { const b = $("#live-state"); b.textContent = t; b.className = "live-state" + (cls ? " " + cls : ""); }
+function liveListen() {
+  if (!LIVE || LIVE.closed) return;
+  stopSpeaking();
+  liveState("🎤 Слушаю… говорите", "listening");
+  const r = new SR(); LIVE.rec = r;
+  r.lang = "ru-RU"; r.interimResults = true; r.continuous = false;
+  let said = "";
+  r.onresult = (e) => { said = [...e.results].map((x) => x[0].transcript).join(" ").trim(); $("#live-heard").textContent = said; };
+  r.onerror = (e) => { if (e.error === "not-allowed") { liveState("Нет доступа к микрофону — разрешите его в браузере"); LIVE.rec = null; } };
+  r.onend = () => {
+    if (!LIVE || LIVE.closed || LIVE.rec !== r) return;
+    LIVE.rec = null;
+    if (said) liveAsk(said); else setTimeout(liveListen, 250);
+  };
+  try { r.start(); } catch (_) { setTimeout(liveListen, 500); }
+}
+function liveFrame() {
+  const v = $("#live-video");
+  if (!v.videoWidth) return null;
+  const k = Math.min(1, 768 / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  const g = c.getContext("2d");
+  if (LIVE.facing === "user") { g.translate(c.width, 0); g.scale(-1, 1); }
+  g.drawImage(v, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.8).split(",")[1];
+}
+async function liveAsk(text) {
+  LIVE.busy = true;
+  liveState("💭 Думаю…", "thinking");
+  $("#live-answer").textContent = "";
+  const frame = liveFrame();
+  const content = [];
+  if (frame) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame } });
+  content.push({ type: "text", text });
+  const userMsg = { role: "user", content, live: true };
+  $("#empty-chat")?.remove();
+  CHAT.messages.push(userMsg);
+  if (!CHAT.title) CHAT.title = text.slice(0, 60);
+  renderMessage(userMsg);
+  await save();
+  const watch = setInterval(() => { if (LIVE && SPEAKER) liveState("🔊 Отвечаю… нажмите, чтобы перебить", "speaking"); }, 300);
+  try { await ask(); } catch (_) {}
+  // ждём, пока ответ дочитается вслух, и снова слушаем
+  while (LIVE && !LIVE.closed && (SPEAKER || ("speechSynthesis" in window && speechSynthesis.speaking))) await new Promise((r) => setTimeout(r, 250));
+  clearInterval(watch);
+  if (!LIVE || LIVE.closed) return;
+  LIVE.busy = false;
+  $("#live-heard").textContent = "";
+  liveListen();
+}
+function stopLive() {
+  if (!LIVE) return;
+  LIVE.closed = true;
+  if (LIVE.rec) { try { LIVE.rec.abort(); } catch (_) {} }
+  if (LIVE.stream) LIVE.stream.getTracks().forEach((t) => t.stop());
+  if (ABORT) ABORT.abort();
+  stopSpeaking();
+  LIVE = null;
+  $("#live").hidden = true;
+  $("#live-video").srcObject = null;
+  scrollDown();
+}
+$("#live-close").onclick = stopLive;
+$("#live-flip").onclick = async () => { if (!LIVE) return; LIVE.facing = LIVE.facing === "user" ? "environment" : "user"; try { await liveCamera(); } catch (_) { toast("Не удалось переключить камеру"); } };
+// нажатие на кнопку состояния: во время ответа — перебить и слушать, во время слушания — закончить фразу
+$("#live-state").onclick = () => {
+  if (!LIVE) return;
+  if (SPEAKER || LIVE.busy) { if (ABORT) ABORT.abort(); stopSpeaking(); }
+  else if (LIVE.rec) { try { LIVE.rec.stop(); } catch (_) {} }
+  else liveListen();
+};
+
 async function save() {
   CHAT.updated = Date.now();
   if (DB.db) { try { await DB.put(CHAT); } catch (_) {} }
 }
 
 /* ===== Файлы ===== */
-const FILE_ACCEPT = "image/*,application/pdf,.txt,.md,.csv";
+const FILE_ACCEPT = "image/*,video/*,application/pdf,.txt,.md,.csv";
 function pickFiles(accept) { const fi = $("#file-input"); fi.accept = accept || FILE_ACCEPT; fi.click(); setTimeout(() => { fi.accept = FILE_ACCEPT; }, 1000); }
 $("#btn-attach").onclick = () => pickFiles();
-$("#btn-tools").onclick = (e) => {
-  e.stopPropagation();
-  const t = $("#chat-tools"); t.hidden = !t.hidden;
-  $("#btn-tools").setAttribute("aria-expanded", String(!t.hidden));
-};
-document.addEventListener("click", (e) => {
-  const t = $("#chat-tools");
-  if (!t.hidden && !t.contains(e.target) && e.target.id !== "btn-tools") { t.hidden = true; $("#btn-tools").setAttribute("aria-expanded", "false"); }
-});
+
 $("#file-input").onchange = async (e) => {
   for (const f of e.target.files) {
     try {
-      if (f.type.startsWith("image/")) {
+      if (f.type.startsWith("video/")) {
+        const v = await videoToBlocks(f);
+        PENDING.push(...v);
+      } else if (f.type.startsWith("image/")) {
         const { data, type, url } = await shrinkImage(f);
         PENDING.push({ name: f.name, preview: url, block: { type: "image", source: { type: "base64", media_type: type, data } } });
       } else if (f.type === "application/pdf") {
@@ -689,13 +839,15 @@ function renderAttachments() {
   const box = $("#attachments");
   box.innerHTML = "";
   PENDING.forEach((p, i) => {
+    if (p.hiddenChip) return;
     const a = el("div", "att");
     if (p.preview) { const img = el("img"); img.src = p.preview; img.alt = ""; a.append(img); }
     else a.append(document.createTextNode("📄 " + p.name));
     const x = el("button");
     x.textContent = "✕";
     x.setAttribute("aria-label", "Убрать");
-    x.onclick = () => { PENDING.splice(i, 1); renderAttachments(); };
+    // у видео убираем сразу все его кадры и расшифровку
+    x.onclick = () => { let n = 1; while (PENDING[i + n] && PENDING[i + n].hiddenChip) n++; PENDING.splice(i, n); renderAttachments(); };
     a.append(x);
     box.append(a);
   });
@@ -1241,6 +1393,11 @@ function openSettings() {
   const list = $("#voice-list");
   list.innerHTML = "";
   const cur = userVoice();
+  const vt = $("#voice-toggle"), vb = $("#voice-box");
+  const curDesc = (VOICES.find((x) => x[0] === cur) || [])[1] || "";
+  vt.innerHTML = `<span>🎙 ${esc(cur)}</span><span class="vdesc">${esc(curDesc)}</span><span class="vt-arrow">${vb.hidden ? "Выбрать ›" : "Свернуть ˄"}</span>`;
+  vt.setAttribute("aria-expanded", String(!vb.hidden));
+  vt.onclick = () => { vb.hidden = !vb.hidden; if (vb.hidden) stopPreview(); openSettings(); };
   VOICES.forEach(([name, desc]) => {
     const li = el("li", "voice" + (name === cur ? " on" : ""));
     const pick = el("button", "voice-pick");
@@ -1536,7 +1693,7 @@ async function chatPhotos(msg) {
   const idx = CHAT.messages.indexOf(msg);
   const src = [];
   CHAT.messages.slice(0, idx < 0 ? CHAT.messages.length : idx).forEach((m) => {
-    if (m.role === "user") (m.content || []).forEach((b) => { if (b.type === "image" && b.source && b.source.data) src.push(b.source); });
+    if (m.role === "user" && !m.live) (m.content || []).forEach((b) => { if (b.type === "image" && b.source && b.source.data) src.push(b.source); });
   });
   const out = [];
   for (const s of src.slice(-20)) {
@@ -1709,7 +1866,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=38");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=39");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

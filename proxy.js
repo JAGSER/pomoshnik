@@ -288,7 +288,31 @@ export async function handler(req, info) {
     return json({ emoji: m ? m[1] : "💬", title: (m ? m[2] : line).replace(/^["«]|["».]$/g, "").slice(0, 60) }, 200, h);
   }
 
-  // Озвучка ответа голосом Gemini. Ключ — переменная GEMINI_KEY
+  // Расшифровка звука из видео (Gemini слышит, Claude — нет)
+  if (url.pathname === "/transcribe") {
+    const gkey = env("GEMINI_KEY");
+    if (!gkey) return json({ error: "Нет ключа Gemini" }, 500, h);
+    const data = String(body.audio || "");
+    if (!data || data.length > 19_000_000) return json({ error: "Звук слишком длинный" }, 400, h);
+    const models = [env("GEMINI_STT_MODEL", ""), "gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash"].filter(Boolean);
+    let last = "";
+    for (const m of models) {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${gkey}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [
+          { inline_data: { mime_type: body.mime || "audio/wav", data } },
+          { text: "Дословно расшифруй речь из этой аудиодорожки видео на языке оригинала. Если речи нет — коротко опиши, что слышно (музыка, шум, тишина). Только текст, без пояснений." },
+        ] }], generationConfig: { temperature: 0 } }),
+      });
+      if (r.status === 404) { last = m + ": нет модели"; continue; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { last = d.error?.message || ("Gemini " + r.status); continue; }
+      const text = (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || "").join("").trim();
+      return json({ text, model: m }, 200, h);
+    }
+    return json({ error: "Не удалось расшифровать звук: " + last }, 502, h);
+  }
+
   // Озвучка ответа голосом Gemini. Ключ — переменная GEMINI_KEY
   if (url.pathname === "/tts") {
     const text = String(body.text || "").slice(0, 5000);
