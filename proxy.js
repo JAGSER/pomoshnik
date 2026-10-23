@@ -20,7 +20,8 @@ function env(name, def = "") {
 
 function cors(origin) {
   const allowed = env("ALLOWED_ORIGIN", "*");
-  const list = allowed.split(",").map((s) => s.trim());
+  // основной адрес приложения и старый, с которого идёт переезд, разрешены всегда
+  const list = allowed.split(",").map((s) => s.trim()).concat(["https://pomoshnik.ai", "https://www.pomoshnik.ai", "https://ai.duetplay.app"]);
   const ok = list.includes("*") || list.includes(origin);
   return {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
@@ -230,6 +231,18 @@ export async function handler(req, info) {
     if (kv) { for await (const e of kv.list({ prefix: ["sample", SAMPLE_VER] })) if (e.key[3] === "n") have.push(e.key[2]); }
     return json({ have }, 200, h);
   }
+  // Переезд на новый адрес: забрать упакованные данные (один раз, по секретному коду)
+  if (req.method === "GET" && url.pathname === "/migrate") {
+    const code = url.searchParams.get("code") || "";
+    const kv = await kvOpen();
+    if (!kv || !/^[a-f0-9]{32}$/.test(code)) return json({ error: "Нет данных" }, 404, h);
+    const n = (await kv.get(["mig", code, "n"])).value;
+    if (!n) return json({ error: "Данные не найдены или уже перенесены" }, 404, h);
+    let data = "";
+    for (let i = 0; i < n; i++) { data += (await kv.get(["mig", code, i])).value || ""; await kv.delete(["mig", code, i]); }
+    await kv.delete(["mig", code, "n"]);
+    return new Response(data, { status: 200, headers: { ...h, "Content-Type": "application/json; charset=utf-8" } });
+  }
   if (req.method !== "POST") return json({ error: "Метод не поддерживается" }, 405, h);
 
   let body;
@@ -242,6 +255,18 @@ export async function handler(req, info) {
 
   if (url.pathname === "/login") {
     return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch }, 200, h);
+  }
+  // Переезд: положить данные приложения на час, вернуть одноразовый код
+  if (url.pathname === "/migrate") {
+    const data = String(body.data || "");
+    if (!data || data.length > 30_000_000) return json({ error: "Слишком много данных" }, 413, h);
+    const kv = await kvOpen();
+    if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const code = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const parts = Math.ceil(data.length / 30000), ttl = { expireIn: 3600_000 };
+    for (let i = 0; i < parts; i++) await kv.set(["mig", code, i], data.slice(i * 30000, (i + 1) * 30000), ttl);
+    await kv.set(["mig", code, "n"], parts, ttl);
+    return json({ ok: true, code }, 200, h);
   }
 
   const key = user.key || env("ANTHROPIC_KEY");

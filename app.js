@@ -132,12 +132,34 @@ async function init() {
   // не ждём хранилище дольше 3 секунд — без истории приложение тоже работает
   try { await Promise.race([DB.open(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); } catch (_) {}
   ADB.open();
+  // переезд со старого адреса: забираем вход, настройки и разговоры
+  const mig = location.hash.match(/^#m=([a-f0-9]{32})$/);
+  if (mig) await importMigration(mig[1]);
 
   SESSION = store.get("session");
   if (SESSION && CFG.users[SESSION.user]) startHome();
   else startLogin();
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+}
+
+async function importMigration(code) {
+  history.replaceState(null, "", location.pathname);
+  try {
+    const r = await fetch(CFG.proxy + "/migrate?code=" + code, { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    Object.entries(d.ls || {}).forEach(([k, v]) => { if (localStorage.getItem(k) == null) try { localStorage.setItem(k, v); } catch (_) {} });
+    if (DB.db && Array.isArray(d.chats) && d.chats.length) {
+      await new Promise((res) => {
+        const tx = DB.db.transaction("chats", "readwrite"), st = tx.objectStore("chats");
+        d.chats.forEach((c) => { const q = st.get(c.id); q.onsuccess = () => { if (!q.result || (q.result.updated || 0) < (c.updated || 0)) st.put(c); }; });
+        tx.oncomplete = tx.onerror = tx.onabort = res;
+      });
+    }
+    store.set("migrated-v2", true);
+    setTimeout(() => toast("Добро пожаловать на новый адрес — pomoshnik.ai. Разговоры перенесены."), 800);
+  } catch (_) {}
 }
 
 /* ===== Вход (только пароль — прослойка сама находит человека) ===== */
@@ -1506,7 +1528,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=30");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=31");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
