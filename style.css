@@ -202,3 +202,8 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .msg-actions .vid-btn { margin-left: auto; }
 .msg-actions .vid-btn.ready { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 @media (max-width: 350px) { .msg-actions button { font-size: .72em; padding: 6px 6px; } .msg.assistant { padding: 12px 10px; } .messages { padding-left: 8px; padding-right: 8px; } }
+.set-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; cursor: pointer; }
+.set-row input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.set-row span { display: flex; flex-direction: column; gap: 2px; }
+.set-row small { color: var(--muted); font-size: .8em; }
+#creative-model { margin-bottom: 10px; }

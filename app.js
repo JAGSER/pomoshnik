@@ -1127,6 +1127,22 @@ function openSettings() {
   const prep = $("#prep-samples");
   prep.hidden = !me().admin;
   if (!prep.disabled) { prep.textContent = "Подготовить все образцы голосов"; prep.onclick = () => prepareAllSamples(prep); }
+  const outroBox = $("#set-outro");
+  outroBox.checked = videoOutroOn();
+  outroBox.onchange = () => store.set("outro:" + SESSION.user, outroBox.checked);
+  $("#creative-block").hidden = !me().admin;
+  if (me().admin) {
+    const cr = $("#set-creative");
+    cr.checked = store.get("creative:" + SESSION.user) !== false;
+    cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
+    document.querySelectorAll("#creative-model button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.model === creativeModel());
+      b.onclick = () => {
+        store.set("creativeModel:" + SESSION.user, b.dataset.model);
+        document.querySelectorAll("#creative-model button").forEach((x) => x.classList.toggle("on", x === b));
+      };
+    });
+  }
   document.querySelectorAll("#rate-seg button").forEach((b) => {
     b.classList.toggle("on", Number(b.dataset.rate) === RATE);
     b.onclick = () => {
@@ -1224,7 +1240,10 @@ async function videoButton(btn, text, msg) {
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
-    const pcm = new Float32Array(total + Math.round(VRATE * 0.6)); // небольшая тишина в конце
+    const outro = videoOutroOn();
+    const speech = total / VRATE;
+    // в конце — тишина под финальную заставку (или короткая пауза, если заставка выключена)
+    const pcm = new Float32Array(total + Math.round(VRATE * (outro ? OUTRO_SEC : 0.6)));
     const subs = [];
     let off = 0;
     parts.forEach((a, i) => {
@@ -1233,9 +1252,16 @@ async function videoButton(btn, text, msg) {
       off += a.length;
     });
     // 2) сборка видео
+    let scene = null;
+    if (creativeOn()) {
+      try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro }, label); }
+      catch (e) { console.warn("Творческий режим:", e); toast("Творческое видео не получилось (" + (e.message || e) + ") — делаю обычное"); }
+    }
     label("⏳ 0%");
-    const scene = makeScene(emoji, title, subs, pcm.length / VRATE);
-    const blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`));
+    if (!scene) scene = makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
+    let blob;
+    try { blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`)); }
+    finally { if (scene.destroy) scene.destroy(); }
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
     btn.disabled = false;
@@ -1288,7 +1314,8 @@ function wrapLines(g, text, maxW) {
 }
 
 const VFONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-function makeScene(emoji, title, subs, duration) {
+function makeScene(emoji, title, subs, duration, speech, outro) {
+  speech = speech || duration;
   const cv = document.createElement("canvas");
   cv.width = VW; cv.height = VH;
   const g = cv.getContext("2d");
@@ -1337,12 +1364,13 @@ function makeScene(emoji, title, subs, duration) {
   return {
     canvas: cv, duration,
     draw(t, amp) {
+      if (outro && t >= speech) { outroDraw(g, t - speech, CFG.appName || "Помощник AI"); return; }
       level = level * 0.6 + Math.min(1, amp * 5) * 0.4;
       g.drawImage(base, 0, 0);
       // эмодзи «дышит» в такт голосу
       const sc = 1 + level * 0.1;
       g.save(); g.translate(VW / 2, 330); g.scale(sc, sc);
-      g.font = `260px ${VFONT}`; g.textAlign = "center"; g.textBaseline = "middle";
+      g.font = `260px ${VFONT}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#000";
       g.fillText(emoji, 0, 10); g.restore();
       while (si < subs.length - 1 && t >= subs[si].t1) si++;
       while (si > 0 && t < subs[si].t0) si--;
@@ -1356,7 +1384,7 @@ function makeScene(emoji, title, subs, duration) {
       }
       // полоска прогресса
       g.fillStyle = "rgba(31,27,22,0.12)"; g.fillRect(140, VH - 190, VW - 280, 10);
-      g.fillStyle = "#B5532E"; g.fillRect(140, VH - 190, (VW - 280) * Math.min(1, t / duration), 10);
+      g.fillStyle = "#B5532E"; g.fillRect(140, VH - 190, (VW - 280) * Math.min(1, t / speech), 10);
     },
   };
 }
@@ -1374,14 +1402,14 @@ function rmsAt(pcm, t) {
 async function encodeVideo(scene, pcm, progress) {
   if (window.VideoEncoder && window.AudioEncoder) {
     try { return await encodeFast(scene, pcm, progress); }
-    catch (e) { console.warn("WebCodecs:", e); }
+    catch (e) { console.warn("WebCodecs:", e); if (scene.frame) throw e; }
   }
   return await encodeRealtime(scene, pcm, progress);
 }
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=25");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=26");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -1418,10 +1446,12 @@ async function encodeFast(scene, pcm, progress) {
   for (let i = 0; i < frames; i++) {
     if (fail) throw fail;
     const t = i / VFPS;
-    scene.draw(t, rmsAt(pcm, t));
-    const f = new VideoFrame(scene.canvas, { timestamp: Math.round(i * 1e6 / VFPS), duration: Math.round(1e6 / VFPS) });
+    let src = scene.canvas;
+    if (scene.frame) src = await scene.frame(t, rmsAt(pcm, t)); else scene.draw(t, rmsAt(pcm, t));
+    const f = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / VFPS), duration: Math.round(1e6 / VFPS) });
     ve.encode(f, { keyFrame: i % (VFPS * 2) === 0 });
     f.close();
+    if (src !== scene.canvas && src.close) src.close();
     while (ve.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
     if (i % 15 === 0) { progress(i / frames); await new Promise((r) => setTimeout(r, 0)); }
   }
@@ -1434,6 +1464,7 @@ async function encodeFast(scene, pcm, progress) {
 
 // Запасной путь (старые телефоны): записываем видео в реальном времени
 async function encodeRealtime(scene, pcm, progress) {
+  if (scene.frame) throw new Error("этот браузер не умеет быстро собирать видео");
   if (!window.MediaRecorder || !scene.canvas.captureStream) throw new Error("этот браузер не умеет записывать видео");
   const mime = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
   const ctx = new AudioContext({ sampleRate: VRATE });
@@ -1468,4 +1499,415 @@ async function encodeRealtime(scene, pcm, progress) {
   await Promise.race([stopped, new Promise((r) => setTimeout(r, 3000))]);
   ctx.close().catch(() => {});
   return new Blob(parts, { type: (mime || "video/webm").split(";")[0] });
+}
+
+/* ===== Финальная заставка и настройки видео ===== */
+const OUTRO_SEC = 3;
+function videoOutroOn() { return !SESSION || store.get("outro:" + SESSION.user) !== false; }
+function creativeOn() { return !!(me().admin && store.get("creative:" + SESSION.user) !== false && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
+function creativeModel() { return store.get("creativeModel:" + SESSION.user) || "claude-opus-5-5"; }
+
+// Талисман и заставка — обычные функции без внешних зависимостей: их же получает песочница
+function mascotDraw(g, cx, cy, size, t, talk) {
+  const k = size / 512;
+  g.save(); g.translate(cx - size / 2, cy - size / 2); g.scale(k, k);
+  g.fillStyle = "#B5532E"; g.beginPath(); g.roundRect(0, 0, 512, 512, 112); g.fill();
+  const open = talk ? 0.55 + 0.45 * Math.abs(Math.sin(t * 11)) * (0.6 + 0.4 * Math.sin(t * 3.1)) : 1;
+  const blink = t % 3.2 > 3.05 ? 0.15 : 1;
+  g.strokeStyle = "#FFFDF9"; g.lineWidth = 34; g.lineCap = "round";
+  g.save(); g.translate(256, 250); g.scale(1, open); g.beginPath(); g.arc(0, 0, 110, 0, Math.PI); g.restore(); g.stroke();
+  g.fillStyle = "#FFFDF9"; g.save(); g.translate(256, 186); g.scale(1, blink); g.beginPath(); g.arc(0, 0, 48, 0, Math.PI * 2); g.fill(); g.restore();
+  g.restore();
+}
+function outroDraw(g, s, app) {
+  const W = 1080, H = 1920, F = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  const cl = (x) => Math.max(0, Math.min(1, x));
+  const back = (x) => { x = cl(x); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, "#F8F3EB"); gr.addColorStop(1, "#EADCC8");
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  const p = back(s / 0.6);
+  if (p > 0) mascotDraw(g, W / 2, 720, 300 * p, s, s > 0.5 && s < 2);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.globalAlpha = cl((s - 0.4) / 0.5); g.fillStyle = "#1F1B16"; g.font = `900 84px ${F}`; g.fillText("Спросите о своём", W / 2, 1020);
+  g.globalAlpha = cl((s - 0.6) / 0.5); g.fillStyle = "#B5532E"; g.fillText(`в «${app}»`, W / 2, 1130);
+  g.restore();
+}
+
+/* ===== Песочница: код ролика от Claude выполняется отдельно от приложения =====
+   iframe без доступа к сайту (sandbox, без same-origin, сеть запрещена) + Worker внутри него,
+   чтобы зависший код можно было просто выбросить, не повесив страницу. */
+function WORKER_MAIN() {
+  const W = 1080, H = 1920, FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  const SAFE = { x0: 60, x1: 1020, y0: 110, y1: 1690 };
+  const cv = new OffscreenCanvas(W, H), g = cv.getContext("2d");
+  const small = new OffscreenCanvas(540, 960), sg = small.getContext("2d");
+  const info = new Map(), seen = new Set();
+  let boxes = [], userDraw = null, brief = null, outro = false, speech = 1, level = 0, lastErr = null, curT = 0;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const ease = {
+    out: (x) => 1 - Math.pow(1 - clamp(x), 3),
+    inOut: (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; },
+    back: (x) => { x = clamp(x); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+    elastic: (x) => { x = clamp(x); return x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI / 3)) + 1; },
+  };
+  function rand(seed) { let s = (Math.abs(Math.floor(seed * 9973)) % 2147483646) + 1; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+  function record(kind, x, y, w, h, label) {
+    if (g.globalAlpha < 0.35) return;
+    const m = g.getTransform();
+    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([a, b]) => [m.a * a + m.c * b + m.e, m.b * a + m.d * b + m.f]);
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    boxes.push({ kind, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), label });
+  }
+  function wrap(str, maxW) {
+    const out = [];
+    String(str).split("\n").forEach((para) => {
+      let cur = "";
+      para.split(/\s+/).filter(Boolean).forEach((w) => {
+        const t = cur ? cur + " " + w : w;
+        if (g.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t;
+      });
+      out.push(cur);
+    });
+    return out;
+  }
+  function text(str, x, y, o = {}) {
+    str = String(str == null ? "" : str); if (!str.trim()) return { w: 0, h: 0, size: 0 };
+    const weight = o.weight || 700, align = o.align || "center", lh = o.lineHeight || 1.2, maxLines = o.maxLines || 3, minSize = o.minSize || 26;
+    const m = g.getTransform(), sx = Math.hypot(m.a, m.b) || 1;
+    let maxW = o.maxWidth;
+    if (!maxW) {
+      const gx = m.a * x + m.c * y + m.e; // ширина до краёв безопасной зоны в экранных точках
+      const room = align === "center" ? 2 * Math.min(gx - SAFE.x0, SAFE.x1 - gx) : align === "left" ? SAFE.x1 - gx : gx - SAFE.x0;
+      maxW = room / sx;
+    }
+    maxW = Math.max(40, maxW);
+    let f = o.size || 64, lines;
+    for (;;) {
+      g.font = `${weight} ${f}px ${o.font || FONT}`;
+      lines = wrap(str, maxW);
+      const wide = Math.max(...lines.map((l) => g.measureText(l).width));
+      if ((lines.length <= maxLines && wide <= maxW) || f <= minSize) break;
+      f = Math.max(minSize, Math.floor(f * 0.92));
+    }
+    lines = lines.slice(0, maxLines);
+    g.save();
+    g.globalAlpha *= o.alpha == null ? 1 : o.alpha;
+    g.fillStyle = o.color || "#1F1B16"; g.textAlign = align; g.textBaseline = "middle";
+    if (o.stroke) { g.strokeStyle = o.stroke; g.lineWidth = o.strokeWidth || 8; g.lineJoin = "round"; }
+    const step = f * lh, top = y - (lines.length * step) / 2 + step / 2;
+    lines.forEach((l, i) => { if (o.stroke) g.strokeText(l, x, top + i * step); g.fillText(l, x, top + i * step); });
+    const w = Math.max(...lines.map((l) => g.measureText(l).width));
+    const bx = align === "center" ? x - w / 2 : align === "left" ? x : x - w;
+    record("text", bx, y - (lines.length * step) / 2, w, lines.length * step, str.slice(0, 40));
+    g.restore();
+    return { w, h: lines.length * step, size: f };
+  }
+  function path(d, k, x, y, o = {}) {
+    if (!d) return;
+    seen.add(d);
+    const meta = info.get(d) || { len: 3000, box: null };
+    const s = o.scale || 1;
+    g.save(); g.translate(x, y); g.scale(s, s);
+    const p = new Path2D(d);
+    if (o.fill && k > 0) { g.save(); g.globalAlpha *= clamp(k); g.fillStyle = o.fill; g.fill(p); g.restore(); }
+    if (k > 0 && o.color !== null) {
+      g.strokeStyle = o.color || "#1F1B16"; g.lineWidth = (o.width || 8) / s; g.lineCap = "round"; g.lineJoin = "round";
+      g.setLineDash([meta.len, meta.len]); g.lineDashOffset = meta.len * (1 - clamp(k));
+      g.stroke(p);
+    }
+    if (meta.box && k > 0.2) record("icon", meta.box.x, meta.box.y, meta.box.w, meta.box.h, "рисунок");
+    g.restore();
+  }
+  function card(x, y, w, h, o = {}) {
+    g.save();
+    if (o.shadow) { g.shadowColor = "rgba(31,27,22,0.15)"; g.shadowBlur = 30; g.shadowOffsetY = 10; }
+    g.fillStyle = o.color || "#FFFDF9"; g.beginPath(); g.roundRect(x, y, w, h, o.r == null ? 36 : o.r); g.fill();
+    g.restore();
+  }
+  function emoji(ch, x, y, size) {
+    g.save(); g.fillStyle = "#000"; g.font = `${size || 160}px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(ch, x, y);
+    record("icon", x - size / 2, y - size / 2, size, size, "эмодзи"); g.restore();
+  }
+  function sub(t) {
+    const subs = brief.subs; let i = 0;
+    while (i < subs.length - 1 && t >= subs[i].t1) i++;
+    const s = subs[i] || { t0: 0, t1: speech, text: "" };
+    return { i, text: s.text, t0: s.t0, t1: s.t1, p: clamp((t - s.t0) / Math.max(0.01, s.t1 - s.t0)) };
+  }
+  const K = {
+    W, H, SAFE, text, path, card, emoji, sub, ease, clamp, rand,
+    prog: (t, a, b) => clamp((t - a) / (b - a)),
+    lerp: (a, b, x) => a + (b - a) * x,
+    mascot: (cx, cy, size, talk) => { mascotDraw(g, cx, cy, size, curT, talk); record("icon", cx - size / 2, cy - size / 2, size, size, "талисман"); },
+    palette: { bg: "#F6F1E9", ink: "#1F1B16", accent: "#B5532E", soft: "#F3E1D6", white: "#FFFDF9", muted: "#6E655A" },
+    get g() { return g; }, get amp() { return level; },
+  };
+  function footer(t) {
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+    g.fillStyle = "rgba(31,27,22,0.14)"; g.fillRect(140, H - 190, W - 280, 10);
+    g.fillStyle = "#B5532E"; g.fillRect(140, H - 190, (W - 280) * clamp(t / speech), 10);
+    g.font = `500 40px ${FONT}`; const app = brief.app; const bw = 62 + g.measureText(app).width, lx = (W - bw) / 2;
+    g.fillStyle = "rgba(246,241,233,0.85)"; g.beginPath(); g.roundRect(lx - 20, H - 132, bw + 40, 64, 32); g.fill();
+    mascotDraw(g, lx + 24, H - 100, 48, t, false);
+    g.fillStyle = "#6E655A"; g.textAlign = "left"; g.textBaseline = "middle"; g.fillText(app, lx + 62, H - 99);
+    g.restore();
+  }
+  function render(t, amp) {
+    boxes = []; curT = t;
+    level = level * 0.6 + Math.min(1, (amp || 0) * 5) * 0.4;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.setLineDash([]);
+    g.fillStyle = "#F6F1E9"; g.fillRect(0, 0, W, H);
+    if (outro && t >= speech) { outroDraw(g, t - speech, brief.app); return; }
+    g.save();
+    try { userDraw(Math.min(t, speech - 0.001), K); } catch (e) { lastErr = lastErr || (e && e.message) || String(e); }
+    g.restore();
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.setLineDash([]); g.shadowColor = "transparent";
+    footer(t);
+  }
+  function overlap(a, b) {
+    const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    return w > 0 && h > 0 ? w * h : 0;
+  }
+  function analyze(t) {
+    const out = [], txt = boxes.filter((b) => b.kind === "text"), ic = boxes.filter((b) => b.kind === "icon");
+    const tt = t.toFixed(1);
+    txt.forEach((b) => {
+      if (b.x0 < SAFE.x0 - 6 || b.x1 > SAFE.x1 + 6 || b.y0 < SAFE.y0 - 6 || b.y1 > SAFE.y1 + 6) out.push(`на ${tt} с текст «${b.label}» выходит за безопасную зону экрана`);
+    });
+    for (let i = 0; i < txt.length; i++) for (let j = i + 1; j < txt.length; j++) {
+      const a = txt[i], b = txt[j], o = overlap(a, b), m = Math.min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0));
+      if (m > 0 && o / m > 0.08) out.push(`на ${tt} с тексты «${a.label}» и «${b.label}» налезают друг на друга`);
+    }
+    txt.forEach((a) => ic.forEach((b) => {
+      const o = overlap(a, b), m = (a.x1 - a.x0) * (a.y1 - a.y0);
+      if (m > 0 && o / m > 0.15) out.push(`на ${tt} с текст «${a.label}» налезает на ${b.label}`);
+    }));
+    return out;
+  }
+  onmessage = async (e) => {
+    const m = e.data;
+    try {
+      if (m.cmd === "load") {
+        brief = m.brief; outro = m.outro; speech = m.brief.speech; lastErr = null; level = 0;
+        K.title = brief.title; K.emojiMain = brief.emojiMain; K.duration = speech; K.subs = brief.subs;
+        userDraw = new Function(m.code + "\n;return typeof draw === 'function' ? draw : null;")();
+        if (!userDraw) throw new Error("в коде нет функции draw(t, k)");
+        const tests = [0, 0.5, speech * 0.25, speech * 0.5, speech * 0.75, speech - 0.05];
+        const t0 = performance.now();
+        tests.forEach((t) => render(t, 0.2));
+        const ms = (performance.now() - t0) / tests.length;
+        postMessage({ id: m.id, ok: !lastErr, error: lastErr, ms, paths: [...seen].filter((d) => !info.has(d)) });
+      } else if (m.cmd === "info") {
+        m.list.forEach(([d, v]) => info.set(d, v));
+        postMessage({ id: m.id, ok: true });
+      } else if (m.cmd === "check") {
+        lastErr = null;
+        const issues = new Set();
+        m.times.forEach((t) => { render(t, 0.2); analyze(t).forEach((x) => issues.add(x)); });
+        postMessage({ id: m.id, ok: true, issues: [...issues].slice(0, 12), error: lastErr });
+      } else if (m.cmd === "shots") {
+        const shots = [];
+        for (const t of m.times) {
+          render(t, 0.2);
+          sg.drawImage(cv, 0, 0, 540, 960);
+          const b = await small.convertToBlob({ type: "image/jpeg", quality: 0.72 });
+          const buf = new Uint8Array(await b.arrayBuffer());
+          let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+          shots.push(btoa(s));
+        }
+        postMessage({ id: m.id, ok: true, shots });
+      } else if (m.cmd === "frame") {
+        render(m.t, m.amp);
+        const bmp = cv.transferToImageBitmap();
+        postMessage({ id: m.id, ok: true, bmp }, [bmp]);
+      }
+    } catch (err) {
+      postMessage({ id: m.id, ok: false, error: (err && err.message) || String(err) });
+    }
+  };
+}
+
+// Внутри iframe: запускает Worker и пересылает сообщения; заодно меряет SVG-пути (в Worker нет DOM)
+function FRAME_MAIN(workerSrc) {
+  const w = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" })));
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"), p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  svg.setAttribute("width", "0"); svg.setAttribute("height", "0"); svg.appendChild(p); document.body.appendChild(svg);
+  w.onmessage = (e) => {
+    const m = e.data;
+    if (m.paths && m.paths.length) {
+      const list = m.paths.map((d) => {
+        try { p.setAttribute("d", d); const b = p.getBBox(); return [d, { len: Math.max(1, p.getTotalLength()), box: { x: b.x, y: b.y, w: b.width, h: b.height } }]; }
+        catch (_) { return [d, { len: 3000, box: null }]; }
+      });
+      w.postMessage({ cmd: "info", id: -1, list });
+    }
+    if (m.id === -1) return;
+    parent.postMessage(m, "*", m.bmp ? [m.bmp] : []);
+  };
+  w.onerror = (e) => parent.postMessage({ id: -2, ok: false, error: e.message || "ошибка в коде ролика" }, "*");
+  onmessage = (e) => { if (e.source === parent) w.postMessage(e.data); };
+}
+
+class Sandbox {
+  constructor() {
+    this.id = 0; this.wait = new Map();
+    const workerSrc = `${mascotDraw}\n${outroDraw}\n(${WORKER_MAIN})();`;
+    const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'"><body><script>(${FRAME_MAIN})(${JSON.stringify(workerSrc)});<\/script></body>`;
+    this.frameEl = document.createElement("iframe");
+    this.frameEl.setAttribute("sandbox", "allow-scripts");
+    this.frameEl.style.cssText = "position:fixed;width:1px;height:1px;left:-10px;top:-10px;border:0;opacity:0;pointer-events:none";
+    this.frameEl.srcdoc = html;
+    this.onMsg = (e) => {
+      if (e.source !== this.frameEl.contentWindow) return;
+      const m = e.data || {};
+      if (m.id === -2) { this.wait.forEach((w) => w.rej(new Error(m.error))); this.wait.clear(); return; }
+      const w = this.wait.get(m.id); if (!w) return;
+      this.wait.delete(m.id); clearTimeout(w.timer); w.res(m);
+    };
+    addEventListener("message", this.onMsg);
+    this.ready = new Promise((r) => (this.frameEl.onload = r));
+    document.body.append(this.frameEl);
+  }
+  async call(msg, ms = 8000) {
+    await this.ready;
+    const id = ++this.id;
+    return new Promise((res, rej) => {
+      const timer = setTimeout(() => { this.wait.delete(id); rej(new Error("код ролика завис")); }, ms);
+      this.wait.set(id, { res, rej, timer });
+      this.frameEl.contentWindow.postMessage({ ...msg, id }, "*");
+    });
+  }
+  async load(code, brief, outro) {
+    const r = await this.call({ cmd: "load", code, brief, outro }, 10000);
+    if (r.ok && r.paths && r.paths.length) await new Promise((res) => setTimeout(res, 150)); // пусть пути измерятся
+    return r;
+  }
+  destroy() { removeEventListener("message", this.onMsg); this.frameEl.remove(); this.wait.clear(); }
+}
+
+/* ===== Режиссёр: Claude придумывает и программирует ролик ===== */
+const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и программист. По тексту озвучки ты придумываешь и программируешь вертикальный ролик 1080×1920 на Canvas 2D. Каждый ролик уникален: своя идея, композиция, палитра, ритм. Не делай слайды с текстом — делай анимацию: предметы и метафоры, схемы, линии, которые рисуются, числа, которые набегают, движение камеры, смену планов.
+
+ФОРМАТ ОТВЕТА: только один блок \`\`\`js … \`\`\` без пояснений. В нём функция draw(t, k), которая рисует кадр в момент t (секунды, 0…k.duration). Рядом можно объявить свои функции и константы. Кадры рисуются независимо и не по порядку — всё вычисляй из t, не храни состояние между вызовами. Нельзя: сеть, картинки, DOM, setTimeout, Math.random (используй k.rand(seed)).
+
+ХОЛСТ: k.g — CanvasRenderingContext2D, k.W=1080, k.H=1920. Фон рисуешь сам (первым делом залей весь холст). Внизу (y > 1690) приложение рисует свою подпись — там ничего важного. Безопасная зона: x 60…1020, y 110…1690 (k.SAFE).
+
+СИНХРОН С ГОЛОСОМ: k.subs — фразы озвучки [{t0,t1,text}]. k.sub(t) → {i, text, t0, t1, p} — текущая фраза (p — доля 0…1). Меняй сцены вместе с фразами. k.amp — громкость голоса 0…1 (для пульса, «дыхания»).
+
+КИСТИ:
+- k.text(str, x, y, opts) — ВЕСЬ текст рисуй только им: он сам уменьшает шрифт и переносит строки, чтобы влезть в экран. opts: size (64), weight (700), color, align ('center'|'left'|'right'), maxWidth, maxLines (3), lineHeight (1.2), alpha, font, stroke (цвет обводки), strokeWidth. y — центр блока. Возвращает {w,h,size}.
+- k.path(d, progress, x, y, {scale, color, width, fill}) — SVG-путь с координатами вокруг 0,0; прорисовывается штрихом по мере progress 0…1; fill — заливка, проявляется вместе с progress. color: null — без обводки.
+- k.card(x, y, w, h, {r, color, shadow}) — скруглённая подложка (x,y — левый верхний угол).
+- k.emoji(символ, x, y, size); k.mascot(cx, cy, size, talking) — талисман приложения (терракотовый квадрат с улыбкой).
+- k.prog(t,a,b) → 0…1; k.ease.out / inOut / back / elastic; k.lerp; k.clamp; k.rand(seed) → генератор 0…1.
+- k.palette = {bg:'#F6F1E9', ink:'#1F1B16', accent:'#B5532E', soft:'#F3E1D6', white:'#FFFDF9', muted:'#6E655A'} — фирменная; можно придумать свою под тему, но текст должен хорошо читаться.
+- k.title, k.emojiMain — тема ролика; k.duration — длина в секундах.
+
+КАЧЕСТВО:
+- Текст на экране — короткие ключевые слова, числа, заголовки (до ~7 слов), а не полные фразы озвучки.
+- Одновременно не больше 2–3 текстовых блоков; они не налезают друг на друга и на рисунки.
+- У каждой сцены появление (0,3–0,6 с), жизнь (лёгкое движение) и уход. Плавно, через k.ease. Разные приёмы в разных сценах.
+- Первые 1–2 секунды — цепляющее появление темы.
+- Кадр рисуется быстро (<10 мс): не больше ~300 фигур, без тяжёлых циклов.
+- Если пришлют замечания или кадры — ответь исправленным кодом целиком.`;
+
+async function directorCall(messages, onChars) {
+  const r = await fetch(CFG.proxy + "/chat", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: creativeModel(), web: false, system: DIRECTOR_PROMPT, messages }),
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = "", out = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
+      if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { out += ev.delta.text; if (onChars) onChars(out.length); }
+      else if (ev.type === "error") throw new Error("Claude прервал ответ");
+    }
+  }
+  return out;
+}
+function extractCode(s) {
+  const m = s.match(/```(?:js|javascript)?\s*\n([\s\S]*?)```/i) || s.match(/```(?:js|javascript)?\s*\n([\s\S]*)$/i);
+  return m ? m[1].trim() : null;
+}
+
+async function makeCreativeScene(v, label) {
+  const brief = {
+    title: v.title, emojiMain: v.emoji, speech: v.speech, app: CFG.appName || "Помощник AI",
+    subs: v.subs.map((s) => ({ t0: +s.t0.toFixed(2), t1: +s.t1.toFixed(2), text: s.text })),
+  };
+  const ask = [
+    `Ролик 9:16 по ответу помощника. Тема: ${v.emoji} ${v.title}. Длительность речи: ${v.speech.toFixed(1)} с (k.duration).`,
+    `Фразы озвучки с таймингом (секунды):`,
+    ...brief.subs.map((s) => `[${s.t0.toFixed(2)}–${s.t1.toFixed(2)}] ${s.text}`),
+    `Придумай идею и запрограммируй ролик.`,
+  ].join("\n");
+  const msgs = [{ role: "user", content: ask }];
+  const write = async (what) => {
+    const txt = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
+    const code = extractCode(txt);
+    msgs.push({ role: "assistant", content: txt });
+    return code;
+  };
+  const sb = new Sandbox();
+  try {
+    label("✨ Идея…");
+    let code = await write("Код");
+    if (!code) throw new Error("Claude не прислал код");
+    // запуск и автопроверка: до двух исправлений, запоминаем лучший вариант
+    const times = []; for (let t = 0.3; t < v.speech; t += 0.5) times.push(+t.toFixed(2));
+    const test = async (c) => {
+      const r = await sb.load(c, brief, v.outro);
+      if (!r.ok) return { problem: `Код упал с ошибкой: ${r.error}` };
+      if (r.ms > 60) return { problem: `Кадр рисуется слишком долго (${Math.round(r.ms)} мс) — упрости.` };
+      const ch = await sb.call({ cmd: "check", times }, 30000);
+      if (ch.error) return { problem: `Во время ролика ошибка: ${ch.error}` };
+      return { n: ch.issues.length, problem: ch.issues.length ? "Автопроверка нашла проблемы:\n- " + ch.issues.join("\n- ") : null };
+    };
+    let best = null;
+    for (let round = 0; round < 3; round++) {
+      label("✨ Проверка…");
+      const r = await test(code);
+      if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n };
+      if (!r.problem || round === 2) break;
+      msgs.push({ role: "user", content: r.problem + "\nИсправь и пришли код целиком." });
+      code = (await write("Правка")) || code;
+    }
+    if (!best) throw new Error("код ролика не заработал");
+    let good = best.code;
+    await sb.load(good, brief, v.outro);
+    // взгляд арт-директора на кадры
+    label("✨ Кадры…");
+    const shotTimes = [0.8, v.speech * 0.2, v.speech * 0.4, v.speech * 0.6, v.speech * 0.8, Math.max(0, v.speech - 0.4)].map((t) => +t.toFixed(2));
+    const sh = await sb.call({ cmd: "shots", times: shotTimes }, 30000);
+    if (sh.ok) {
+      if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + good + "\n```" });
+      else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + good + "\n```" }, { role: "assistant", content: "Хорошо." });
+      msgs.push({ role: "user", content: [
+        ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
+        { type: "text", text: `Кадры ролика в моменты ${shotTimes.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
+      ] });
+      const txt = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`));
+      const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
+      if (better) {
+        const r = await test(better);
+        if (r.n != null && r.n <= best.n) good = better;
+        else await sb.load(good, brief, v.outro);
+      }
+    }
+    return {
+      duration: v.duration,
+      frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 5000)).bmp,
+      destroy: () => sb.destroy(),
+    };
+  } catch (e) { sb.destroy(); throw e; }
 }
