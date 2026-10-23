@@ -23,6 +23,39 @@ function userLang(id) {
 }
 const EN_SYSTEM = "IMPORTANT: this person does not speak Russian — ignore the instruction above to answer in Russian. Answer in English, unless their preferences below ask for another language or they write in another language.";
 
+/* ===== Звук на iPhone =====
+   iPhone разрешает сайту звук только из элемента, который «разбудили» касанием пользователя.
+   Поэтому держим один общий проигрыватель и общий AudioContext и будим их при первом касании. */
+const PLAYER = new Audio();
+let AC_SHARED = null, AUDIO_UNLOCKED = false;
+const IS_APPLE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) || (/Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Android/.test(navigator.userAgent));
+function silentWavUrl() {
+  const n = 800, b = new DataView(new ArrayBuffer(44 + n * 2));
+  const w = (o, t) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, "RIFF"); b.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+  b.setUint32(24, 8000, true); b.setUint32(28, 16000, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([b.buffer], { type: "audio/wav" }));
+}
+function sharedAC() {
+  if (!AC_SHARED || AC_SHARED.state === "closed") { try { AC_SHARED = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { AC_SHARED = null; } }
+  return AC_SHARED;
+}
+function unlockAudio() {
+  const ac = sharedAC(); if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+  if (AUDIO_UNLOCKED) return;
+  AUDIO_UNLOCKED = true;
+  try { if (!PLAYER.src || PLAYER.paused) { PLAYER.src = silentWavUrl(); PLAYER.play().then(() => PLAYER.pause()).catch(() => { AUDIO_UNLOCKED = false; }); } } catch (_) { AUDIO_UNLOCKED = false; }
+  try { if ("speechSynthesis" in window) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } } catch (_) {}
+}
+["pointerdown", "touchend", "click", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+// звук всегда играем через общий проигрыватель
+function audioFor(url) {
+  try { PLAYER.pause(); } catch (_) {}
+  PLAYER.onended = PLAYER.onerror = PLAYER.onpause = null;
+  PLAYER.src = url;
+  return PLAYER;
+}
+
 /* ===== Персонализация: что Claude знает о собеседнике ===== */
 function profile() {
   const u = me();
@@ -1355,7 +1388,7 @@ class Speaker {
       if (this.paused) await new Promise((r) => (this.resumeWait = r));
       if (this.stopped) { URL.revokeObjectURL(url); return; }
       await new Promise((res) => {
-        this.audio = new Audio(url);
+        this.audio = audioFor(url);
         this.audio.playbackRate = RATE;
         this.audio.onended = this.audio.onerror = () => { URL.revokeObjectURL(url); res(); };
         this.audio.play().catch(() => res());
@@ -1512,7 +1545,7 @@ async function playSnippet(chat, btn) {
     for (const part of parts) {
       const url = await ttsFetch(part);
       if (SNIPPET !== me_) return;
-      me_.audio = new Audio(url);
+      me_.audio = audioFor(url);
       me_.audio.playbackRate = RATE;
       await new Promise((res, rej) => {
         me_.audio.onended = res;
@@ -1621,7 +1654,7 @@ function openSettings() {
       try {
         const url = await sampleUrl(name);
         if (play.textContent !== "⏳") return;
-        PREVIEW = new Audio(url);
+        PREVIEW = audioFor(url);
         PREVIEW.playbackRate = RATE;
         play.textContent = "⏹";
         PREVIEW.onended = () => { play.textContent = "▶"; PREVIEW = null; };
@@ -2064,6 +2097,12 @@ function rmsAt(pcm, t) {
 }
 
 async function encodeVideo(scene, pcm, progress) {
+  // iPhone без AAC в быстром кодировщике: картинка быстро, звук — записью самого iPhone
+  const appleRemux = window.VideoEncoder && window.MediaRecorder && (store.get("forceRemux") || (IS_APPLE && !(window.AudioEncoder && await aacSupported())));
+  if (appleRemux) {
+    const silent = await encodeFast(scene, pcm, (k) => progress(k * 0.6), true);
+    return await addAudioRealtime(silent, pcm, (k) => progress(0.6 + k * 0.4));
+  }
   if (window.VideoEncoder && window.AudioEncoder) {
     try { return await encodeFast(scene, pcm, progress); }
     catch (e) { console.warn("WebCodecs:", e); if (scene.frame) throw e; }
@@ -2072,8 +2111,8 @@ async function encodeVideo(scene, pcm, progress) {
 }
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
-async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=45");
+async function encodeFast(scene, pcm, progress, noAudio) {
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=46");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2086,21 +2125,21 @@ async function encodeFast(scene, pcm, progress) {
     const c = { codec, sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 };
     try { if ((await AudioEncoder.isConfigSupported(c)).supported) { acfg = c; acodec = mc; break; } } catch (_) {}
   }
-  if (!acfg) throw new Error("кодек звука не поддерживается");
+  if (!acfg && !noAudio) throw new Error("кодек звука не поддерживается");
   const muxer = new Mp4Muxer.Muxer({
     target: new Mp4Muxer.ArrayBufferTarget(),
     video: { codec: vcodec, width: VW, height: VH, frameRate: VFPS },
-    audio: { codec: acodec, sampleRate: VRATE, numberOfChannels: 1 },
+    ...(noAudio ? {} : { audio: { codec: acodec, sampleRate: VRATE, numberOfChannels: 1 } }),
     fastStart: "in-memory",
   });
   let fail = null;
   const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => (fail = e) });
   ve.configure(vcfg);
-  const ae = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (fail = e) });
-  ae.configure(acfg);
+  const ae = noAudio ? null : new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (fail = e) });
+  if (ae) ae.configure(acfg);
   // звук
   const step = VRATE / 10;
-  for (let i = 0; i < pcm.length; i += step) {
+  for (let i = 0; ae && i < pcm.length; i += step) {
     const data = pcm.slice(i, Math.min(pcm.length, i + step));
     const ad = new AudioData({ format: "f32", sampleRate: VRATE, numberOfFrames: data.length, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / VRATE), data });
     ae.encode(ad); ad.close();
@@ -2119,7 +2158,7 @@ async function encodeFast(scene, pcm, progress) {
     while (ve.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
     if (i % 15 === 0) { progress(i / frames); await new Promise((r) => setTimeout(r, 0)); }
   }
-  await ve.flush(); await ae.flush();
+  await ve.flush(); if (ae) await ae.flush();
   if (fail) throw fail;
   muxer.finalize();
   progress(1);
@@ -2131,7 +2170,7 @@ async function encodeRealtime(scene, pcm, progress) {
   if (scene.frame) throw new Error("этот браузер не умеет быстро собирать видео");
   if (!window.MediaRecorder || !scene.canvas.captureStream) throw new Error("этот браузер не умеет записывать видео");
   const mime = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
-  const ctx = new AudioContext({ sampleRate: VRATE });
+  const ctx = sharedAC() || new AudioContext();
   const buf = ctx.createBuffer(1, pcm.length, VRATE);
   buf.copyToChannel(pcm, 0);
   const src = ctx.createBufferSource(); src.buffer = buf;
@@ -2161,8 +2200,58 @@ async function encodeRealtime(scene, pcm, progress) {
   });
   rec.stop();
   await Promise.race([stopped, new Promise((r) => setTimeout(r, 3000))]);
-  ctx.close().catch(() => {});
+  try { src.disconnect(); } catch (_) {}
   return new Blob(parts, { type: (mime || "video/webm").split(";")[0] });
+}
+
+// iPhone: быстрый кодировщик звука даёт формат, который iPhone сам не играет (звук пропадает при сохранении).
+// Поэтому картинку собираем быстро, а звук добавляем прогоном готового видео через запись самого iPhone (AAC).
+async function addAudioRealtime(videoBlob, pcm, progress) {
+  const mime = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto";
+  const vurl = URL.createObjectURL(videoBlob); v.src = vurl;
+  await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error("не открылось видео")); setTimeout(res, 5000); });
+  const cv = document.createElement("canvas"); cv.width = VW; cv.height = VH;
+  const g = cv.getContext("2d");
+  g.drawImage(v, 0, 0, VW, VH);
+  const ctx = sharedAC() || new AudioContext();
+  const buf = ctx.createBuffer(1, pcm.length, VRATE); buf.copyToChannel(pcm, 0);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const dest = ctx.createMediaStreamDestination(); src.connect(dest);
+  const stream = new MediaStream([...cv.captureStream(VFPS * 2).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3_000_000 } : {});
+  const parts = []; rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  rec.start(1000);
+  await ctx.resume().catch(() => {});
+  const dur = pcm.length / VRATE, w0 = performance.now();
+  await v.play().catch(() => {});
+  src.start();
+  await new Promise((res) => {
+    let fin = false;
+    const done = () => { if (!fin) { fin = true; res(); } };
+    v.onended = done;
+    const tick = () => {
+      if (fin) return;
+      g.drawImage(v, 0, 0, VW, VH);
+      const t = (performance.now() - w0) / 1000;
+      progress(Math.min(1, t / dur));
+      if (t > dur + 1) return done();
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick); else setTimeout(tick, 1000 / (VFPS * 2));
+    };
+    tick();
+    setTimeout(done, (dur + 2) * 1000);
+  });
+  g.drawImage(v, 0, 0, VW, VH);
+  rec.stop();
+  await Promise.race([stopped, new Promise((r) => setTimeout(r, 3000))]);
+  try { src.disconnect(); } catch (_) {}
+  URL.revokeObjectURL(vurl);
+  return new Blob(parts, { type: (mime || "video/webm").split(";")[0] });
+}
+async function aacSupported() {
+  try { return !!(await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 })).supported; } catch (_) { return false; }
 }
 
 /* ===== Финальная заставка и настройки видео ===== */

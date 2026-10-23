@@ -7,6 +7,7 @@
 
   "users": {
     "mama": {
+      "lang": "ru",
       "name": "Светлана",
       "avatar": "🌷",
       "model": "claude-sonnet-5-5",
@@ -16,6 +17,7 @@
       "note": "Пароль и ключ задаются в прослойке, не здесь"
     },
     "papa": {
+      "lang": "ru",
       "name": "Игорь",
       "avatar": "🌲",
       "model": "claude-sonnet-5-5",
@@ -24,6 +26,7 @@
       "bigText": true
     },
     "sister": {
+      "lang": "ru",
       "name": "Юля",
       "avatar": "🎬",
       "model": "claude-opus-5-5",
@@ -43,6 +46,7 @@
       "bigText": false
     },
     "yuri": {
+      "lang": "ru",
       "name": "Юрий",
       "avatar": "🛠",
       "admin": true,
