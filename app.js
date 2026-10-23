@@ -295,6 +295,13 @@ async function startHome() {
     b.onclick = () => openChat(newChat(pid));
     grid.append(b);
   });
+  // плитка «Помощники» — сразу открывает список готовых помощников
+  if (helpersOn()) {
+    const b = el("button", "preset preset-helpers");
+    b.innerHTML = `<span class="pi">⭐</span><span><span class="pt">Помощники</span><span class="ps">Готовые помощники на разные случаи</span></span>`;
+    b.onclick = openHelpers;
+    grid.append(b);
+  }
 
   const list = $("#history");
   list.innerHTML = "";
@@ -374,10 +381,9 @@ function openChat(chat) {
   show("screen-chat");
   const box = $("#messages");
   box.innerHTML = "";
-  if (p.greeting) addNotice(p.greeting);
+  const hpc = chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
+  if (hpc && hpc.hint) addNotice(hpc.hint); else if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
-  $("#helpers-bar").hidden = !helpersOn();
-  $("#composer").classList.toggle("has-helpers", helpersOn());
   renderHelperChip();
   if (p.allowFiles !== false) {
     const ec = el("div", "empty-chat" + (chat.messages.length ? " compact" : "")); ec.id = "empty-chat";
@@ -742,15 +748,15 @@ function closeHelpers() { $("#helpers-sheet").hidden = true; }
 function pickHelper(id) {
   const h = CFG.helpers[id];
   closeHelpers();
-  CHAT.helper = id;
-  save(); renderHelperChip();
   track("Помощник", { helper: id });
-  if (h.hint) { addNotice(h.hint); scrollDown(); }
+  // новый разговор, в котором Claude уже работает как выбранный помощник
+  const chat = newChat("ask");
+  chat.helper = id; chat.title = h.title; chat.emoji = h.icon;
+  openChat(chat);
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
   else $("#input").focus();
 }
-$("#btn-helpers").onclick = openHelpers;
 $("#helpers-close").onclick = closeHelpers;
 $("#helpers-sheet").onclick = (e) => { if (e.target.id === "helpers-sheet") closeHelpers(); };
 
@@ -2247,7 +2253,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=52");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=53");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

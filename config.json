@@ -12,7 +12,7 @@
       "name": "Светлана",
       "avatar": "🌷",
       "model": "claude-sonnet-5-5",
-      "presets": ["ask", "example"],
+      "presets": ["ask"],
       "readAloud": true,
       "bigText": true,
       "note": "Пароль и ключ задаются в прослойке, не здесь"
@@ -23,7 +23,7 @@
       "name": "Игорь",
       "avatar": "🌲",
       "model": "claude-sonnet-5-5",
-      "presets": ["ask", "example"],
+      "presets": ["ask"],
       "readAloud": true,
       "bigText": true
     },
@@ -54,7 +54,7 @@
       "avatar": "🛠",
       "admin": true,
       "model": "claude-opus-5-5",
-      "presets": ["ask", "example"],
+      "presets": ["ask"],
       "readAloud": false,
       "bigText": false
     }
