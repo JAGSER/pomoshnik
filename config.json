@@ -36,6 +36,7 @@
       "avatar": "🌺",
       "lang": "en",
       "creative": true,
+      "style": "Always reply in Malay (Bahasa Melayu), simply and warmly.",
       "model": "claude-sonnet-5-5",
       "presets": ["ask"],
       "readAloud": false,

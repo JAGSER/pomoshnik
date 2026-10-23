@@ -21,7 +21,7 @@ function userLang(id) {
   if (u.lang) return u.lang;
   return /^(ru|uk|be|kk)/i.test(navigator.language || "") ? "ru" : "en";
 }
-const EN_SYSTEM = "IMPORTANT: this person speaks English. Always answer in English (ignore the instruction above to answer in Russian), unless they write in another language.";
+const EN_SYSTEM = "IMPORTANT: this person does not speak Russian — ignore the instruction above to answer in Russian. Answer in English, unless their preferences below ask for another language or they write in another language.";
 
 /* ===== Персонализация: что Claude знает о собеседнике ===== */
 function profile() {
@@ -2073,7 +2073,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=44");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=45");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
