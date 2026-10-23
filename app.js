@@ -273,7 +273,7 @@ function openChat(chat) {
   scrollDown();
   if (!matchMedia("(pointer: coarse)").matches) $("#input").focus();
 }
-$("#btn-back").onclick = () => { if (ABORT) ABORT.abort(); stopListening(); startHome(); };
+$("#btn-back").onclick = () => { if (ABORT) ABORT.abort(); stopAutoSend(); stopListening(); startHome(); };
 
 /* ===== Названия разговоров ===== */
 function chatTitle(c) {
@@ -367,7 +367,7 @@ function actions(text, msg) {
   const copy = el("button");
   copy.textContent = "📋 Копия";
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(text); copy.textContent = "✓ Готово"; }
+    try { await copyRich(text); copy.textContent = "✓ Готово"; }
     catch (_) { copy.textContent = "Не вышло"; }
     setTimeout(() => (copy.textContent = "📋 Копия"), 1800);
   };
@@ -377,7 +377,9 @@ function actions(text, msg) {
   vid.title = "Сохранить ответ как видео с озвучкой (9:16)";
   vid.setAttribute("aria-label", vid.title);
   vid.onclick = () => videoButton(vid, text, msg);
-  a.append(speak, copy, vid);
+  const timer = el("span", "vid-timer");
+  timer.hidden = true;
+  a.append(speak, copy, timer, vid);
   return a;
 }
 // Две скорости: «1×» на деле читает в 1,2 раза быстрее (так приятнее на слух), «1,5×» — как написано
@@ -417,6 +419,7 @@ $("#input").addEventListener("input", autoGrow);
 function autoGrow() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.4) + "px"; }
 
 async function send() {
+  stopAutoSend();
   if (ABORT) { ABORT.abort(); return; }
   stopListening();
   const text = $("#input").value.trim();
@@ -646,7 +649,36 @@ function toBase64(file) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null;
 if (!SR) $("#btn-mic").hidden = true;
-$("#btn-mic").onclick = () => (rec ? stopListening() : startListening());
+$("#btn-mic").onclick = () => {
+  // во время отсчёта нажатие на микрофон отменяет отправку и стирает сообщение
+  if (AUTO) { stopAutoSend(); $("#input").value = ""; autoGrow(); toast("Отправка отменена"); return; }
+  rec ? stopListening() : startListening();
+};
+// После голосового ввода — 3 секунды на проверку, затем сообщение уходит само
+const AUTO_MS = 3000;
+let AUTO = null;
+function startAutoSend() {
+  stopAutoSend();
+  const b = $("#btn-mic"), start = performance.now();
+  b.classList.add("countdown");
+  AUTO = { raf: 0 };
+  const step = (now) => {
+    if (!AUTO) return;
+    const p = Math.min(1, (now - start) / AUTO_MS);
+    b.style.setProperty("--p", p);
+    if (p >= 1) { stopAutoSend(); send(); return; }
+    AUTO.raf = requestAnimationFrame(step);
+  };
+  AUTO.raf = requestAnimationFrame(step);
+}
+function stopAutoSend() {
+  if (!AUTO) return;
+  cancelAnimationFrame(AUTO.raf);
+  AUTO = null;
+  const b = $("#btn-mic"); b.classList.remove("countdown"); b.style.removeProperty("--p");
+}
+// нажали на поле с текстом или начали печатать — отправку останавливаем, текст остаётся
+["pointerdown", "keydown", "focus"].forEach((ev) => $("#input").addEventListener(ev, () => { if (AUTO) { stopAutoSend(); toast("Автоотправка остановлена — можно поправить текст"); } }));
 function startListening() {
   stopSpeaking();
   rec = new SR();
@@ -654,7 +686,9 @@ function startListening() {
   rec.interimResults = true;
   rec.continuous = false;
   const base = $("#input").value ? $("#input").value.trim() + " " : "";
+  let heard = false;
   rec.onresult = (e) => {
+    heard = true;
     let t = "";
     for (const r of e.results) t += r[0].transcript;
     $("#input").value = base + t;
@@ -663,7 +697,10 @@ function startListening() {
   rec.onerror = (e) => {
     if (e.error === "not-allowed") alert("Разрешите доступ к микрофону в настройках браузера.");
   };
-  rec.onend = () => { rec = null; $("#btn-mic").classList.remove("on"); };
+  rec.onend = () => {
+    rec = null; $("#btn-mic").classList.remove("on");
+    if (heard && $("#input").value.trim()) startAutoSend();
+  };
   $("#btn-mic").classList.add("on");
   try { rec.start(); } catch (_) { rec = null; $("#btn-mic").classList.remove("on"); }
 }
@@ -955,6 +992,33 @@ function inline(s) {
     .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
+// Обычный текст ответа — как на экране: без звёздочек и решёток, с номерами и точками списков
+function mdText(src) {
+  return String(src)
+    .replace(/```[^\n]*\n?([\s\S]*?)(```|$)/g, "$1")
+    .split("\n").map((l) => l
+      .replace(/^#{1,6}\s+/, "")
+      .replace(/^(\s*)[-*]\s+/, "$1• ")
+      .replace(/\*\*([^*]+)\*\*/g, "$1").replace(/__([^_]+)__/g, "$1")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1$2")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1 ($2)"))
+    .join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+async function copyRich(src) {
+  const plainText = mdText(src);
+  try {
+    if (window.ClipboardItem && navigator.clipboard.write) {
+      const html = `<meta charset="utf-8"><div>${md(src)}</div>`;
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
+      })]);
+      return;
+    }
+  } catch (_) {}
+  await navigator.clipboard.writeText(plainText);
+}
 function md(src) {
   const blocks = [];
   src = esc(src).replace(/```[^\n]*\n?([\s\S]*?)(```|$)/g, (_, code) => { blocks.push(code); return `\u0000${blocks.length - 1}\u0000`; });
@@ -965,8 +1029,8 @@ function md(src) {
     let m;
     if ((m = line.match(/^\u0000(\d+)\u0000$/))) { closeList(); out.push(`<pre><code>${blocks[m[1]]}</code></pre>`); }
     else if ((m = line.match(/^#{1,6}\s+(.*)/))) { closeList(); out.push(`<h3>${inline(m[1])}</h3>`); }
-    else if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inline(m[1])}</li>`); }
-    else if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inline(m[1])}</li>`); }
+    else if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { closeList(); out.push('<ul class="mk">'); list = "ul"; } out.push(`<li><span class="mk-n">•</span><span>${inline(m[1])}</span></li>`); }
+    else if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)/))) { if (list !== "ol") { closeList(); out.push('<ol class="mk">'); list = "ol"; } out.push(`<li><span class="mk-n">${m[1]}.</span><span>${inline(m[2])}</span></li>`); }
     else if (!line.trim()) { closeList(); }
     else { closeList(); out.push(`<p>${inline(line)}</p>`); }
   });
@@ -1220,6 +1284,15 @@ function planChunks(full, prev) {
 }
 
 let VIDEO_BUSY = false;
+// Кнопки под ответом должны стоять в одну строку: если не влезают — делаем мельче
+function fitRow(row) {
+  if (!row) return;
+  const over = () => [...row.children].some((b) => !b.hidden && b.scrollWidth > b.clientWidth + 1) || row.scrollWidth > row.clientWidth + 1;
+  row.classList.remove("tight", "tighter");
+  if (over()) row.classList.add("tight");
+  if (over()) row.classList.add("tighter");
+}
+addEventListener("resize", () => document.querySelectorAll(".msg-actions").forEach(fitRow));
 function vidNote(btn, text) {
   const row = btn.closest(".msg-actions");
   let n = row.nextElementSibling;
@@ -1232,7 +1305,14 @@ async function videoButton(btn, text, msg) {
   if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
   VIDEO_BUSY = true;
   btn.disabled = true;
-  const label = (s) => { btn.textContent = s; };
+  const label = (s) => { btn.textContent = s; fitRow(btn.closest(".msg-actions")); };
+  // секундомер: идёт, пока видео собирается, и остаётся с итоговым временем
+  const timer = btn.previousElementSibling && btn.previousElementSibling.classList.contains("vid-timer") ? btn.previousElementSibling : null;
+  const t0 = Date.now();
+  const fmt = () => { const sec = Math.round((Date.now() - t0) / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
+  let tick = null;
+  if (timer) { timer.hidden = false; timer.textContent = "0:00"; timer.classList.remove("done"); tick = setInterval(() => (timer.textContent = fmt()), 1000); fitRow(btn.closest(".msg-actions")); }
+  const stopTimer = (ok) => { if (!timer) return; clearInterval(tick); timer.textContent = fmt(); if (ok) timer.classList.add("done"); else timer.hidden = true; };
   try {
     const chat = CHAT;
     const p = CFG.presets[chat.preset] || {};
@@ -1282,11 +1362,13 @@ async function videoButton(btn, text, msg) {
     btn.disabled = false;
     label("💾 Видео");
     btn.classList.add("ready");
+    stopTimer(true);
     toast("Видео готово — нажмите «💾 Видео», чтобы сохранить");
   } catch (err) {
     console.error(err);
     btn.disabled = false;
     label("🎬 Видео");
+    stopTimer(false);
     toast("Не получилось сделать видео: " + (err.message || err));
   } finally { VIDEO_BUSY = false; }
 }
@@ -1424,7 +1506,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=28");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=30");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
