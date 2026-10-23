@@ -430,6 +430,320 @@
         "sister",
         "vie"
       ]
+    },
+    "plan": {
+      "icon": "📝",
+      "title": "План урока",
+      "title_en": "Lesson plan",
+      "hint": "Тема, класс и длительность урока?",
+      "hint_en": "Topic, grade and lesson length?",
+      "system": "You help a primary school teacher write a lesson plan. Ask for topic, grade and duration if missing. Give: objectives, materials, step-by-step lesson flow with timings, activities, differentiation, assessment. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "worksheet": {
+      "icon": "📄",
+      "title": "Рабочий лист",
+      "title_en": "Worksheet",
+      "hint": "Тема и класс? Сделаю лист с заданиями для печати.",
+      "hint_en": "Topic and grade? I'll make a printable worksheet.",
+      "system": "Create a printable worksheet for primary school children: title, short instructions, 6-10 varied tasks from easy to harder, space for answers, answer key at the end. Child-friendly wording. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "quiz": {
+      "icon": "❓",
+      "title": "Тест",
+      "title_en": "Quiz maker",
+      "hint": "Тема, класс и сколько вопросов?",
+      "hint_en": "Topic, grade and how many questions?",
+      "system": "Create a quiz or test for primary school: mix multiple choice, fill in the blank and matching. Give an answer key and points. Child-friendly.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "levels": {
+      "icon": "🪜",
+      "title": "Задания по уровням",
+      "title_en": "Easy & hard tasks",
+      "hint": "Какая тема? Сделаю задания трёх уровней.",
+      "hint_en": "Which topic? I'll make tasks at three levels.",
+      "system": "Make the same task in three levels: easy (support), medium, challenge. Label them clearly so the teacher can hand them out to different children.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "textbook": {
+      "icon": "📸",
+      "title": "По фото учебника",
+      "title_en": "From textbook photo",
+      "hint": "Сфотографируйте страницу учебника.",
+      "hint_en": "Take a photo of the textbook page.",
+      "system": "The teacher sends a textbook page photo. Make a short child-friendly summary, comprehension questions with answers, and 2-3 activities based on it.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ],
+      "action": "photo"
+    },
+    "kidsexplain": {
+      "icon": "🧒",
+      "title": "Объяснить детям",
+      "title_en": "Explain for kids",
+      "hint": "Что объяснить детям?",
+      "hint_en": "What should I explain to the children?",
+      "system": "Explain any topic for children aged 7-12: very simple words, examples from their daily life, a fun comparison, and 2 check questions.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "project": {
+      "icon": "🌱",
+      "title": "Школьный проект",
+      "title_en": "Class project",
+      "hint": "Тема или ценность проекта?",
+      "hint_en": "Project theme or value?",
+      "system": "Suggest class project ideas with a week-by-week plan, roles for children, what to present at the end and a simple rubric. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade. For Indonesia, link to P5 (Profil Pelajar Pancasila) where it fits.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "english": {
+      "icon": "🔤",
+      "title": "Урок английского",
+      "title_en": "English lesson",
+      "hint": "Тема и возраст детей?",
+      "hint_en": "Topic and children's age?",
+      "system": "Plan a fun English lesson for young learners: 6-10 target words, simple phrases, a game, a song or chant, a quick check. Write the English material in English with translations into the teacher's language.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "cards": {
+      "icon": "🃏",
+      "title": "Карточки слов",
+      "title_en": "Word cards",
+      "hint": "Какие слова или тема?",
+      "hint_en": "Which words or topic?",
+      "system": "Make printable word cards: English word, simple pronunciation hint, translation, a short example sentence and a picture idea for each card.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "songs": {
+      "icon": "🎶",
+      "title": "Песенки и речёвки",
+      "title_en": "Songs & chants",
+      "hint": "Для какой темы песенка?",
+      "hint_en": "Song for which topic?",
+      "system": "Write short, catchy songs or chants for children to remember words or rules. Simple rhythm, repetition, actions to do while singing.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "check": {
+      "icon": "✅",
+      "title": "Проверить работу",
+      "title_en": "Check homework",
+      "hint": "Сфотографируйте тетрадь или лист с ответами.",
+      "hint_en": "Take a photo of the notebook or answer sheet.",
+      "system": "The teacher sends a photo of a child's work. Check the answers, list mistakes clearly, give a score if asked, and write one short kind encouraging comment for the child.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ],
+      "action": "photo"
+    },
+    "grades": {
+      "icon": "📊",
+      "title": "Оценки",
+      "title_en": "Grades helper",
+      "hint": "Пришлите оценки списком или фото журнала.",
+      "hint_en": "Send the marks as a list or a photo of the grade book.",
+      "system": "Help with marks: calculate averages and percentages, show who is struggling, present results as a clear table. Double-check the arithmetic.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "rapor": {
+      "icon": "🗒️",
+      "title": "Комментарии в табель",
+      "title_en": "Report comments",
+      "hint": "Имена учеников и пара слов о каждом.",
+      "hint_en": "Students' names and a few words about each.",
+      "system": "Write report card comments for each student: warm, specific, constructive, 2-3 sentences, no repeated phrases between students. Language as the teacher asks.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "parents": {
+      "icon": "💬",
+      "title": "Сообщение родителям",
+      "title_en": "Message to parents",
+      "hint": "О чём написать родителям?",
+      "hint_en": "What should we tell the parents?",
+      "system": "Write a short polite message to parents for WhatsApp: clear, friendly, respectful. Offer it in the language the teacher needs.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "announce": {
+      "icon": "📢",
+      "title": "Объявление",
+      "title_en": "Announcement",
+      "hint": "О каком событии объявление?",
+      "hint_en": "What is the announcement about?",
+      "system": "Write a clear school announcement: what, when, where, what to bring or pay, contact. Friendly tone.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "paperwork": {
+      "icon": "🗂️",
+      "title": "Школьные бумаги",
+      "title_en": "School paperwork",
+      "hint": "Какой документ нужно составить?",
+      "hint_en": "Which document do you need?",
+      "system": "Help with teacher paperwork: reports, meeting minutes, plans, forms. Ask for missing details, then produce a ready document in a formal tone. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "speech": {
+      "icon": "🎤",
+      "title": "Речь",
+      "title_en": "Speech",
+      "hint": "По какому поводу речь и сколько минут?",
+      "hint_en": "What is the speech for and how long?",
+      "system": "Write a speech for a school event: warm, clear, right length for the time given, easy to read aloud.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "games": {
+      "icon": "🎲",
+      "title": "Игры для класса",
+      "title_en": "Class games",
+      "hint": "Тема урока и сколько минут на игру?",
+      "hint_en": "Lesson topic and how many minutes for a game?",
+      "system": "Suggest classroom games and warm-ups for 5-10 minutes with no preparation: rules in 3-4 steps, how to link to the lesson topic.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "behavior": {
+      "icon": "🧑‍🤝‍🧑",
+      "title": "Трудный ребёнок",
+      "title_en": "Difficult child",
+      "hint": "Расскажите, что происходит с ребёнком.",
+      "hint_en": "Tell me what is happening with the child.",
+      "system": "Help a primary teacher with a child who misbehaves, cries, withdraws or falls behind. Ask what happens, suggest calm practical steps, what to say to the child and to the parents. Kind and realistic.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "rewards": {
+      "icon": "🏆",
+      "title": "Поощрения",
+      "title_en": "Rewards & motivation",
+      "hint": "Какой у вас класс и что хотите улучшить?",
+      "hint_en": "What is your class like and what do you want to improve?",
+      "system": "Suggest simple reward and motivation systems for a primary class: sticker charts, class points, roles, praise phrases. Cheap and easy to run.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "story": {
+      "icon": "📖",
+      "title": "Сказка для класса",
+      "title_en": "Story for class",
+      "hint": "Тема урока и возраст детей?",
+      "hint_en": "Lesson topic and children's age?",
+      "system": "Write a short story for children on the lesson topic (3-5 minutes to read aloud) and 4 questions about it.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "lessonvideo": {
+      "icon": "🎬",
+      "title": "Видео к уроку",
+      "title_en": "Lesson video",
+      "hint": "Тема ролика? Потом нажмите «🎬 Видео» под ответом.",
+      "hint_en": "Video topic? Then tap “🎬 Video” under the answer.",
+      "system": "Write a short narration (30-60 seconds read aloud) explaining a topic to children, lively and clear, as continuous text without lists or headings, good for voice-over. Remind at the end to tap the Video button under the answer.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "week": {
+      "icon": "📅",
+      "title": "План недели",
+      "title_en": "Plan my week",
+      "hint": "Что нужно успеть на этой неделе?",
+      "hint_en": "What do you need to get done this week?",
+      "system": "Help a busy teacher plan her week: lessons, marking, paperwork, rest. Put tasks into days, suggest what can be postponed or simplified, keep it realistic.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
+    },
+    "teachercare": {
+      "icon": "☕",
+      "title": "Поддержка учителя",
+      "title_en": "Teacher support",
+      "hint": "Расскажите, что сейчас тяжело.",
+      "hint_en": "Tell me what feels hard right now.",
+      "system": "Support a tired, overloaded teacher: listen warmly, help prioritise, suggest what to drop or simplify, small ways to rest. No lecturing.",
+      "group": "school",
+      "for": [
+        "vie",
+        "yuri"
+      ]
     }
   }
 }

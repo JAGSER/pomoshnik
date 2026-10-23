@@ -382,7 +382,7 @@ function openChat(chat) {
   const box = $("#messages");
   box.innerHTML = "";
   const hpc = chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
-  if (hpc && hpc.hint) addNotice(hpc.hint); else if (p.greeting) addNotice(p.greeting);
+  if (hpc && hHint(hpc)) addNotice(hHint(hpc)); else if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
   renderHelperChip();
   if (p.allowFiles !== false) {
@@ -578,7 +578,7 @@ async function ask() {
   const u = me();
   const today = new Date().toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric", weekday: "long" });
   const hp = activeHelper();
-  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hp.title}». ${hp.system}` : "", LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}` : "", LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -725,24 +725,34 @@ function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.cont
 // помощники, которые положены этому человеку (в config.json у каждого есть список "for")
 function myHelpers() { return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(SESSION.user)); }
 function helpersOn() { return myHelpers().length > 0; }
+const hTitle = (h) => (LANG === "en" && h.title_en ? h.title_en : h.title);
+const hHint = (h) => (LANG === "en" && h.hint_en ? h.hint_en : h.hint);
 function activeHelper() { return CHAT && CHAT.helper && CFG.helpers ? CFG.helpers[CHAT.helper] || null : null; }
 function renderHelperChip() {
   const c = $("#helper-chip"), h = activeHelper();
   c.hidden = !h;
   if (!h) return;
   c.innerHTML = "";
-  const t = el("span"); t.textContent = `${h.icon} ${h.title}`;
+  const t = el("span"); t.textContent = `${h.icon} ${hTitle(h)}`;
   const x = el("button"); x.type = "button"; x.textContent = "✕"; x.setAttribute("aria-label", "Выключить помощника");
   x.onclick = () => { CHAT.helper = null; save(); renderHelperChip(); toast("Помощник выключен"); };
   c.append(t, x);
 }
 function openHelpers() {
   const g = $("#helpers-grid"); g.innerHTML = "";
-  myHelpers().forEach(([id, h]) => {
+  // школьные помощники — отдельным блоком сверху
+  const list = myHelpers(), groups = [["school", "🍎 Для школы"], ["", "🏠 На каждый день"]];
+  const grouped = list.some(([, h]) => h.group);
+  groups.forEach(([gid, gname]) => {
+  const part = list.filter(([, h]) => (h.group || "") === gid);
+  if (!part.length) return;
+  if (grouped) { const hh = el("h3", "helpers-group"); hh.textContent = gname; g.append(hh); }
+  part.forEach(([id, h]) => {
     const b = el("button", "helper-tile" + (CHAT && CHAT.helper === id ? " on" : "")); b.type = "button";
-    b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(h.title)}</span>`;
+    b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(hTitle(h))}</span>`;
     b.onclick = () => pickHelper(id);
     g.append(b);
+  });
   });
   $("#helpers-sheet").hidden = false;
 }
@@ -753,7 +763,7 @@ function pickHelper(id) {
   track("Помощник", { helper: id });
   // новый разговор, в котором Claude уже работает как выбранный помощник
   const chat = newChat("ask");
-  chat.helper = id; chat.title = T(h.title); chat.emoji = h.icon;
+  chat.helper = id; chat.title = T(hTitle(h)); chat.emoji = h.icon;
   openChat(chat);
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
@@ -2255,7 +2265,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=54");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=55");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
