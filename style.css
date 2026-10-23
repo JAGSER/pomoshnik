@@ -281,3 +281,4 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .live-state { min-height: 76px; border-radius: 999px; border: 0; font: inherit; font-weight: 800; font-size: 1.35em; background: rgba(255,255,255,.18); color: #fff; cursor: pointer; backdrop-filter: blur(6px); }
 .live-state.listening { background: var(--accent); animation: pulse 1.4s infinite; }
 .live-state.speaking { background: #2f7d4f; }
+.live-time { text-align: center; font-size: 1em; font-weight: 700; opacity: .75; min-height: 1.2em; }

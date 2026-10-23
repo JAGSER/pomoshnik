@@ -339,16 +339,19 @@ export async function handler(req, info) {
 
   if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
 
-  const model = models.includes(body.model) ? body.model : models[0];
+  // живой режим: быстрые модели доступны всем (они дешевле основной)
+  const LIVE_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5"];
+  const isLive = body.purpose === "live";
+  const model = isLive && LIVE_MODELS.includes(body.model) ? body.model : models.includes(body.model) ? body.model : models[0];
   if (!Array.isArray(body.messages) || !body.messages.length) {
     return json({ error: "Пустой разговор" }, 400, h);
   }
 
-  const think = !!body.think;
+  const think = !!body.think && !isLive;
   const payload = {
     model,
     // творческое видео: длинный код ролика — даём больший запас длины ответа
-    max_tokens: body.purpose === "video" ? 32000 : Math.min(Math.max(Number(user.maxTokens) || 8000, think ? 16000 : 0), 32000),
+    max_tokens: isLive ? 600 : body.purpose === "video" ? 32000 : Math.min(Math.max(Number(user.maxTokens) || 8000, think ? 16000 : 0), 32000),
     stream: true,
     messages: body.messages,
   };
@@ -358,7 +361,7 @@ export async function handler(req, info) {
     payload.output_config = { effort: "high" };
   }
   if (body.system) payload.system = String(body.system).slice(0, 20000);
-  if (user.webSearch && body.web !== false) {
+  if (user.webSearch && body.web !== false && !isLive) {
     payload.tools = [{
       type: env("WEB_SEARCH_TOOL", "web_search_20250305"),
       name: "web_search",

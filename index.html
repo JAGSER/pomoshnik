@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник AI">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="cb0ec999-076a-4bd0-ad61-49313a08c950" data-domains="pomoshnik.ai"></script>
 </head>
 <body>
@@ -61,6 +61,12 @@
       <button id="prep-samples" class="btn btn-ghost btn-wide prep" hidden>Подготовить все образцы голосов</button>
       <ul id="voice-list" class="voice-list"></ul>
     </div>
+    <h2 class="section-title">Живой режим с камерой</h2>
+    <div class="seg" id="live-seg">
+      <button type="button" data-model="claude-haiku-5-5">⚡ Быстрый</button>
+      <button type="button" data-model="claude-sonnet-5-5">🎯 Точный</button>
+    </div>
+    <p class="hint">Быстрый отвечает раньше, точный лучше видит предметы и точнее их обводит.</p>
     <h2 class="section-title">Скорость чтения</h2>
     <div class="seg" id="rate-seg">
       <button type="button" data-rate="1.2">1×</button>
@@ -136,12 +142,13 @@
     <button id="live-close" class="live-round" type="button" aria-label="Завершить">✕</button>
   </div>
   <div class="live-bottom">
+    <div id="live-time" class="live-time"></div>
     <div id="live-heard" class="live-heard"></div>
     <div id="live-answer" class="live-answer"></div>
     <button id="live-state" class="live-state" type="button">Включаю камеру…</button>
   </div>
 </div>
 
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

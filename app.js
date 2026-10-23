@@ -520,7 +520,7 @@ async function ask() {
   const p = CFG.presets[CHAT.preset] || {};
   const u = me();
   const today = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", weekday: "long" });
-  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system, LIVE ? LIVE_SYSTEM : ""].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -541,7 +541,9 @@ async function ask() {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: LIVE ? "claude-sonnet-5-5" : me().model, think: LIVE ? false : $("#think").checked, system, messages: contextMessages() }),
+      body: JSON.stringify(LIVE
+        ? { user: SESSION.user, password: SESSION.password, model: liveModel(), purpose: "live", web: false, think: false, system, messages: liveContext() }
+        : { user: SESSION.user, password: SESSION.password, model: me().model, think: $("#think").checked, system, messages: contextMessages() }),
       signal: ABORT.signal,
     });
     if (!r.ok) {
@@ -569,7 +571,7 @@ async function ask() {
         } else if (ev.type === "content_block_start" && ev.content_block?.type === "thinking") {
           if (!started) body.textContent = "Обдумываю…";
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-          if (!started) { started = true; body.classList.remove("typing"); }
+          if (!started) { started = true; body.classList.remove("typing"); if (LIVE && LIVE.t0) liveTime(); }
           full += ev.delta.text;
           const shown = LIVE ? liveClean(full) : full;
           body.innerHTML = md(shown);
@@ -584,8 +586,10 @@ async function ask() {
       }
     }
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
-    if (LIVE) { liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
+    let rawMarks = null;
+    if (LIVE) { rawMarks = [...full.matchAll(MARK_RE)].map((m) => m[0]); if (rawMarks.length) rawMarks.push(`кадр ${LIVE.fw}×${LIVE.fh}`); liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
+    if (rawMarks && rawMarks.length) msg.marks = rawMarks;
     CHAT.messages.push(msg);
     const acts = actions(full, msg);
     bubble.append(acts);
@@ -717,7 +721,7 @@ async function transcribeVideo(file) {
 const LIVE_SYSTEM = `Сейчас живой режим: человек говорит с тобой голосом и показывает камеру телефона. К каждой реплике приложен кадр — это то, что камера видит прямо сейчас. Отвечай как в живом разговоре: коротко (1–3 предложения), просто, без списков и разметки. Если на кадре не видно того, о чём спрашивают, попроси показать поближе или повернуть камеру.
 Ты можешь показывать предметы прямо на экране. Когда речь о конкретном предмете в кадре (что это, где он, куда нажать, что взять), добавь в самом конце ответа для каждого такого предмета отдельную строку:
 [[метка: короткое название; x, y, w, h]]
-где x, y — левый верхний угол рамки предмета, w, h — её ширина и высота, всё в долях кадра от 0 до 1000. Рамку подбирай плотно по предмету. Приложение нарисует её на экране и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» вместо координат. Не больше 4 меток.`;
+где x, y — левый верхний угол рамки предмета, w, h — её ширина и высота, в пикселях приложенного кадра (размер кадра указан ниже). Рамку подбирай плотно по предмету, внимательно сверяясь с кадром. Приложение нарисует её на экране и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» вместо координат. Не больше 4 меток.`;
 // голос телефона в живом режиме: начинает говорить с первой же законченной фразы, без задержки на запись
 class LiveSpeaker {
   constructor() { this.spoken = 0; this.text = ""; this.left = 0; this.ended = false; this.owner = null; this.stopped = false; SPEAKER = this; speechSynthesis.cancel(); }
@@ -749,7 +753,10 @@ class LiveSpeaker {
 // крупный текст ответа: показываем только последние слова, чтобы помещались
 function liveTail(t) { t = t.trim(); if (t.length <= 110) return t; const cut = t.slice(-110); return "…" + cut.slice(cut.indexOf(" ") + 1); }
 const MARK_RE = /\[\[\s*метка\s*:\s*([^;\]]+?)\s*;\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\]/gi;
-function liveParseMarks(s) { return [...s.matchAll(MARK_RE)].slice(0, 4).map((m) => ({ label: m[1], x: +m[2] / 1000, y: +m[3] / 1000, w: Math.max(0.02, +m[4] / 1000), h: Math.max(0.02, +m[5] / 1000) })); }
+function liveParseMarks(s) {
+  const W = (LIVE && LIVE.fw) || 1000, H = (LIVE && LIVE.fh) || 1000;
+  return [...s.matchAll(MARK_RE)].slice(0, 4).map((m) => ({ label: m[1], x: +m[2] / W, y: +m[3] / H, w: Math.max(0.03, +m[4] / W), h: Math.max(0.03, +m[5] / H) }));
+}
 function liveClean(s) { return s.replace(MARK_RE, "").replace(/\[\[[^\]]*$/, "").replace(/\[$/, "").trimEnd(); }
 
 /* Трекинг меток: маленькая серая копия кадра, поиск шаблона рядом с прошлым местом */
@@ -778,11 +785,11 @@ function liveSample(img, bx, by, bw, bh) {
 function liveScore(a, b) { let s = 0; for (let k = 0; k < a.t.length; k++) s += Math.abs(a.t[k] - b.t[k]); return s / a.t.length / Math.max(8, a.dev); }
 function liveSearch(img, mk, rad, step, far) {
   let best = { s: Infinity, x: mk.bx, y: mk.by };
-  const pen = far ? 0.35 / img.w : 0.6 / img.w; // чем дальше от прошлого места, тем строже
+  const pen = 3 / img.w; // чем дальше от прошлого места, тем строже: на повторяющемся узоре рамка не прыгает
   for (let dy = -rad; dy <= rad; dy += step) for (let dx = -rad; dx <= rad; dx += step) {
     const x = mk.bx + dx, y = mk.by + dy;
     if (x < -mk.bw / 2 || y < -mk.bh / 2 || x > img.w - mk.bw / 2 || y > img.h - mk.bh / 2) continue;
-    const s = liveScore(mk.tpl, liveSample(img, x, y, mk.bw, mk.bh)) + pen * Math.hypot(dx, dy);
+    const s = liveScore(mk.tpl, liveSample(img, x + mk.tx, y + mk.ty, mk.tw, mk.th)) + pen * Math.hypot(dx, dy);
     if (s < best.s) best = { s, x, y };
   }
   return best;
@@ -793,7 +800,10 @@ function liveShowMarks(marks) {
   const cap = LIVE.capture;
   LIVE.marks = marks.map((m) => {
     const mk = { label: m.label, bx: m.x * cap.w, by: m.y * cap.h, bw: m.w * cap.w, bh: m.h * cap.h, ok: 1, born: performance.now() };
-    mk.tpl = liveSample(cap, mk.bx, mk.by, mk.bw, mk.bh);
+    // следим не только за самим предметом, но и за его окружением — так не перепутать с похожим узором рядом
+    const ex = Math.max(mk.bw, 14) * 0.6, ey = Math.max(mk.bh, 14) * 0.6;
+    mk.tx = -ex; mk.ty = -ey; mk.tw = mk.bw + ex * 2; mk.th = mk.bh + ey * 2;
+    mk.tpl = liveSample(cap, mk.bx + mk.tx, mk.by + mk.ty, mk.tw, mk.th);
     return mk;
   });
   // первый поиск — по всему кадру: камера могла сдвинуться, пока Claude думал
@@ -801,12 +811,12 @@ function liveShowMarks(marks) {
   if (v.videoWidth) {
     const img = liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user");
     LIVE.marks.forEach((mk) => {
-      if (mk.tpl.dev < 6) return; // однотонный предмет — следить не за что, рамка стоит на месте
-      let b = liveSearch(img, mk, Math.round(img.w * 0.3), 3);
-      if (b.s > 0.7) { const g2 = liveSearch(img, mk, Math.max(img.w, img.h), 4, true); if (g2.s < b.s - 0.15) b = g2; }
-      const keep = { bx: mk.bx, by: mk.by }; mk.bx = b.x; mk.by = b.y;
-      b = liveSearch(img, mk, 3, 1);
-      if (b.s < 0.9) { mk.bx = b.x; mk.by = b.y; mk.ok = 1; } else { mk.bx = keep.bx; mk.by = keep.by; mk.ok = 0.6; }
+      if (mk.tpl.dev < 6) return; // однотонное место — следить не за что, рамка стоит на месте
+      // пока Claude думал, камера обычно сдвигается немного — ищем рядом
+      const keep = { bx: mk.bx, by: mk.by };
+      let b = liveSearch(img, mk, Math.round(img.w * 0.12), 2); mk.bx = b.x; mk.by = b.y;
+      b = liveSearch(img, mk, 2, 1);
+      if (b.s < 0.75) { mk.bx = b.x; mk.by = b.y; mk.ok = 1; } else { mk.bx = keep.bx; mk.by = keep.by; mk.ok = 0.7; }
     });
   }
   LIVE.trackTimer = setInterval(liveTrack, 70);
@@ -824,13 +834,13 @@ function liveTrack() {
   const img = liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user");
   LIVE.marks.forEach((mk) => {
     if (mk.tpl.dev < 6) return;
-    let b = liveSearch(img, mk, 12, 3);
+    let b = liveSearch(img, mk, 8, 2);
     const save = { bx: mk.bx, by: mk.by }; mk.bx = b.x; mk.by = b.y;
     b = liveSearch(img, mk, 2, 1);
-    if (b.s < 0.9) {
+    if (b.s < 0.75) {
       mk.bx = b.x; mk.by = b.y; mk.ok = Math.min(1, mk.ok + 0.25);
       // шаблон чуть подстраивается под свет и поворот
-      const cur = liveSample(img, mk.bx, mk.by, mk.bw, mk.bh);
+      const cur = liveSample(img, mk.bx + mk.tx, mk.by + mk.ty, mk.tw, mk.th);
       for (let k = 0; k < cur.t.length; k++) mk.tpl.t[k] = mk.tpl.t[k] * 0.9 + cur.t[k] * 0.1;
     } else { mk.bx = save.bx; mk.by = save.by; mk.ok = Math.max(0.25, mk.ok - 0.2); }
   });
@@ -849,7 +859,8 @@ function liveDraw() {
   LIVE.marks.forEach((mk) => {
     // плавное движение рамки на экране
     mk.sx = mk.sx == null ? mk.bx : mk.sx + (mk.bx - mk.sx) * 0.35; mk.sy = mk.sy == null ? mk.by : mk.sy + (mk.by - mk.sy) * 0.35;
-    const x = ox + mk.sx / cw * vw * s, y = oy + mk.sy / ch * vh * s, w = mk.bw / cw * vw * s, h = mk.bh / ch * vh * s;
+    let x = ox + mk.sx / cw * vw * s, y = oy + mk.sy / ch * vh * s, w = mk.bw / cw * vw * s, h = mk.bh / ch * vh * s;
+    if (w < 64) { x -= (64 - w) / 2; w = 64; } if (h < 64) { y -= (64 - h) / 2; h = 64; }
     const pad = 6 + 3 * Math.sin(t * 5);
     g.globalAlpha = mk.ok;
     g.lineWidth = 6; g.strokeStyle = "#FFD23F"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
@@ -864,6 +875,19 @@ function liveDraw() {
   LIVE.raf = requestAnimationFrame(liveDraw);
 }
 let LIVE = null;
+function liveModel() { return store.get("liveModel:" + SESSION.user) || "claude-haiku-5-5"; }
+// в живом режиме — только последние реплики и только текущий кадр: меньше данных, быстрее ответ
+function liveContext() {
+  let msgs = CHAT.messages.slice(-7);
+  while (msgs.length && msgs[0].role !== "user") msgs = msgs.slice(1);
+  return msgs.map((m, i) => ({ role: m.role, content: m.content.map((b) => {
+    if (b.type === "image") return i === msgs.length - 1 ? { type: "image", source: b.source } : { type: "text", text: "[кадр с камеры]" };
+    if (b.type === "document") return { type: "text", text: `[документ: ${b.title || ""}]` };
+    return { type: "text", text: b.text };
+  }) }));
+}
+// сколько секунд прошло от конца фразы до первого слова ответа
+function liveTime() { const t = ((performance.now() - LIVE.t0) / 1000).toFixed(1).replace(".", ","); $("#live-time").textContent = `⏱ ${t} с`; LIVE.t0 = 0; }
 async function startLive() {
   if (!SR) { alert("В этом браузере нет распознавания речи. Откройте приложение в Chrome."); return; }
   if (!navigator.mediaDevices?.getUserMedia) { alert("Этот браузер не даёт доступ к камере."); return; }
@@ -888,25 +912,30 @@ function liveListen() {
   liveState("🎤 Слушаю… говорите", "listening");
   const r = new SR(); LIVE.rec = r;
   r.lang = "ru-RU"; r.interimResults = true; r.continuous = false;
-  let said = "";
-  r.onresult = (e) => { said = [...e.results].map((x) => x[0].transcript).join(" ").trim(); $("#live-heard").textContent = said; };
+  let said = "", hush = 0;
+  // не ждём, пока телефон сам решит, что фраза закончилась: 0,8 с тишины — и отправляем
+  r.onresult = (e) => {
+    said = [...e.results].map((x) => x[0].transcript).join(" ").trim(); $("#live-heard").textContent = said;
+    clearTimeout(hush); hush = setTimeout(() => { try { r.stop(); } catch (_) {} }, 800);
+  };
   r.onerror = (e) => { if (e.error === "not-allowed") { liveState("Нет доступа к микрофону — разрешите его в браузере"); LIVE.rec = null; } };
   r.onend = () => {
     if (!LIVE || LIVE.closed || LIVE.rec !== r) return;
-    LIVE.rec = null;
-    if (said) liveAsk(said); else setTimeout(liveListen, 250);
+    LIVE.rec = null; clearTimeout(hush);
+    if (said) { LIVE.t0 = performance.now(); liveAsk(said); } else setTimeout(liveListen, 250);
   };
   try { r.start(); } catch (_) { setTimeout(liveListen, 500); }
 }
 function liveFrame() {
   const v = $("#live-video");
   if (!v.videoWidth) return null;
-  const k = Math.min(1, 768 / Math.max(v.videoWidth, v.videoHeight));
+  const k = Math.min(1, 512 / Math.max(v.videoWidth, v.videoHeight));
   const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  LIVE.fw = c.width; LIVE.fh = c.height;
   const g = c.getContext("2d");
   if (LIVE.facing === "user") { g.translate(c.width, 0); g.scale(-1, 1); }
   g.drawImage(v, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.8).split(",")[1];
+  return c.toDataURL("image/jpeg", 0.6).split(",")[1];
 }
 async function liveAsk(text) {
   LIVE.busy = true;
@@ -1547,6 +1576,10 @@ function openSettings() {
   const list = $("#voice-list");
   list.innerHTML = "";
   const cur = userVoice();
+  document.querySelectorAll("#live-seg button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.model === liveModel());
+    b.onclick = () => { store.set("liveModel:" + SESSION.user, b.dataset.model); document.querySelectorAll("#live-seg button").forEach((x) => x.classList.toggle("on", x === b)); };
+  });
   const vt = $("#voice-toggle"), vb = $("#voice-box");
   const curDesc = (VOICES.find((x) => x[0] === cur) || [])[1] || "";
   vt.innerHTML = `<span>🎙 ${esc(cur)}</span><span class="vdesc">${esc(curDesc)}</span><span class="vt-arrow">${vb.hidden ? "Выбрать ›" : "Свернуть ˄"}</span>`;
@@ -2020,7 +2053,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=40");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=41");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
