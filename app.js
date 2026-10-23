@@ -535,7 +535,7 @@ async function ask() {
   // Чтение вслух начинается, пока Claude ещё пишет ответ
   stopSpeaking();
   const autoRead = LIVE ? true : $("#autoread").checked;
-  const live = autoRead && useGemini() ? new Speaker() : null;
+  const live = LIVE ? new LiveSpeaker() : autoRead && useGemini() ? new Speaker() : null;
   let pre = null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
@@ -571,9 +571,10 @@ async function ask() {
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (!started) { started = true; body.classList.remove("typing"); }
           full += ev.delta.text;
-          body.innerHTML = md(full);
-          if (live) live.push(full);
-          if (LIVE) $("#live-answer").textContent = plain(full).slice(-160);
+          const shown = LIVE ? liveClean(full) : full;
+          body.innerHTML = md(shown);
+          if (live) live.push(shown);
+          if (LIVE) $("#live-answer").textContent = liveTail(plain(shown));
           // предзапись первой фразы, даже если чтение вслух выключено, — чтобы «Вслух» звучал сразу
           else if (!pre && useGemini()) { const c = firstChunk(plain(full), false); if (c) { pre = c; ttsFetch(c).catch(() => {}); } }
           scrollDown();
@@ -583,6 +584,7 @@ async function ask() {
       }
     }
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
+    if (LIVE) { liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     CHAT.messages.push(msg);
     const acts = actions(full, msg);
@@ -712,14 +714,162 @@ async function transcribeVideo(file) {
 }
 
 /* ===== Живой режим: камера + голос, ответы сразу вслух ===== */
-const LIVE_SYSTEM = "Сейчас живой режим: человек говорит с тобой голосом и показывает камеру телефона. К каждой реплике приложен кадр — это то, что камера видит прямо сейчас. Отвечай как в живом разговоре: коротко (1–3 предложения), просто, без списков и разметки. Если на кадре не видно того, о чём спрашивают, попроси показать поближе или повернуть камеру.";
+const LIVE_SYSTEM = `Сейчас живой режим: человек говорит с тобой голосом и показывает камеру телефона. К каждой реплике приложен кадр — это то, что камера видит прямо сейчас. Отвечай как в живом разговоре: коротко (1–3 предложения), просто, без списков и разметки. Если на кадре не видно того, о чём спрашивают, попроси показать поближе или повернуть камеру.
+Ты можешь показывать предметы прямо на экране. Когда речь о конкретном предмете в кадре (что это, где он, куда нажать, что взять), добавь в самом конце ответа для каждого такого предмета отдельную строку:
+[[метка: короткое название; x, y, w, h]]
+где x, y — левый верхний угол рамки предмета, w, h — её ширина и высота, всё в долях кадра от 0 до 1000. Рамку подбирай плотно по предмету. Приложение нарисует её на экране и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» вместо координат. Не больше 4 меток.`;
+// голос телефона в живом режиме: начинает говорить с первой же законченной фразы, без задержки на запись
+class LiveSpeaker {
+  constructor() { this.spoken = 0; this.text = ""; this.left = 0; this.ended = false; this.owner = null; this.stopped = false; SPEAKER = this; speechSynthesis.cancel(); }
+  setOwner(btn) { this.owner = btn; }
+  say(t) {
+    if (!t.trim() || this.stopped) return;
+    const voices = speechSynthesis.getVoices();
+    const ru = voices.find((v) => v.lang === "ru-RU" && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith("ru"));
+    splitText(t, 220).forEach((c) => {
+      const u = new SpeechSynthesisUtterance(c);
+      u.lang = "ru-RU"; if (ru) u.voice = ru; u.rate = 1.05 * RATE;
+      this.left++;
+      u.onend = u.onerror = () => { this.left--; this.check(); };
+      speechSynthesis.speak(u);
+    });
+  }
+  push(full) {
+    this.text = plain(full);
+    const rest = this.text.slice(this.spoken);
+    const re = /[.!?…]+["»)]*\s+/g; let end = -1, m;
+    while ((m = re.exec(rest))) end = m.index + m[0].length;
+    if (end > 0) { this.say(rest.slice(0, end)); this.spoken += end; }
+  }
+  end() { this.ended = true; this.say(this.text.slice(this.spoken)); this.spoken = this.text.length; this.check(); }
+  check() { if (this.ended && this.left <= 0 && SPEAKER === this) SPEAKER = null; }
+  pause() { speechSynthesis.pause(); } resume() { speechSynthesis.resume(); } setRate() {}
+  stop() { this.stopped = true; speechSynthesis.cancel(); if (SPEAKER === this) SPEAKER = null; }
+}
+// крупный текст ответа: показываем только последние слова, чтобы помещались
+function liveTail(t) { t = t.trim(); if (t.length <= 110) return t; const cut = t.slice(-110); return "…" + cut.slice(cut.indexOf(" ") + 1); }
+const MARK_RE = /\[\[\s*метка\s*:\s*([^;\]]+?)\s*;\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\]/gi;
+function liveParseMarks(s) { return [...s.matchAll(MARK_RE)].slice(0, 4).map((m) => ({ label: m[1], x: +m[2] / 1000, y: +m[3] / 1000, w: Math.max(0.02, +m[4] / 1000), h: Math.max(0.02, +m[5] / 1000) })); }
+function liveClean(s) { return s.replace(MARK_RE, "").replace(/\[\[[^\]]*$/, "").replace(/\[$/, "").trimEnd(); }
+
+/* Трекинг меток: маленькая серая копия кадра, поиск шаблона рядом с прошлым местом */
+const TW = 192;
+function liveGray(src, w, h, mirror) {
+  const c = LIVE.gc || (LIVE.gc = document.createElement("canvas"));
+  c.width = TW; c.height = Math.round(TW * h / w);
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.save(); if (mirror) { g.translate(c.width, 0); g.scale(-1, 1); }
+  g.drawImage(src, 0, 0, c.width, c.height); g.restore();
+  const d = g.getImageData(0, 0, c.width, c.height).data, out = new Float32Array(c.width * c.height);
+  for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = d[j] * 0.3 + d[j + 1] * 0.59 + d[j + 2] * 0.11;
+  return { px: out, w: c.width, h: c.height };
+}
+const TS = 14; // шаблон 14×14 точек внутри рамки
+function liveSample(img, bx, by, bw, bh) {
+  const t = new Float32Array(TS * TS); let sum = 0;
+  for (let j = 0; j < TS; j++) for (let i = 0; i < TS; i++) {
+    const x = Math.min(img.w - 1, Math.max(0, Math.round(bx + (i + 0.5) * bw / TS))), y = Math.min(img.h - 1, Math.max(0, Math.round(by + (j + 0.5) * bh / TS)));
+    const v = img.px[y * img.w + x]; t[j * TS + i] = v; sum += v;
+  }
+  const mean = sum / t.length; let dev = 0;
+  for (let k = 0; k < t.length; k++) { t[k] -= mean; dev += Math.abs(t[k]); }
+  return { t, dev: dev / t.length || 1 };
+}
+function liveScore(a, b) { let s = 0; for (let k = 0; k < a.t.length; k++) s += Math.abs(a.t[k] - b.t[k]); return s / a.t.length / Math.max(8, a.dev); }
+function liveSearch(img, mk, rad, step, far) {
+  let best = { s: Infinity, x: mk.bx, y: mk.by };
+  const pen = far ? 0.35 / img.w : 0.6 / img.w; // чем дальше от прошлого места, тем строже
+  for (let dy = -rad; dy <= rad; dy += step) for (let dx = -rad; dx <= rad; dx += step) {
+    const x = mk.bx + dx, y = mk.by + dy;
+    if (x < -mk.bw / 2 || y < -mk.bh / 2 || x > img.w - mk.bw / 2 || y > img.h - mk.bh / 2) continue;
+    const s = liveScore(mk.tpl, liveSample(img, x, y, mk.bw, mk.bh)) + pen * Math.hypot(dx, dy);
+    if (s < best.s) best = { s, x, y };
+  }
+  return best;
+}
+function liveShowMarks(marks) {
+  liveClearMarks();
+  if (!marks.length || !LIVE || !LIVE.capture) return;
+  const cap = LIVE.capture;
+  LIVE.marks = marks.map((m) => {
+    const mk = { label: m.label, bx: m.x * cap.w, by: m.y * cap.h, bw: m.w * cap.w, bh: m.h * cap.h, ok: 1, born: performance.now() };
+    mk.tpl = liveSample(cap, mk.bx, mk.by, mk.bw, mk.bh);
+    return mk;
+  });
+  // первый поиск — по всему кадру: камера могла сдвинуться, пока Claude думал
+  const v = $("#live-video");
+  if (v.videoWidth) {
+    const img = liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user");
+    LIVE.marks.forEach((mk) => {
+      if (mk.tpl.dev < 6) return; // однотонный предмет — следить не за что, рамка стоит на месте
+      let b = liveSearch(img, mk, Math.round(img.w * 0.3), 3);
+      if (b.s > 0.7) { const g2 = liveSearch(img, mk, Math.max(img.w, img.h), 4, true); if (g2.s < b.s - 0.15) b = g2; }
+      const keep = { bx: mk.bx, by: mk.by }; mk.bx = b.x; mk.by = b.y;
+      b = liveSearch(img, mk, 3, 1);
+      if (b.s < 0.9) { mk.bx = b.x; mk.by = b.y; mk.ok = 1; } else { mk.bx = keep.bx; mk.by = keep.by; mk.ok = 0.6; }
+    });
+  }
+  LIVE.trackTimer = setInterval(liveTrack, 70);
+  liveDraw();
+}
+function liveClearMarks() {
+  if (!LIVE) return;
+  clearInterval(LIVE.trackTimer); cancelAnimationFrame(LIVE.raf);
+  LIVE.marks = [];
+  const c = $("#live-marks"); c.getContext("2d").clearRect(0, 0, c.width, c.height);
+}
+function liveTrack() {
+  if (!LIVE || !LIVE.marks.length) return;
+  const v = $("#live-video"); if (!v.videoWidth) return;
+  const img = liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user");
+  LIVE.marks.forEach((mk) => {
+    if (mk.tpl.dev < 6) return;
+    let b = liveSearch(img, mk, 12, 3);
+    const save = { bx: mk.bx, by: mk.by }; mk.bx = b.x; mk.by = b.y;
+    b = liveSearch(img, mk, 2, 1);
+    if (b.s < 0.9) {
+      mk.bx = b.x; mk.by = b.y; mk.ok = Math.min(1, mk.ok + 0.25);
+      // шаблон чуть подстраивается под свет и поворот
+      const cur = liveSample(img, mk.bx, mk.by, mk.bw, mk.bh);
+      for (let k = 0; k < cur.t.length; k++) mk.tpl.t[k] = mk.tpl.t[k] * 0.9 + cur.t[k] * 0.1;
+    } else { mk.bx = save.bx; mk.by = save.by; mk.ok = Math.max(0.25, mk.ok - 0.2); }
+  });
+  LIVE.trackW = img.w; LIVE.trackH = img.h;
+  // метки живут 40 секунд или до следующего вопроса
+  if (performance.now() - LIVE.marks[0].born > 40000) liveClearMarks();
+}
+function liveDraw() {
+  if (!LIVE || !LIVE.marks.length) return;
+  const c = $("#live-marks"), v = $("#live-video"), dpr = devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const vw = v.videoWidth || 1, vh = v.videoHeight || 1, s = Math.max(W / vw, H / vh), ox = (W - vw * s) / 2, oy = (H - vh * s) / 2;
+  const cw = LIVE.capture.w, ch = LIVE.capture.h, t = performance.now() / 1000;
+  LIVE.marks.forEach((mk) => {
+    // плавное движение рамки на экране
+    mk.sx = mk.sx == null ? mk.bx : mk.sx + (mk.bx - mk.sx) * 0.35; mk.sy = mk.sy == null ? mk.by : mk.sy + (mk.by - mk.sy) * 0.35;
+    const x = ox + mk.sx / cw * vw * s, y = oy + mk.sy / ch * vh * s, w = mk.bw / cw * vw * s, h = mk.bh / ch * vh * s;
+    const pad = 6 + 3 * Math.sin(t * 5);
+    g.globalAlpha = mk.ok;
+    g.lineWidth = 6; g.strokeStyle = "#FFD23F"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
+    g.beginPath(); g.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 18); g.stroke();
+    g.shadowBlur = 0;
+    g.font = `800 30px ${VFONT}`;
+    const lw = g.measureText(mk.label).width + 32, lx = Math.min(W - lw - 8, Math.max(8, x + w / 2 - lw / 2)), ly = y - pad - 60 < 70 ? y + h + pad + 10 : y - pad - 60;
+    g.fillStyle = "#FFD23F"; g.beginPath(); g.roundRect(lx, ly, lw, 50, 25); g.fill();
+    g.fillStyle = "#1b1b1b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(mk.label, lx + lw / 2, ly + 26);
+    g.globalAlpha = 1;
+  });
+  LIVE.raf = requestAnimationFrame(liveDraw);
+}
 let LIVE = null;
 async function startLive() {
   if (!SR) { alert("В этом браузере нет распознавания речи. Откройте приложение в Chrome."); return; }
   if (!navigator.mediaDevices?.getUserMedia) { alert("Этот браузер не даёт доступ к камере."); return; }
   stopSpeaking();
   track("Живой режим");
-  LIVE = { facing: "environment", stream: null, rec: null, busy: false, closed: false };
+  LIVE = { facing: "environment", stream: null, rec: null, busy: false, closed: false, marks: [] };
   $("#live").hidden = false;
   $("#live-heard").textContent = ""; $("#live-answer").textContent = "";
   try { await liveCamera(); } catch (e) { stopLive(); alert("Нет доступа к камере. Разрешите камеру для сайта в настройках браузера."); return; }
@@ -760,9 +910,12 @@ function liveFrame() {
 }
 async function liveAsk(text) {
   LIVE.busy = true;
+  liveClearMarks();
   liveState("💭 Думаю…", "thinking");
   $("#live-answer").textContent = "";
   const frame = liveFrame();
+  const v = $("#live-video");
+  LIVE.capture = v.videoWidth ? liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user") : null;
   const content = [];
   if (frame) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame } });
   content.push({ type: "text", text });
@@ -772,7 +925,7 @@ async function liveAsk(text) {
   if (!CHAT.title) CHAT.title = text.slice(0, 60);
   renderMessage(userMsg);
   await save();
-  const watch = setInterval(() => { if (LIVE && SPEAKER) liveState("🔊 Отвечаю… нажмите, чтобы перебить", "speaking"); }, 300);
+  const watch = setInterval(() => { if (LIVE && speechSynthesis.speaking) liveState("🔊 Отвечаю… нажмите, чтобы перебить", "speaking"); }, 300);
   try { await ask(); } catch (_) {}
   // ждём, пока ответ дочитается вслух, и снова слушаем
   while (LIVE && !LIVE.closed && (SPEAKER || ("speechSynthesis" in window && speechSynthesis.speaking))) await new Promise((r) => setTimeout(r, 250));
@@ -784,6 +937,7 @@ async function liveAsk(text) {
 }
 function stopLive() {
   if (!LIVE) return;
+  liveClearMarks();
   LIVE.closed = true;
   if (LIVE.rec) { try { LIVE.rec.abort(); } catch (_) {} }
   if (LIVE.stream) LIVE.stream.getTracks().forEach((t) => t.stop());
@@ -1866,7 +2020,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=39");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=40");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
