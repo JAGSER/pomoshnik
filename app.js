@@ -12,6 +12,17 @@ const show = (id) => {
   document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
 };
 
+function appName() { return LANG === "en" ? EN_APP : CFG.appName || "Помощник AI"; }
+// язык человека: выбранный в настройках → указанный в config.json → язык телефона
+function userLang(id) {
+  const saved = store.get("lang:" + id);
+  if (saved) return saved;
+  const u = CFG.users[id] || {};
+  if (u.lang) return u.lang;
+  return /^(ru|uk|be|kk)/i.test(navigator.language || "") ? "ru" : "en";
+}
+const EN_SYSTEM = "IMPORTANT: this person speaks English. Always answer in English (ignore the instruction above to answer in Russian), unless they write in another language.";
+
 /* ===== Персонализация: что Claude знает о собеседнике ===== */
 function profile() {
   const u = me();
@@ -150,8 +161,8 @@ async function init() {
     document.body.innerHTML = "<p style='padding:24px'>Не удалось загрузить настройки. Проверьте интернет и обновите страницу.</p>";
     return;
   }
-  document.title = CFG.appName || "Помощник AI";
-  $("#app-name").textContent = CFG.appName || "Помощник AI";
+  document.title = appName();
+  $("#app-name").textContent = appName();
   // не ждём хранилище дольше 3 секунд — без истории приложение тоже работает
   try { await Promise.race([DB.open(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); } catch (_) {}
   ADB.open();
@@ -160,6 +171,7 @@ async function init() {
   if (mig) await importMigration(mig[1]);
 
   SESSION = store.get("session");
+  if (SESSION && CFG.users[SESSION.user] && userLang(SESSION.user) !== LANG) { setLang(userLang(SESSION.user)); return; }
   if (SESSION && CFG.users[SESSION.user]) startHome();
   else startLogin();
 
@@ -220,6 +232,7 @@ $("#login-form").onsubmit = async (e) => {
     SESSION = { user: d.user, password, models: d.models, webSearch: d.webSearch };
     store.set("session", SESSION);
     track("Вход");
+    if (userLang(d.user) !== LANG) { setLang(userLang(d.user)); return; }
     startHome();
   } catch (_) {
     $("#login-error").textContent = "Нет связи с помощником. Проверьте интернет.";
@@ -374,7 +387,7 @@ async function autoTitle(chat) {
   try {
     const r = await fetch(CFG.proxy + "/title", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: `Вопрос: ${q}\n\nНачало ответа: ${a.slice(0, 600)}` }),
+      body: JSON.stringify({ user: SESSION.user, password: SESSION.password, lang: LANG, text: `Вопрос: ${q}\n\nНачало ответа: ${a.slice(0, 600)}` }),
     });
     if (!r.ok) return;
     const d = await r.json();
@@ -519,8 +532,8 @@ async function send() {
 async function ask() {
   const p = CFG.presets[CHAT.preset] || {};
   const u = me();
-  const today = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", weekday: "long" });
-  const system = [CFG.baseSystem, `Сегодня ${today}.`, personalSystem(), p.system, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
+  const today = new Date().toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric", weekday: "long" });
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -732,10 +745,10 @@ class LiveSpeaker {
   say(t) {
     if (!t.trim() || this.stopped) return;
     const voices = speechSynthesis.getVoices();
-    const ru = voices.find((v) => v.lang === "ru-RU" && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith("ru"));
+    const ru = voices.find((v) => v.lang === SR_LANG() && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith(LANG));
     splitText(t, 220).forEach((c) => {
       const u = new SpeechSynthesisUtterance(c);
-      u.lang = "ru-RU"; if (ru) u.voice = ru; u.rate = 1.05 * RATE;
+      u.lang = SR_LANG(); if (ru) u.voice = ru; u.rate = 1.05 * RATE;
       this.left++;
       u.onend = u.onerror = () => { this.left--; this.check(); };
       speechSynthesis.speak(u);
@@ -914,7 +927,7 @@ function liveListen() {
   stopSpeaking();
   liveState("🎤 Слушаю… говорите", "listening");
   const r = new SR(); LIVE.rec = r;
-  r.lang = "ru-RU"; r.interimResults = true; r.continuous = false;
+  r.lang = SR_LANG(); r.interimResults = true; r.continuous = false;
   let said = "", hush = 0;
   // не ждём, пока телефон сам решит, что фраза закончилась: 0,8 с тишины — и отправляем
   r.onresult = (e) => {
@@ -1102,7 +1115,7 @@ function stopAutoSend() {
 function startListening() {
   stopSpeaking();
   rec = new SR();
-  rec.lang = "ru-RU";
+  rec.lang = SR_LANG();
   rec.interimResults = true;
   rec.continuous = false;
   const base = $("#input").value ? $("#input").value.trim() + " " : "";
@@ -1385,12 +1398,12 @@ class BrowserSpeaker {
 function browserSpeak(t, onEnd) {
   if (!("speechSynthesis" in window)) { if (onEnd) onEnd(); return; }
   const voices = speechSynthesis.getVoices();
-  const ru = voices.find((v) => v.lang === "ru-RU" && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith("ru"));
+  const ru = voices.find((v) => v.lang === SR_LANG() && /google|natural|online/i.test(v.name)) || voices.find((v) => v.lang?.startsWith(LANG));
   // длинный текст читаем кусками — иначе на Android обрывается
   const chunks = splitText(t, 220);
   chunks.forEach((c, i) => {
     const u = new SpeechSynthesisUtterance(c);
-    u.lang = "ru-RU";
+    u.lang = SR_LANG();
     if (ru) u.voice = ru;
     u.rate = 0.95 * RATE;
     if (i === chunks.length - 1 && onEnd) u.onend = onEnd;
@@ -1579,6 +1592,10 @@ function openSettings() {
   const list = $("#voice-list");
   list.innerHTML = "";
   const cur = userVoice();
+  document.querySelectorAll("#lang-seg button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.lang === LANG);
+    b.onclick = () => { store.set("lang:" + SESSION.user, b.dataset.lang); setLang(b.dataset.lang); };
+  });
   document.querySelectorAll("#live-seg button").forEach((b) => {
     b.classList.toggle("on", b.dataset.model === liveModel());
     b.onclick = () => { store.set("liveModel:" + SESSION.user, b.dataset.model); document.querySelectorAll("#live-seg button").forEach((x) => x.classList.toggle("on", x === b)); };
@@ -1630,7 +1647,7 @@ function openSettings() {
   $("#creative-block").hidden = !me().admin;
   if (me().admin) {
     const lg = store.get("creativeLog:" + SESSION.user);
-    $("#creative-log").textContent = lg ? `Последний творческий ролик (${new Date(lg.at).toLocaleString("ru")}, ${lg.model.includes("opus") ? "Opus" : "Sonnet"}):\n` + lg.steps.join("\n") : "";
+    $("#creative-log").textContent = lg ? `Последний творческий ролик (${new Date(lg.at).toLocaleString(LOCALE())}, ${lg.model.includes("opus") ? "Opus" : "Sonnet"}):\n` + lg.steps.join("\n") : "";
     const cr = $("#set-creative");
     cr.checked = store.get("creative:" + SESSION.user) !== false;
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
@@ -1716,8 +1733,8 @@ function el(tag, cls) { const e = document.createElement(tag); if (cls) e.classN
 function fmtDate(t) {
   const d = new Date(t);
   const today = new Date();
-  if (d.toDateString() === today.toDateString()) return "сегодня, " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  if (d.toDateString() === today.toDateString()) return "сегодня, " + d.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString(LOCALE(), { day: "numeric", month: "long" });
 }
 
 init();
@@ -1926,7 +1943,7 @@ function makePhotoScene(emoji, title, subs, duration, speech, outro, photos) {
   return {
     canvas: cv, duration,
     draw(t) {
-      if (outro && t >= speech) { outroDraw(g, t - speech, CFG.appName || "Помощник AI"); return; }
+      if (outro && t >= speech) { outroDraw(g, t - speech, appName(), T("Спросите о своём"), T(`в «${appName()}»`)); return; }
       g.fillStyle = "#000"; g.fillRect(0, 0, VW, VH);
       const i = Math.min(n - 1, Math.floor(t / per)), tt = t - i * per;
       photo(i, tt / per, 1);
@@ -1957,7 +1974,7 @@ function makePhotoScene(emoji, title, subs, duration, speech, outro, photos) {
       g.fillStyle = "rgba(255,255,255,.25)"; g.fillRect(140, VH - 150, VW - 280, 8);
       g.fillStyle = "#E07A50"; g.fillRect(140, VH - 150, (VW - 280) * Math.min(1, t / speech), 8);
       g.font = `500 36px ${VFONT}`; g.fillStyle = "rgba(255,253,249,.8)"; g.textAlign = "center";
-      g.fillText(CFG.appName || "Помощник AI", VW / 2, VH - 90);
+      g.fillText(appName(), VW / 2, VH - 90);
     },
   };
 }
@@ -1986,7 +2003,7 @@ function makeScene(emoji, title, subs, duration, speech, outro) {
   b.fillStyle = "#B5532E"; b.fillRect(VW / 2 - 60, titleEnd, 120, 6);
   b.fillStyle = "#6E655A"; b.font = `500 40px ${VFONT}`;
   // значок приложения и название — одной группой по центру
-  const brand = CFG.appName || "Помощник AI", isz = 48, gap = 14;
+  const brand = appName(), isz = 48, gap = 14;
   const bw = isz + gap + b.measureText(brand).width;
   const lx = (VW - bw) / 2, ly = VH - 90 - 38, k = isz / 512;
   b.textAlign = "left";
@@ -2011,7 +2028,7 @@ function makeScene(emoji, title, subs, duration, speech, outro) {
   return {
     canvas: cv, duration,
     draw(t, amp) {
-      if (outro && t >= speech) { outroDraw(g, t - speech, CFG.appName || "Помощник AI"); return; }
+      if (outro && t >= speech) { outroDraw(g, t - speech, appName(), T("Спросите о своём"), T(`в «${appName()}»`)); return; }
       level = level * 0.6 + Math.min(1, amp * 5) * 0.4;
       g.drawImage(base, 0, 0);
       // эмодзи «дышит» в такт голосу
@@ -2056,7 +2073,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=42");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=43");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2166,7 +2183,7 @@ function mascotDraw(g, cx, cy, size, t, talk) {
   g.fillStyle = "#FFFDF9"; g.save(); g.translate(256, 186); g.scale(1, blink); g.beginPath(); g.arc(0, 0, 48, 0, Math.PI * 2); g.fill(); g.restore();
   g.restore();
 }
-function outroDraw(g, s, app) {
+function outroDraw(g, s, app, l1, l2) {
   const W = 1080, H = 1920, F = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   const cl = (x) => Math.max(0, Math.min(1, x));
   const back = (x) => { x = cl(x); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
@@ -2176,8 +2193,8 @@ function outroDraw(g, s, app) {
   const p = back(s / 0.6);
   if (p > 0) mascotDraw(g, W / 2, 720, 300 * p, s, s > 0.5 && s < 2);
   g.textAlign = "center"; g.textBaseline = "middle";
-  g.globalAlpha = cl((s - 0.4) / 0.5); g.fillStyle = "#1F1B16"; g.font = `900 84px ${F}`; g.fillText("Спросите о своём", W / 2, 1020);
-  g.globalAlpha = cl((s - 0.6) / 0.5); g.fillStyle = "#B5532E"; g.fillText(`в «${app}»`, W / 2, 1130);
+  g.globalAlpha = cl((s - 0.4) / 0.5); g.fillStyle = "#1F1B16"; g.font = `900 84px ${F}`; g.fillText(l1 || "Спросите о своём", W / 2, 1020);
+  g.globalAlpha = cl((s - 0.6) / 0.5); g.fillStyle = "#B5532E"; g.fillText(l2 || `в «${app}»`, W / 2, 1130);
   g.restore();
 }
 
@@ -2317,7 +2334,7 @@ function WORKER_MAIN() {
     level = level * 0.6 + Math.min(1, (amp || 0) * 5) * 0.4;
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.setLineDash([]);
     g.fillStyle = "#F6F1E9"; g.fillRect(0, 0, W, H);
-    if (outro && t >= speech) { outroDraw(g, t - speech, brief.app); return; }
+    if (outro && t >= speech) { outroDraw(g, t - speech, brief.app, brief.o1, brief.o2); return; }
     g.save();
     try { userDraw(Math.min(t, speech - 0.001), K); } catch (e) { lastErr = lastErr || (e && e.message) || String(e); }
     g.restore();
@@ -2508,7 +2525,7 @@ function extractCode(s) {
 
 async function makeCreativeScene(v, label) {
   const brief = {
-    title: v.title, emojiMain: v.emoji, speech: v.speech, app: CFG.appName || "Помощник AI",
+    title: v.title, emojiMain: v.emoji, speech: v.speech, app: appName(), o1: T("Спросите о своём"), o2: T(`в «${appName()}»`),
     subs: v.subs.map((s) => ({ t0: +s.t0.toFixed(2), t1: +s.t1.toFixed(2), text: s.text })),
   };
   const photos = v.photos || [];

@@ -278,7 +278,9 @@ export async function handler(req, info) {
     const r = await callAnthropic(key, {
       model: env("TITLE_MODEL", "claude-haiku-5-5"),
       max_tokens: 60,
-      system: "Придумай для разговора одно подходящее по смыслу эмодзи и короткое название из 2–5 слов на русском. Ответь строго одной строкой: эмодзи, пробел, название. Без кавычек и точки.",
+      system: body.lang === "en"
+        ? "Come up with one fitting emoji and a short title of 2–5 words in English for this chat. Reply with exactly one line: emoji, space, title. No quotes, no period."
+        : "Придумай для разговора одно подходящее по смыслу эмодзи и короткое название из 2–5 слов на русском. Ответь строго одной строкой: эмодзи, пробел, название. Без кавычек и точки.",
       messages: [{ role: "user", content: text }],
     });
     if (!r.ok) return json({ error: "Не удалось придумать название" }, 502, h);

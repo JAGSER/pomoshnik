@@ -1,7 +1,7 @@
 // Кэш оболочки приложения: открывается даже при плохом интернете.
 // Всегда сначала берём свежую версию из сети (минуя кэш браузера), при её отсутствии — из кэша.
-const CACHE = "pomoshnik-v42";
-const SHELL = ["./", "index.html", "style.css", "app.js", "config.json", "icon.svg", "manifest.webmanifest"];
+const CACHE = "pomoshnik-v43";
+const SHELL = ["./", "index.html", "style.css", "app.js", "i18n.js", "config.json", "icon.svg", "manifest.webmanifest"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
