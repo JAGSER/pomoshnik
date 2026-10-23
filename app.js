@@ -1877,8 +1877,9 @@ async function videoButton(btn, text, msg) {
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
     if (IS_APPLE || me().admin || me().creative) {
-      const a = await audioInFile(blob);
-      vidNote(btn, a === "AAC" ? `🔊 Звук в файле: AAC ✓${VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""}` : a === "Opus" ? "⚠️ Звук в файле: Opus — iPhone его не проигрывает" : "⚠️ В файле нет звука" + (VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""));
+      let peak = 0; for (let i = 0; i < pcm.length; i += 64) { const x = Math.abs(pcm[i]); if (x > peak) peak = x; }
+      const a = (await audioInFile(blob)) + (peak > 0.02 ? "" : "-silent");
+      vidNote(btn, /-silent$/.test(a) ? "⚠️ Голос не записался: озвучка пришла пустой (тишина)" : a === "AAC-nocfg" ? "⚠️ Звук AAC без настройки — iPhone может его не проиграть" : a === "AAC" ? `🔊 Звук в файле: AAC ✓${VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""}` : a === "Opus" ? "⚠️ Звук в файле: Opus — iPhone его не проигрывает" : "⚠️ В файле нет звука" + (VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""));
     }
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
@@ -2103,13 +2104,25 @@ function rmsAt(pcm, t) {
 }
 
 let VIDEO_PATH = "";
+// AudioSpecificConfig для AAC-LC: тип 2, частота, каналы
+function aacConfig(rate, ch) {
+  const idx = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000].indexOf(rate);
+  const v = (2 << 11) | ((idx < 0 ? 3 : idx) << 7) | (ch << 3);
+  return new Uint8Array([v >> 8, v & 255]);
+}
 // какой звук оказался в готовом файле — чтобы видеть, где он теряется
 async function audioInFile(blob) {
   try {
     const head = new Uint8Array(await blob.slice(0, 2e6).arrayBuffer()), tail = new Uint8Array(await blob.slice(Math.max(0, blob.size - 2e6)).arrayBuffer());
     const b = new Uint8Array(head.length + tail.length); b.set(head); b.set(tail, head.length);
     const has = (t) => { const c = [...t].map((x) => x.charCodeAt(0)); outer: for (let i = 0; i < b.length - c.length; i++) { for (let j = 0; j < c.length; j++) if (b[i + j] !== c[j]) continue outer; return true; } return false; };
-    if (has("mp4a") || has("A_AAC")) return "AAC";
+    if (has("mp4a")) {
+      // в esds должна быть настройка звука (тег 05) — без неё iPhone молчит
+      const e = [...b].length && (() => { for (let i = 0; i < b.length - 4; i++) if (b[i] === 0x65 && b[i + 1] === 0x73 && b[i + 2] === 0x64 && b[i + 3] === 0x73) return i; return -1; })();
+      if (e >= 0) { for (let i = e; i < Math.min(b.length - 1, e + 80); i++) if (b[i] === 0x05) { let j = i + 1; while (b[j] === 0x80) j++; if (b[j] >= 2 && b[j] < 0x80) return "AAC"; } return "AAC-nocfg"; }
+      return "AAC";
+    }
+    if (has("A_AAC")) return "AAC";
     if (has("Opus") || has("A_OPUS")) return "Opus";
     return "";
   } catch (_) { return "?"; }
@@ -2132,7 +2145,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=47");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=48");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2155,7 +2168,26 @@ async function encodeFast(scene, pcm, progress, noAudio) {
   let fail = null;
   const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => (fail = e) });
   ve.configure(vcfg);
-  const ae = noAudio ? null : new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (fail = e) });
+  // iPhone отдаёт AAC без служебной настройки (AudioSpecificConfig) и иногда с ADTS-заголовками —
+  // без настройки плеер не играет звук, поэтому вписываем её сами и снимаем заголовки
+  let aFirst = true;
+  const aacOut = (c, m) => {
+    if (acodec !== "aac") return muxer.addAudioChunk(c, m);
+    let data = new Uint8Array(c.byteLength); c.copyTo(data);
+    if (data[0] === 0xff && (data[1] & 0xf6) === 0xf0) {
+      const hl = data[1] & 1 ? 7 : 9;
+      data = data.subarray(hl);
+      c = new EncodedAudioChunk({ type: c.type, timestamp: c.timestamp, duration: c.duration ?? undefined, data });
+    }
+    if (aFirst) {
+      aFirst = false;
+      const d = (m && m.decoderConfig) || {};
+      const desc = d.description && d.description.byteLength ? d.description : aacConfig(VRATE, 1);
+      m = { decoderConfig: { codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, ...d, description: desc } };
+    } else m = undefined;
+    muxer.addAudioChunk(c, m);
+  };
+  const ae = noAudio ? null : new AudioEncoder({ output: aacOut, error: (e) => (fail = e) });
   if (ae) ae.configure(acfg);
   // звук
   const step = VRATE / 10;

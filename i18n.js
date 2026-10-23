@@ -172,6 +172,8 @@ const EN = {
   "🔊 Звук в файле: AAC ✓ ({0})": "🔊 Sound in file: AAC ✓ ({0})",
   "⚠️ Звук в файле: Opus — iPhone его не проигрывает": "⚠️ Sound in file: Opus — iPhone can't play it",
   "⚠️ В файле нет звука": "⚠️ The file has no sound",
+  "⚠️ Голос не записался: озвучка пришла пустой (тишина)": "⚠️ The voice wasn't recorded: the narration came back empty (silence)",
+  "⚠️ Звук AAC без настройки — iPhone может его не проиграть": "⚠️ AAC sound without its config — iPhone may not play it",
   "⚠️ В файле нет звука ({0})": "⚠️ The file has no sound ({0})",
   "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
   // творческие видео
