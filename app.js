@@ -723,7 +723,9 @@ function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.cont
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
 // помощники, которые положены этому человеку (в config.json у каждого есть список "for")
-function myHelpers() { return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(SESSION.user)); }
+function myHelpers(uid) { uid = uid || SESSION.user; return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(uid)); }
+// админ может посмотреть, какой список помощников видит каждый человек
+let HELPERS_VIEW = null;
 function helpersOn() { return myHelpers().length > 0; }
 const hTitle = (h) => (LANG === "en" && h.title_en ? h.title_en : h.title);
 const hHint = (h) => (LANG === "en" && h.hint_en ? h.hint_en : h.hint);
@@ -740,8 +742,22 @@ function renderHelperChip() {
 }
 function openHelpers() {
   const g = $("#helpers-grid"); g.innerHTML = "";
+  const viewer = me().admin && HELPERS_VIEW ? HELPERS_VIEW : SESSION.user;
+  const vEn = (CFG.users[viewer] || {}).lang === "en";
+  const tOf = (h) => (vEn && h.title_en ? h.title_en : vEn ? T(h.title) : hTitle(h));
+  // переключатель «чей список» — только у администратора
+  if (me().admin) {
+    const seg = el("div", "helpers-who");
+    Object.entries(CFG.users).sort(([a], [b]) => (b === SESSION.user) - (a === SESSION.user)).forEach(([uid, u]) => {
+      const b = el("button", uid === viewer ? "on" : ""); b.type = "button";
+      b.textContent = `${u.avatar || ""} ${uid === SESSION.user ? "Я" : u.name} · ${myHelpers(uid).length}`;
+      b.onclick = () => { HELPERS_VIEW = uid; openHelpers(); };
+      seg.append(b);
+    });
+    g.append(seg);
+  }
   // школьные помощники — отдельным блоком сверху
-  const list = myHelpers(), groups = [["school", "🍎 Для школы"], ["", "🏠 На каждый день"]];
+  const list = myHelpers(viewer), groups = [["school", "🍎 Для школы"], ["", "🏠 На каждый день"]];
   const grouped = list.some(([, h]) => h.group);
   groups.forEach(([gid, gname]) => {
   const part = list.filter(([, h]) => (h.group || "") === gid);
@@ -749,7 +765,7 @@ function openHelpers() {
   if (grouped) { const hh = el("h3", "helpers-group"); hh.textContent = gname; g.append(hh); }
   part.forEach(([id, h]) => {
     const b = el("button", "helper-tile" + (CHAT && CHAT.helper === id ? " on" : "")); b.type = "button";
-    b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(hTitle(h))}</span>`;
+    b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(tOf(h))}</span>`;
     b.onclick = () => pickHelper(id);
     g.append(b);
   });
@@ -2265,7 +2281,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=55");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=56");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
