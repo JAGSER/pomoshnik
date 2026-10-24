@@ -384,6 +384,7 @@ function openChat(chat) {
   const hpc = chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
   if (hpc && hHint(hpc)) addNotice(hHint(hpc)); else if (p.greeting) addNotice(p.greeting);
   chat.messages.forEach((m) => renderMessage(m));
+  if (chat.messages.length) { const last = chat.messages[chat.messages.length - 1]; if (last.role === "assistant" && last.options) showFollowups(last.options); }
   renderHelperChip();
   if (p.allowFiles !== false) {
     const ec = el("div", "empty-chat" + (chat.messages.length ? " compact" : "")); ec.id = "empty-chat";
@@ -394,8 +395,10 @@ function openChat(chat) {
       mk("📄", "Документ", () => pickFiles("application/pdf,.pdf,.txt,.md,.csv")),
       mk("🎬", "Видео", () => pickFiles("video/*")),
     );
-    if (chat.messages.length) box.prepend(ec); else box.append(ec);
+    if (chat.messages.length || chat.helper) { ec.classList.add("compact"); box.prepend(ec); } else box.append(ec);
   }
+  // готовые вопросы, чтобы можно было просто нажать
+  if (!chat.messages.length) showStarters(chat);
   scrollDown();
   if (!matchMedia("(pointer: coarse)").matches) $("#input").focus();
 }
@@ -560,7 +563,7 @@ async function send() {
   if (text) content.push({ type: "text", text });
   else content.push({ type: "text", text: "Посмотри, пожалуйста, что я приложил(а)." });
   const userMsg = { role: "user", content };
-  liftPanel();
+  liftPanel(); clearFollowups();
   CHAT.messages.push(userMsg);
   if (!CHAT.title) CHAT.title = (text || PENDING[0]?.name || "Разговор").slice(0, 60);
   renderMessage(userMsg);
@@ -578,7 +581,8 @@ async function ask() {
   const u = me();
   const today = new Date().toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric", weekday: "long" });
   const hp = activeHelper();
-  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}` : "", LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
+  const FOLLOW = LIVE ? "" : "В самом конце ответа добавь одну строку вида [[кнопки: вариант | вариант | вариант]] — 2-4 коротких варианта (до 6 слов каждый), которые человек может просто нажать вместо того, чтобы печатать: от его лица, на языке разговора. Если ты задаёшь вопрос — варианты это готовые ответы на него. Если вопроса нет — что логично спросить или сделать дальше. Эту строку не упоминай в тексте.";
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}` : "", FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -631,7 +635,7 @@ async function ask() {
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (!started) { started = true; body.classList.remove("typing"); if (LIVE && LIVE.t0) liveTime(); }
           full += ev.delta.text;
-          const shown = LIVE ? liveClean(full) : full;
+          const shown = LIVE ? liveClean(full) : optClean(full);
           body.innerHTML = md(shown);
           if (live) live.push(shown);
           if (LIVE) $("#live-answer").textContent = liveTail(plain(shown));
@@ -644,13 +648,16 @@ async function ask() {
       }
     }
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
-    let rawMarks = null;
+    let rawMarks = null, opts = [];
+    if (!LIVE) { opts = optParse(full); full = optClean(full); body.innerHTML = md(full); }
     if (LIVE) { rawMarks = [...full.matchAll(MARK_RE)].map((m) => m[0]); if (rawMarks.length) rawMarks.push(`кадр ${LIVE.fw}×${LIVE.fh}`); liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     if (rawMarks && rawMarks.length) msg.marks = rawMarks;
+    if (opts.length) msg.options = opts;
     CHAT.messages.push(msg);
     const acts = actions(full, msg);
     bubble.append(acts);
+    if (msg.options) showFollowups(msg.options);
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
@@ -720,6 +727,32 @@ function contextMessages() {
 
 // четыре кнопки не исчезают: после первого вопроса поднимаются наверх в один ряд
 function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.contains("compact")) { ec.classList.add("compact"); $("#messages").prepend(ec); } }
+
+/* ===== Кнопки-подсказки: чтобы не нужно было придумывать, что спросить ===== */
+const OPT_RE = /\[\[\s*(?:кнопки|buttons|butang|pilihan)\s*:([^\]]*)\]\]/i;
+function optParse(s) { const m = s.match(OPT_RE); return m ? m[1].split("|").map((x) => x.trim()).filter(Boolean).slice(0, 4) : []; }
+function optClean(s) { return s.replace(new RegExp(OPT_RE.source, "gi"), "").replace(/\[\[[^\]]*$/, "").replace(/\[$/, "").trimEnd(); }
+function clearFollowups() { document.querySelectorAll(".followups").forEach((x) => x.remove()); }
+function quickSend(text) {
+  clearFollowups();
+  // «Сфотографирую…» — сразу открываем выбор фото, «Покажу…» — камеру
+  if (/^(Сфотографирую|I'll take a photo)/i.test(text)) { pickFiles("image/*"); return; }
+  if (/^(Покажу|I'll show)/i.test(text)) { startLive(); return; }
+  $("#input").value = text; send();
+}
+function chipsRow(list, cls) {
+  const row = el("div", "followups " + cls);
+  list.forEach((t) => { const b = el("button", "fu-chip"); b.type = "button"; b.textContent = t; b.onclick = () => quickSend(t); row.append(b); });
+  return row;
+}
+function showFollowups(list) { clearFollowups(); if (!list || !list.length) return; $("#messages").append(chipsRow(list, "after")); scrollDown(); }
+function showStarters(chat) {
+  const hp = chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
+  const src = hp || CFG.presets[chat.preset] || {};
+  const list = (LANG === "en" && src.examples_en) || src.examples;
+  if (!list || !list.length) return;
+  $("#messages").append(chipsRow(list, "start"));
+}
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
 // помощники, которые положены этому человеку (в config.json у каждого есть список "for")
@@ -1077,7 +1110,7 @@ async function liveAsk(text) {
   if (frame) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame } });
   content.push({ type: "text", text });
   const userMsg = { role: "user", content, live: true };
-  liftPanel();
+  liftPanel(); clearFollowups();
   CHAT.messages.push(userMsg);
   if (!CHAT.title) CHAT.title = text.slice(0, 60);
   renderMessage(userMsg);
@@ -2281,7 +2314,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=56");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=57");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

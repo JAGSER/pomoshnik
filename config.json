@@ -74,7 +74,19 @@
       "subtitle": "Любой вопрос — голосом или текстом",
       "system": "",
       "greeting": "Здравствуйте! Спрашивайте что угодно — можно нажать на микрофон и сказать голосом.",
-      "allowFiles": true
+      "allowFiles": true,
+      "examples": [
+        "Что ты умеешь?",
+        "Помоги разобраться с телефоном",
+        "Расскажи новости",
+        "Посоветуй фильм на вечер"
+      ],
+      "examples_en": [
+        "What can you do?",
+        "Help me with my phone",
+        "Tell me the news",
+        "Suggest a movie for tonight"
+      ]
     },
     "example": {
       "icon": "⭐",
@@ -96,6 +108,12 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Звонили из банка и просят код из СМС",
+        "Пришло сообщение, что выиграл приз",
+        "Пишет «сын» с нового номера и просит денег",
+        "Звонят из полиции про родственника"
       ]
     },
     "paper": {
@@ -109,6 +127,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Сфотографирую квитанцию",
+        "Пришло письмо из суда",
+        "Принесли договор на подпись"
       ]
     },
     "letter": {
@@ -121,6 +144,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Жалоба в управляющую компанию",
+        "Заявление в поликлинику",
+        "Заявление в банк"
       ]
     },
     "cook": {
@@ -134,6 +162,18 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Есть курица, картошка и лук",
+        "Что-нибудь лёгкое на ужин",
+        "Простой суп на 3 дня",
+        "Что испечь к чаю"
+      ],
+      "examples_en": [
+        "I have chicken, potatoes and onion",
+        "Something light for dinner",
+        "A simple soup",
+        "What to bake for tea"
       ]
     },
     "fix": {
@@ -147,6 +187,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Течёт кран",
+        "Не работает розетка",
+        "Сломалась дверная ручка"
       ]
     },
     "wish": {
@@ -160,6 +205,18 @@
         "yuri",
         "vie",
         "sister"
+      ],
+      "examples": [
+        "Поздравь с днём рождения подругу",
+        "Поздравь внука",
+        "Поздравь с Новым годом",
+        "Поздравь с юбилеем, 70 лет"
+      ],
+      "examples_en": [
+        "Birthday wish for a friend",
+        "Wish for my student",
+        "New Year greeting",
+        "Wedding anniversary"
       ]
     },
     "memory": {
@@ -171,6 +228,11 @@
         "mama",
         "papa",
         "yuri"
+      ],
+      "examples": [
+        "Расскажу о своём детстве",
+        "Как я познакомилась с мужем",
+        "Моя первая работа"
       ]
     },
     "talk": {
@@ -184,6 +246,18 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Расскажи что-нибудь интересное",
+        "Давай поговорим о книгах",
+        "Мне скучно",
+        "Посоветуй, чем заняться вечером"
+      ],
+      "examples_en": [
+        "Tell me something interesting",
+        "Let's talk about books",
+        "I'm bored",
+        "What to do this evening"
       ]
     },
     "tests": {
@@ -197,6 +271,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Сфотографирую анализ крови",
+        "Что значит высокий холестерин?",
+        "Объясни анализ мочи"
       ]
     },
     "pills": {
@@ -211,6 +290,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Сфотографирую упаковку",
+        "Можно ли пить вместе два лекарства?",
+        "Пропустил таблетку, что делать?"
+      ],
+      "examples_en": [
+        "I'll take a photo of the box",
+        "Can I take two medicines together?",
+        "I missed a pill, what now?"
       ]
     },
     "symptoms": {
@@ -224,6 +313,18 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Болит голова",
+        "Скачет давление",
+        "Болит спина",
+        "Кружится голова"
+      ],
+      "examples_en": [
+        "I have a headache",
+        "My back hurts",
+        "I feel dizzy",
+        "Sore throat"
       ]
     },
     "diet": {
@@ -236,6 +337,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Что есть при давлении",
+        "Что есть при диабете",
+        "Меню на неделю попроще"
       ]
     },
     "sleep": {
@@ -249,6 +355,16 @@
         "yuri",
         "vie",
         "sister"
+      ],
+      "examples": [
+        "Не могу уснуть",
+        "Просыпаюсь ночью",
+        "Поговори со мной перед сном"
+      ],
+      "examples_en": [
+        "I can't fall asleep",
+        "I wake up at night",
+        "Talk to me before sleep"
       ]
     },
     "utility": {
@@ -261,6 +377,11 @@
         "mama",
         "papa",
         "yuri"
+      ],
+      "examples": [
+        "Сфотографирую квитанцию",
+        "Почему выросла плата?",
+        "Как пожаловаться на начисления"
       ]
     },
     "benefits": {
@@ -273,6 +394,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Какие льготы мне положены",
+        "Как оформить выплату",
+        "Как записаться к врачу через Госуслуги"
       ]
     },
     "pension": {
@@ -284,6 +410,11 @@
         "mama",
         "papa",
         "yuri"
+      ],
+      "examples": [
+        "Когда будет индексация",
+        "Как пересчитать пенсию",
+        "Что за письмо из Соцфонда"
       ]
     },
     "buy": {
@@ -298,6 +429,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Сфотографирую товар",
+        "Стоит ли брать в кредит",
+        "Сравни два телефона"
+      ],
+      "examples_en": [
+        "I'll take a photo of the item",
+        "Is it worth buying on credit?",
+        "Compare two phones"
       ]
     },
     "screen": {
@@ -312,6 +453,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Покажу экран телефона",
+        "Покажу телевизор",
+        "Покажу компьютер"
+      ],
+      "examples_en": [
+        "I'll show my phone screen",
+        "I'll show my laptop",
+        "I'll show the TV"
       ]
     },
     "gift": {
@@ -325,6 +476,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Подарок внуку 7 лет",
+        "Подарок подруге до 2000 ₽",
+        "Подарок мужу на юбилей"
+      ],
+      "examples_en": [
+        "Gift for a 7-year-old",
+        "Gift for a friend",
+        "Gift for my boyfriend"
       ]
     },
     "kids": {
@@ -337,6 +498,11 @@
         "papa",
         "yuri",
         "sister"
+      ],
+      "examples": [
+        "Сказка на ночь",
+        "Почему небо голубое?",
+        "Игра для ребёнка дома"
       ]
     },
     "support": {
@@ -350,6 +516,16 @@
         "yuri",
         "vie",
         "sister"
+      ],
+      "examples": [
+        "Мне грустно",
+        "Тревожно, не могу успокоиться",
+        "Чувствую себя одиноко"
+      ],
+      "examples_en": [
+        "I feel sad",
+        "I'm anxious",
+        "I feel lonely"
       ]
     },
     "movies": {
@@ -363,6 +539,17 @@
         "yuri",
         "vie",
         "sister"
+      ],
+      "examples": [
+        "Хорошая комедия",
+        "Фильм о любви",
+        "Сериал на вечер",
+        "Старое советское кино"
+      ],
+      "examples_en": [
+        "A good comedy",
+        "A romantic movie",
+        "A series for tonight"
       ]
     },
     "travel": {
@@ -376,6 +563,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Санаторий для здоровья",
+        "Что взять в поездку",
+        "Как доехать на поезде"
+      ],
+      "examples_en": [
+        "Weekend trip ideas",
+        "What to pack",
+        "How to get there by bus"
       ]
     },
     "news": {
@@ -389,6 +586,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Главное за сегодня",
+        "Что с погодой на неделе",
+        "Новости в моём городе"
+      ],
+      "examples_en": [
+        "Today's main news",
+        "Weather this week",
+        "News in my city"
       ]
     },
     "explain": {
@@ -402,6 +609,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Что такое искусственный интеллект",
+        "Как работает интернет",
+        "Что такое криптовалюта"
+      ],
+      "examples_en": [
+        "What is artificial intelligence",
+        "How does the internet work",
+        "What is inflation"
       ]
     },
     "postcard": {
@@ -416,6 +633,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Открытка к дню рождения",
+        "Открытка внукам",
+        "Открытка с праздником"
+      ],
+      "examples_en": [
+        "Birthday card",
+        "Card for my students",
+        "Holiday card"
       ]
     },
     "translate": {
@@ -429,6 +656,16 @@
         "yuri",
         "sister",
         "vie"
+      ],
+      "examples": [
+        "Переведи на английский",
+        "Сфотографирую текст",
+        "Что значит это слово?"
+      ],
+      "examples_en": [
+        "Translate into English",
+        "I'll take a photo of the text",
+        "What does this word mean?"
       ]
     },
     "plan": {
@@ -442,6 +679,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Урок математики, 2 класс, 35 минут",
+        "Урок английского, тема «Животные»",
+        "Урок природы, тема «Вода»"
+      ],
+      "examples_en": [
+        "Maths lesson, year 2, 35 minutes",
+        "English lesson: animals",
+        "Science lesson: water"
       ]
     },
     "worksheet": {
@@ -455,6 +702,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Лист на сложение до 20",
+        "Лист «Цвета» на английском",
+        "Лист по чтению для 1 класса"
+      ],
+      "examples_en": [
+        "Addition up to 20",
+        "Colours in English",
+        "Reading for year 1"
       ]
     },
     "quiz": {
@@ -468,6 +725,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Тест на 10 вопросов по математике",
+        "Тест по английским словам",
+        "Викторина по природе"
+      ],
+      "examples_en": [
+        "10-question maths quiz",
+        "English vocabulary quiz",
+        "Nature quiz"
       ]
     },
     "levels": {
@@ -481,6 +748,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Задачи на умножение",
+        "Чтение текста",
+        "Английские слова"
+      ],
+      "examples_en": [
+        "Multiplication tasks",
+        "Reading a text",
+        "English words"
       ]
     },
     "textbook": {
@@ -495,7 +772,13 @@
         "vie",
         "yuri"
       ],
-      "action": "photo"
+      "action": "photo",
+      "examples": [
+        "Сфотографирую страницу учебника"
+      ],
+      "examples_en": [
+        "I'll take a photo of the textbook page"
+      ]
     },
     "kidsexplain": {
       "icon": "🧒",
@@ -508,6 +791,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Почему идёт дождь",
+        "Что такое дроби",
+        "Как растут растения"
+      ],
+      "examples_en": [
+        "Why does it rain",
+        "What are fractions",
+        "How do plants grow"
       ]
     },
     "project": {
@@ -521,6 +814,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Проект про экологию",
+        "Проект про семью",
+        "Проект про здоровую еду"
+      ],
+      "examples_en": [
+        "Project about the environment",
+        "Project about family",
+        "Project about healthy food"
       ]
     },
     "english": {
@@ -534,6 +837,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Урок «Животные»",
+        "Урок «Цвета»",
+        "Урок «Моя семья»"
+      ],
+      "examples_en": [
+        "Lesson: animals",
+        "Lesson: colours",
+        "Lesson: my family"
       ]
     },
     "cards": {
@@ -547,6 +860,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Карточки «Фрукты»",
+        "Карточки «Школа»",
+        "Карточки «Тело»"
+      ],
+      "examples_en": [
+        "Cards: fruit",
+        "Cards: school",
+        "Cards: body parts"
       ]
     },
     "songs": {
@@ -560,6 +883,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Песенка про цвета",
+        "Речёвка про дни недели",
+        "Песенка про числа"
+      ],
+      "examples_en": [
+        "Song about colours",
+        "Chant for days of the week",
+        "Song about numbers"
       ]
     },
     "check": {
@@ -574,7 +907,13 @@
         "vie",
         "yuri"
       ],
-      "action": "photo"
+      "action": "photo",
+      "examples": [
+        "Сфотографирую тетрадь"
+      ],
+      "examples_en": [
+        "I'll take a photo of the notebook"
+      ]
     },
     "grades": {
       "icon": "📊",
@@ -587,6 +926,14 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Посчитать средние баллы",
+        "Кто отстаёт?"
+      ],
+      "examples_en": [
+        "Calculate averages",
+        "Who is falling behind?"
       ]
     },
     "rapor": {
@@ -600,6 +947,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Комментарии для всего класса",
+        "Комментарий для сильного ученика",
+        "Комментарий для отстающего"
+      ],
+      "examples_en": [
+        "Comments for the whole class",
+        "Comment for a strong student",
+        "Comment for a struggling student"
       ]
     },
     "parents": {
@@ -613,6 +970,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Напомнить о домашнем задании",
+        "Пригласить на собрание",
+        "Ребёнок плохо себя ведёт"
+      ],
+      "examples_en": [
+        "Remind about homework",
+        "Invite to a meeting",
+        "Child misbehaves"
       ]
     },
     "announce": {
@@ -626,6 +993,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Экскурсия",
+        "Школьный праздник",
+        "Сбор денег на класс"
+      ],
+      "examples_en": [
+        "School trip",
+        "School celebration",
+        "Collecting class money"
       ]
     },
     "paperwork": {
@@ -639,6 +1016,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Отчёт за месяц",
+        "Протокол собрания",
+        "План на четверть"
+      ],
+      "examples_en": [
+        "Monthly report",
+        "Meeting minutes",
+        "Term plan"
       ]
     },
     "speech": {
@@ -652,6 +1039,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Речь на выпускной",
+        "Речь на День учителя",
+        "Приветствие родителям"
+      ],
+      "examples_en": [
+        "Graduation speech",
+        "Teachers' Day speech",
+        "Welcome to parents"
       ]
     },
     "games": {
@@ -665,6 +1062,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Разминка на 5 минут",
+        "Игра на английские слова",
+        "Игра на счёт"
+      ],
+      "examples_en": [
+        "5-minute warm-up",
+        "English word game",
+        "Counting game"
       ]
     },
     "behavior": {
@@ -678,6 +1085,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Ребёнок мешает на уроке",
+        "Ребёнок часто плачет",
+        "Ребёнок отстаёт"
+      ],
+      "examples_en": [
+        "A child disrupts the lesson",
+        "A child cries often",
+        "A child is falling behind"
       ]
     },
     "rewards": {
@@ -691,6 +1108,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Таблица наклеек",
+        "Баллы для класса",
+        "Как хвалить детей"
+      ],
+      "examples_en": [
+        "Sticker chart",
+        "Class points",
+        "How to praise children"
       ]
     },
     "story": {
@@ -704,6 +1131,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Сказка про дружбу",
+        "Рассказ про природу",
+        "Сказка про честность"
+      ],
+      "examples_en": [
+        "Story about friendship",
+        "Story about nature",
+        "Story about honesty"
       ]
     },
     "lessonvideo": {
@@ -717,6 +1154,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Ролик про круговорот воды",
+        "Ролик про части растения",
+        "Ролик «Цвета» на английском"
+      ],
+      "examples_en": [
+        "Video: the water cycle",
+        "Video: parts of a plant",
+        "Video: colours in English"
       ]
     },
     "week": {
@@ -730,6 +1177,14 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Спланируй мою неделю",
+        "Как всё успеть с проверкой тетрадей"
+      ],
+      "examples_en": [
+        "Plan my week",
+        "How to keep up with marking"
       ]
     },
     "teachercare": {
@@ -743,6 +1198,16 @@
       "for": [
         "vie",
         "yuri"
+      ],
+      "examples": [
+        "Я очень устала",
+        "Слишком много бумаг",
+        "Как отдыхать после работы"
+      ],
+      "examples_en": [
+        "I'm very tired",
+        "Too much paperwork",
+        "How to rest after work"
       ]
     }
   }

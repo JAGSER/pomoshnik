@@ -317,3 +317,9 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .helpers-who { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .helpers-who button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 12px; font: inherit; font-size: .9em; cursor: pointer; }
 .helpers-who button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+/* Кнопки-подсказки */
+.followups { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; padding: 2px 0 6px; }
+.followups.start { justify-content: center; }
+.fu-chip { border: 1.5px solid var(--accent); background: var(--surface); color: var(--accent); border-radius: 18px; padding: 10px 14px; font: inherit; font-weight: 700; font-size: .95em; text-align: left; cursor: pointer; max-width: 100%; }
+.fu-chip:active { background: var(--accent-soft); }
