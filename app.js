@@ -2185,6 +2185,12 @@ function openSettings() {
     const cr = $("#set-creative");
     cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
+    // стиль творческих роликов — пока только для проверки администратором
+    $("#creative-style").hidden = !me().admin;
+    document.querySelectorAll("#creative-style button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.style === creativeStyle());
+      b.onclick = () => { store.set("creativeStyle:" + SESSION.user, b.dataset.style); document.querySelectorAll("#creative-style button").forEach((x) => x.classList.toggle("on", x === b)); };
+    });
     document.querySelectorAll("#creative-model button").forEach((b) => {
       b.classList.toggle("on", b.dataset.model === creativeModel());
       b.onclick = () => {
@@ -3294,7 +3300,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=102");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=103");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3618,6 +3624,16 @@ function creativeAllowed() { return true; }
 // творческий режим включён у всех по умолчанию; простое видео — если человек сам выключит
 function creativePref() { const v = store.get("creative:" + SESSION.user); return v === null || v === undefined ? true : v !== false; }
 function creativeOn() { return !!(creativeAllowed() && creativePref() && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
+function creativeStyle() { return (me().admin && store.get("creativeStyle:" + SESSION.user)) || "std"; }
+// шаблон стиля «Риограф»: готовые кисти (код) и правила для Opus, грузятся только когда нужны
+let RISO = null;
+async function risoAssets() {
+  if (!RISO) {
+    const [lib, doc] = await Promise.all(["riso/lib.js?v=1", "riso/doc.md?v=1"].map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error("шаблон стиля не загрузился"); return r.text(); })));
+    RISO = { lib, doc };
+  }
+  return RISO;
+}
 function creativeModel() { return store.get("creativeModel:" + SESSION.user) || "claude-opus-5-5"; }
 
 // Талисман и заставка — обычные функции без внешних зависимостей: их же получает песочница
@@ -3978,10 +3994,10 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Главное — голос, под ним ещё будет музыка: громкость 0.08…0.2, в среднем не чаще одного звука в 1–1,5 с (серия тиков у счётчика — один звук). Финальную заставку озвучивает приложение.`;
 
 let CUR_VID = null;
-async function directorCall(messages, onChars, model) {
+async function directorCall(messages, onChars, model, system) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: system || DIRECTOR_PROMPT, messages }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -4039,6 +4055,9 @@ async function makeCreativeScene(v, label) {
     } catch (_) {}
   }
   const msgs = [{ role: "user", content: thumbs.length ? [...thumbs, { type: "text", text: ask }] : ask }];
+  // стиль: «Риограф» добавляет к заданию правила стиля, а к коду — библиотеку готовых кистей R
+  const style = creativeStyle(); let SYS = DIRECTOR_PROMPT, LIB = "";
+  if (style === "riso") { const a = await risoAssets(); SYS = DIRECTOR_PROMPT + "\n\n" + a.doc; LIB = a.lib + "\n"; note("стиль: Риограф"); }
   // фото в песочницу (копии — оригиналы нужны для обычного видео, если творческое не выйдет)
   const sendPhotos = async (box) => {
     if (!photos.length) return;
@@ -4048,9 +4067,9 @@ async function makeCreativeScene(v, label) {
   let cut = false;
   // правки пишет быстрый Sonnet: он только чинит готовый код
   const write = async (what, fast) => {
-    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null);
+    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null, SYS);
     cut = stop === "max_tokens";
-    const code = extractCode(txt);
+    const raw = extractCode(txt), code = raw && LIB + raw;
     note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}`);
     msgs.push({ role: "assistant", content: txt });
     return code;

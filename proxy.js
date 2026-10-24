@@ -863,7 +863,9 @@ export async function handler(req, info) {
     payload.thinking = { type: "adaptive" };
     payload.output_config = { effort: "high" };
   }
-  if (body.system) payload.system = String(body.system).slice(0, 20000);
+  if (body.system) payload.system = String(body.system).slice(0, body.purpose === "video" ? 40000 : 20000);
+  // длинное задание режиссёра одинаково для всех роликов — кэшируем, чтобы не платить за него каждый раз
+  if (body.purpose === "video" && payload.system) payload.system = [{ type: "text", text: payload.system, cache_control: { type: "ephemeral" } }];
   if (user.webSearch && body.web !== false && !isLive) {
     payload.tools = [{
       type: env("WEB_SEARCH_TOOL", "web_search_20250305"),
