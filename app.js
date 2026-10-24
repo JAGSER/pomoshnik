@@ -1460,15 +1460,21 @@ const VOICES = [
 function userVoice() {
   return (SESSION && store.get("voice:" + SESSION.user)) || me().voice || (CFG.voice || {}).name || "Algieba";
 }
+// один и тот же кусок не запрашиваем дважды: чтение вслух и видео ждут общий запрос
+const TTS_INFLIGHT = new Map();
 async function ttsBlob(chunk, voice) {
   voice = voice || userVoice();
   const key = ttsKey(chunk, voice);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
-  blob = await ttsLoad(chunk, voice);
-  // запасной голос (когда основной упёрся в лимит) не запоминаем — в следующий раз запишется основным
-  if (!blob._backup) { TTS_MEM.set(key, blob); ADB.put(key, blob); }
-  return blob;
+  if (TTS_INFLIGHT.has(key)) return TTS_INFLIGHT.get(key);
+  const p = ttsLoad(chunk, voice).then((b) => {
+    // запасной голос (когда основной упёрся в лимит) не запоминаем — в следующий раз запишется основным
+    if (!b._backup) { TTS_MEM.set(key, b); ADB.put(key, b); }
+    return b;
+  }).finally(() => TTS_INFLIGHT.delete(key));
+  TTS_INFLIGHT.set(key, p);
+  return p;
 }
 async function ttsFetch(chunk, voice) { return URL.createObjectURL(await ttsBlob(chunk, voice)); }
 // Не больше двух запросов озвучки одновременно — у Google лимит в минуту
@@ -1488,6 +1494,8 @@ async function ttsLoad(chunk, voice) {
       catch (err) {
         // лимит в минуту: один раз ждём, сколько просит Google (не дольше 25 секунд), и пробуем снова
         if (err.retryAfter && attempt === 0 && err.retryAfter <= 25) { await new Promise((r) => setTimeout(r, err.retryAfter * 1000)); continue; }
+        // обрыв связи или зависший запрос — ещё одна попытка
+        if (err.network && attempt === 0) { await new Promise((r) => setTimeout(r, 1500)); continue; }
         throw err;
       }
     }
@@ -1495,18 +1503,26 @@ async function ttsLoad(chunk, voice) {
 }
 async function ttsLoadOnce(chunk, voice) {
   const v = CFG.voice || {};
-  const r = await fetch(CFG.proxy + "/tts", {
+  // не ждём дольше 70 секунд: сервер сам ждёт лимит до 30 с, плюс озвучка
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
+  let r;
+  try {
+    r = await fetch(CFG.proxy + "/tts", {
+    signal: ctl.signal,
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: v.model }),
-  });
+    });
+  } catch (e) { clearTimeout(timer); const er = new Error(ctl.signal.aborted ? "Голос Gemini не ответил вовремя" : "Нет связи с сервером озвучки"); er.network = true; throw er; }
   if (r.status === 501) GEMINI_OFF = true;
   if (!r.ok) {
+    clearTimeout(timer);
     const d = await r.json().catch(() => ({}));
     const e = new Error(d.error || "Голос Gemini недоступен");
     if (r.status === 429) e.retryAfter = Math.max(3, Number(d.retryAfter) || 20);
     throw e;
   }
-  const b = await r.blob();
+  let b;
+  try { b = await r.blob(); } catch (e) { const er = new Error("Озвучка пришла не полностью"); er.network = true; throw er; } finally { clearTimeout(timer); }
   const used = r.headers.get("X-TTS-Model") || "";
   if (used.startsWith("backup:")) b._backup = used;
   return b;
@@ -2638,7 +2654,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=70");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=71");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
