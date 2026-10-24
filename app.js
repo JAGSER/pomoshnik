@@ -3300,7 +3300,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=105");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=106");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3955,6 +3955,7 @@ class Sandbox {
 }
 
 /* ===== Режиссёр: Claude придумывает и программирует ролик ===== */
+const DIRECTOR_RULE_CHARS = "ПЕРСОНАЖИ И БРЕНДЫ: не рисуй известных персонажей, маскотов и логотипы (покемоны, герои мультфильмов и игр, фирменные знаки) — даже если ответ о них. Передай тему своими метафорами, предметами, схемами, датами и талисманом приложения (k.mascot).\n\n";
 const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и программист. По тексту озвучки ты придумываешь и программируешь вертикальный ролик 1080×1920 на Canvas 2D. Каждый ролик уникален: своя идея, композиция, палитра, ритм. Не делай слайды с текстом — делай анимацию: предметы и метафоры, схемы, линии, которые рисуются, числа, которые набегают, движение камеры, смену планов.
 
 ФОРМАТ ОТВЕТА: только один блок \`\`\`js … \`\`\` без пояснений. В нём функция draw(t, k), которая рисует кадр в момент t (секунды, 0…k.duration). Рядом можно объявить свои функции и константы. Кадры рисуются независимо и не по порядку — всё вычисляй из t, не храни состояние между вызовами. Нельзя: сеть, картинки, DOM, setTimeout, Math.random (используй k.rand(seed)).
@@ -3999,7 +4000,7 @@ let CUR_VID = null;
 async function directorCall(messages, onChars, model, system) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: system || DIRECTOR_PROMPT, cacheSystem: !!system && system !== DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: system || DIRECTOR_PROMPT, cacheSystem: !!system && system.length > DIRECTOR_PROMPT.length + 1000, messages }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -4059,6 +4060,8 @@ async function makeCreativeScene(v, label) {
   const msgs = [{ role: "user", content: thumbs.length ? [...thumbs, { type: "text", text: ask }] : ask }];
   // стиль: «Риограф» добавляет к заданию правила стиля, а к коду — библиотеку готовых кистей R
   const style = creativeStyle(); let SYS = DIRECTOR_PROMPT, LIB = "";
+  // «Исходный»: ровно как было до экспериментов — задание без новых правил, всегда Opus
+  if (style === "orig") { SYS = DIRECTOR_PROMPT.replace(DIRECTOR_RULE_CHARS, ""); note("стиль: исходный (Opus)"); }
   if (style === "riso") { const a = await risoAssets(); SYS = DIRECTOR_PROMPT + "\n\n" + a.doc; LIB = a.lib + "\n"; note("стиль: Риограф"); }
   // фото в песочницу (копии — оригиналы нужны для обычного видео, если творческое не выйдет)
   const sendPhotos = async (box) => {
@@ -4069,7 +4072,7 @@ async function makeCreativeScene(v, label) {
   let cut = false;
   // правки пишет быстрый Sonnet: он только чинит готовый код
   const write = async (what, fast) => {
-    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null, SYS);
+    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : style === "orig" ? "claude-opus-5-5" : null, SYS);
     cut = stop === "max_tokens";
     const raw = extractCode(txt), code = raw && LIB + raw;
     note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}`);
