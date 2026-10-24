@@ -822,6 +822,12 @@ export async function handler(req, info) {
         // незарегистрированные гости: с одного адреса не больше 3 пробных творческих роликов в неделю
         const guestIpKey = !user.acct.pw ? ["cvip", await sha(ip), Math.floor(Date.now() / 604800000)] : null;
         if (guestIpKey && (await kvNum(kv, guestIpKey)) >= Number(env("CREATIVE_PER_IP_WEEK", "3"))) return json({ error: user.acct.lang === "en" ? "Trial creative videos from this internet connection are used up this week. Save your account (⚙️ → name and password) to unlock them. This one is a simple video." : "С этого интернета пробные творческие ролики на этой неделе уже взяли. Сохраните аккаунт (⚙️ → имя и пароль), и они откроются. Сейчас сделан обычный ролик.", code: "creative_reg" }, 402, h);
+        // незарегистрированные гости: между творческими роликами минимум 10 минут
+        if (!user.acct.pw && u.creativeLeft > 0) {
+          const last = (await kv.get(["cvlast", user.id])).value || 0, gap = Number(env("CREATIVE_GAP_MIN", "10")) * 60000, wait = Math.ceil((last + gap - Date.now()) / 60000);
+          if (wait > 0) return json({ error: user.acct.lang === "en" ? `Next creative video in ${wait} min, or right away after you save your account (⚙️ → name and password). This one is a simple video.` : `Следующий творческий ролик через ${wait} мин., а после сохранения аккаунта (⚙️ → имя и пароль) без ожидания. Сейчас сделан обычный ролик.`, code: "creative_wait" }, 402, h);
+          await kv.set(["cvlast", user.id], Date.now(), { expireIn: gap });
+        }
         if (guestIpKey && u.creativeLeft > 0) await kvInc(kv, guestIpKey, 1, 8);
         if (u.creativeLeft <= 0) return json({ error: plan === "free" ? "Творческий ролик на бесплатном тарифе: 1 в месяц. Сделаю обычный ролик." : "Творческие ролики на этот месяц закончились. Сделаю обычный ролик.", code: "creative_limit" }, 402, h);
         await kvInc(kv, ["cvt", user.id], 1, 0); await kvInc(kv, ["cvm", user.id, MONTH()], 1, 40);
