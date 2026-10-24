@@ -79,13 +79,33 @@
         "Что ты умеешь?",
         "Помоги разобраться с телефоном",
         "Расскажи новости",
-        "Посоветуй фильм на вечер"
+        "Посоветуй фильм на вечер",
+        "Какая погода будет на выходных?",
+        "Как сделать шрифт крупнее?",
+        "Объясни, что значит это слово",
+        "Посоветуй книгу почитать",
+        "Как отправить фото в WhatsApp?",
+        "Сколько варить яйцо всмятку?",
+        "Какие цветы посадить на даче?",
+        "Как вывести пятно с рубашки?",
+        "Помоги посчитать, сколько я потратил",
+        "Чем заняться с внуками дома?"
       ],
       "examples_en": [
         "What can you do?",
         "Help me with my phone",
         "Tell me the news",
-        "Suggest a movie for tonight"
+        "Suggest a movie for tonight",
+        "What's the weather this weekend?",
+        "How do I make the text bigger?",
+        "What does this word mean?",
+        "Recommend a good book to read",
+        "How do I send a photo on WhatsApp?",
+        "Help me plan my week",
+        "How do I get a stain out of a shirt?",
+        "Ideas for a class activity tomorrow",
+        "Help me budget my salary",
+        "Easy plants to grow at home?"
       ]
     },
     "example": {
@@ -113,7 +133,17 @@
         "Звонили из банка и просят код из СМС",
         "Пришло сообщение, что выиграл приз",
         "Пишет «сын» с нового номера и просит денег",
-        "Звонят из полиции про родственника"
+        "Звонят из полиции про родственника",
+        "Пришла СМС из банка, это не мошенники?",
+        "Просят перевести деньги на безопасный счёт",
+        "Звонили из Госуслуг, просят код",
+        "Предлагают бесплатно заменить счётчики",
+        "Пришла ссылка на выплату от государства",
+        "Звонят и просят продиктовать номер карты",
+        "Предлагают вложиться, обещают большой доход",
+        "Пришёл звонок, что карта заблокирована",
+        "Пришла посылка, которую я не заказывал",
+        "Просят установить приложение на телефон"
       ]
     },
     "paper": {
@@ -131,7 +161,18 @@
       "examples": [
         "Сфотографирую квитанцию",
         "Пришло письмо из суда",
-        "Принесли договор на подпись"
+        "Принесли договор на подпись",
+        "Сфотографирую письмо из налоговой",
+        "Что за штраф мне пришёл?",
+        "Пришло извещение с почты",
+        "Сфотографирую выписку из больницы",
+        "Что написано в договоре с банком?",
+        "Пришло требование оплатить долг",
+        "Сфотографирую страховой полис",
+        "Что за письмо от управляющей компании?",
+        "Сфотографирую чек, проверь сумму",
+        "Пришло уведомление из Соцфонда",
+        "Сфотографирую справку, что в ней?"
       ]
     },
     "letter": {
@@ -148,7 +189,18 @@
       "examples": [
         "Жалоба в управляющую компанию",
         "Заявление в поликлинику",
-        "Заявление в банк"
+        "Заявление в банк",
+        "Жалоба на шумных соседей",
+        "Заявление на перерасчёт за воду",
+        "Жалоба на грязь в подъезде",
+        "Заявление в соцзащиту на льготу",
+        "Жалоба на врача главврачу",
+        "Претензия в магазин за брак",
+        "Заявление на возврат денег за товар",
+        "Попросить починить крышу над квартирой",
+        "Жалоба на плохое отопление",
+        "Заявление, чтобы закрыть карту в банке",
+        "Обращение к депутату по двору"
       ]
     },
     "cook": {
@@ -167,13 +219,33 @@
         "Есть курица, картошка и лук",
         "Что-нибудь лёгкое на ужин",
         "Простой суп на 3 дня",
-        "Что испечь к чаю"
+        "Что испечь к чаю",
+        "Что приготовить из фарша?",
+        "Что сделать из капусты и моркови?",
+        "Каша на завтрак повкуснее",
+        "Что приготовить из рыбы?",
+        "Что сделать из вчерашнего риса?",
+        "Блюдо к праздничному столу",
+        "Простой салат из того, что есть",
+        "Что приготовить без мяса?",
+        "Как сварить компот из яблок?",
+        "Сфотографирую холодильник"
       ],
       "examples_en": [
         "I have chicken, potatoes and onion",
         "Something light for dinner",
         "A simple soup",
-        "What to bake for tea"
+        "What to bake for tea",
+        "What can I make with rice and eggs?",
+        "A quick lunch box idea",
+        "Something with fish and vegetables",
+        "What to cook with leftover rice?",
+        "An easy dessert for guests",
+        "A healthy breakfast idea",
+        "What can I make without meat?",
+        "A dish for a family gathering",
+        "Something simple with noodles",
+        "I'll take a photo of my fridge"
       ]
     },
     "fix": {
@@ -191,7 +263,18 @@
       "examples": [
         "Течёт кран",
         "Не работает розетка",
-        "Сломалась дверная ручка"
+        "Сломалась дверная ручка",
+        "Не сливается вода в унитазе",
+        "Перегорела лампочка в люстре",
+        "Засорилась раковина на кухне",
+        "Не закрывается окно",
+        "Выбивает пробки",
+        "Капает вода из-под ванны",
+        "Не работает пульт от телевизора",
+        "Скрипит дверь",
+        "Не включается стиральная машина",
+        "Отклеились обои",
+        "Пахнет газом, что делать?"
       ]
     },
     "wish": {
@@ -210,13 +293,33 @@
         "Поздравь с днём рождения подругу",
         "Поздравь внука",
         "Поздравь с Новым годом",
-        "Поздравь с юбилеем, 70 лет"
+        "Поздравь с юбилеем, 70 лет",
+        "Поздравь дочь с днём рождения",
+        "Поздравь с 8 Марта",
+        "Поздравь с 23 февраля",
+        "Поздравь с годовщиной свадьбы",
+        "Поздравь соседку с юбилеем",
+        "Поздравь с Пасхой",
+        "Поздравь сына с днём рождения",
+        "Поздравь в стихах, коротко",
+        "Поздравь с рождением правнука",
+        "Поздравь бывших коллег с праздником"
       ],
       "examples_en": [
         "Birthday wish for a friend",
         "Wish for my student",
         "New Year greeting",
-        "Wedding anniversary"
+        "Wedding anniversary",
+        "Hari Raya greeting for family",
+        "Chinese New Year wishes",
+        "Deepavali greeting for a colleague",
+        "Teachers' Day thank you to a colleague",
+        "Birthday wish for my mum",
+        "Get well soon message",
+        "Congratulations on a new baby",
+        "Wish for my students' graduation",
+        "Short birthday poem",
+        "Wish for my boyfriend's birthday"
       ]
     },
     "memory": {
@@ -232,7 +335,18 @@
       "examples": [
         "Расскажу о своём детстве",
         "Как я познакомилась с мужем",
-        "Моя первая работа"
+        "Моя первая работа",
+        "Расскажу о своих родителях",
+        "Как мы жили в моём детстве",
+        "Моя школа и учителя",
+        "Как родились мои дети",
+        "Расскажу про нашу свадьбу",
+        "Мои бабушка и дедушка",
+        "Где я служил в армии",
+        "Самое смешное, что со мной было",
+        "Как мы получили квартиру",
+        "Мои любимые песни молодости",
+        "Сложим мои истории для внуков"
       ]
     },
     "talk": {
@@ -251,13 +365,33 @@
         "Расскажи что-нибудь интересное",
         "Давай поговорим о книгах",
         "Мне скучно",
-        "Посоветуй, чем заняться вечером"
+        "Посоветуй, чем заняться вечером",
+        "Давай поговорим о старых фильмах",
+        "Расскажи интересное про космос",
+        "Поговорим о даче и огороде",
+        "Расскажи историю какого-нибудь города",
+        "Давай вспомним старые песни",
+        "Загадай мне загадку",
+        "Расскажи о животных что-нибудь",
+        "Поговорим о внуках",
+        "Мне одиноко, поговори со мной",
+        "Давай поспорим о чём-нибудь"
       ],
       "examples_en": [
         "Tell me something interesting",
         "Let's talk about books",
         "I'm bored",
-        "What to do this evening"
+        "What to do this evening",
+        "Let's talk about movies",
+        "Tell me something about space",
+        "Let's talk about travel",
+        "Tell me a fun fact about animals",
+        "Give me a riddle",
+        "Let's talk about music",
+        "I had a long day at school",
+        "Tell me about a famous person",
+        "I feel lonely, talk with me",
+        "Let's talk about food"
       ]
     },
     "tests": {
@@ -275,7 +409,18 @@
       "examples": [
         "Сфотографирую анализ крови",
         "Что значит высокий холестерин?",
-        "Объясни анализ мочи"
+        "Объясни анализ мочи",
+        "Сфотографирую заключение врача",
+        "Высокий сахар в крови, это плохо?",
+        "Что значит низкий гемоглобин?",
+        "Сфотографирую биохимию крови",
+        "Объясни результат УЗИ",
+        "Что значит повышенный СОЭ?",
+        "Сфотографирую кардиограмму",
+        "Объясни анализ на гормоны щитовидки",
+        "Что спросить у врача по анализам?",
+        "Сравни мои старые и новые анализы",
+        "Что значит высокий креатинин?"
       ]
     },
     "pills": {
@@ -294,12 +439,34 @@
       "examples": [
         "Сфотографирую упаковку",
         "Можно ли пить вместе два лекарства?",
-        "Пропустил таблетку, что делать?"
+        "Пропустил таблетку, что делать?",
+        "Сфотографирую инструкцию",
+        "Для чего мне выписали это лекарство?",
+        "Пить до еды или после?",
+        "Какие побочные эффекты у таблеток?",
+        "Можно ли с этим лекарством алкоголь?",
+        "Есть ли аналог подешевле?",
+        "Можно ли делить таблетку пополам?",
+        "Истёк срок годности, можно пить?",
+        "Как хранить это лекарство?",
+        "От таблеток кружится голова, это они?",
+        "Можно ли пить на ночь?"
       ],
       "examples_en": [
         "I'll take a photo of the box",
         "Can I take two medicines together?",
-        "I missed a pill, what now?"
+        "I missed a pill, what now?",
+        "I'll take a photo of the leaflet",
+        "What is this medicine for?",
+        "Before or after meals?",
+        "What are the side effects?",
+        "Can I take it with coffee?",
+        "Is there a cheaper alternative?",
+        "Can I split this tablet in half?",
+        "It's expired, is it still safe?",
+        "How should I store this medicine?",
+        "Is it safe while breastfeeding?",
+        "Can I take it before bed?"
       ]
     },
     "symptoms": {
@@ -318,13 +485,33 @@
         "Болит голова",
         "Скачет давление",
         "Болит спина",
-        "Кружится голова"
+        "Кружится голова",
+        "Болит колено при ходьбе",
+        "Температура и ломит тело",
+        "Болит желудок после еды",
+        "Отекают ноги к вечеру",
+        "Давно кашляю, не проходит",
+        "Немеют пальцы на руках",
+        "Сердце колотится часто",
+        "Болит горло, трудно глотать",
+        "Часто бегаю в туалет ночью",
+        "Слабость, ничего не хочется"
       ],
       "examples_en": [
         "I have a headache",
         "My back hurts",
         "I feel dizzy",
-        "Sore throat"
+        "Sore throat",
+        "I have a fever and body aches",
+        "My stomach hurts after eating",
+        "I've had a cough for weeks",
+        "My knee hurts when I walk",
+        "I feel tired all the time",
+        "My ankles are swollen",
+        "I have a rash on my arm",
+        "My eyes are red and itchy",
+        "I have a toothache",
+        "I lost my voice from teaching"
       ]
     },
     "diet": {
@@ -341,7 +528,18 @@
       "examples": [
         "Что есть при давлении",
         "Что есть при диабете",
-        "Меню на неделю попроще"
+        "Меню на неделю попроще",
+        "Что есть, если болит желудок?",
+        "Как питаться при подагре?",
+        "Что есть при высоком холестерине?",
+        "Чем завтракать, чтобы был сытым?",
+        "Сколько воды пить в день?",
+        "Можно ли мне сладкое?",
+        "Что есть, чтобы не было запоров?",
+        "Как похудеть без жёстких диет?",
+        "Какие продукты полезны для суставов?",
+        "Что есть при низком гемоглобине?",
+        "Чем заменить соль в еде?"
       ]
     },
     "sleep": {
@@ -359,12 +557,34 @@
       "examples": [
         "Не могу уснуть",
         "Просыпаюсь ночью",
-        "Поговори со мной перед сном"
+        "Поговори со мной перед сном",
+        "Просыпаюсь в 4 утра и не сплю",
+        "Сплю днём, а ночью не могу",
+        "Тревожные мысли не дают уснуть",
+        "Сколько мне нужно спать?",
+        "Чем заменить снотворное?",
+        "Ноги ноют по ночам, не сплю",
+        "Расскажи что-нибудь спокойное на ночь",
+        "Утром встаю разбитым",
+        "Храплю, это опасно?",
+        "Можно ли пить чай на ночь?",
+        "Давно плохо сплю, к какому врачу?"
       ],
       "examples_en": [
         "I can't fall asleep",
         "I wake up at night",
-        "Talk to me before sleep"
+        "Talk to me before sleep",
+        "I wake up too early",
+        "My mind won't stop at night",
+        "How many hours should I sleep?",
+        "I nap in the day, then can't sleep",
+        "I feel tired every morning",
+        "Tell me something calming",
+        "Is it OK to use my phone in bed?",
+        "Can I drink tea in the evening?",
+        "It's too hot to sleep",
+        "I'm stressed about work and can't sleep",
+        "I've slept badly for weeks, see a doctor?"
       ]
     },
     "utility": {
@@ -381,7 +601,18 @@
       "examples": [
         "Сфотографирую квитанцию",
         "Почему выросла плата?",
-        "Как пожаловаться на начисления"
+        "Как пожаловаться на начисления",
+        "Почему такая большая сумма за отопление?",
+        "Начислили за воду больше, чем по счётчику",
+        "Что такое капремонт в квитанции?",
+        "Платят за человека, который не живёт",
+        "Как передать показания счётчиков?",
+        "Что за строка про содержание жилья?",
+        "Пришёл долг, а я всё оплатил",
+        "Как сделать перерасчёт, если уезжал?",
+        "Положена ли мне скидка на ЖКХ?",
+        "Сравни с прошлой квитанцией",
+        "Когда менять счётчик воды?"
       ]
     },
     "benefits": {
@@ -398,7 +629,18 @@
       "examples": [
         "Какие льготы мне положены",
         "Как оформить выплату",
-        "Как записаться к врачу через Госуслуги"
+        "Как записаться к врачу через Госуслуги",
+        "Как получить звание ветерана труда?",
+        "Положена ли скидка на коммуналку?",
+        "Как получить бесплатные лекарства?",
+        "Как оформить инвалидность?",
+        "Положен ли бесплатный проезд?",
+        "Как получить путёвку в санаторий?",
+        "Как войти в Госуслуги, забыл пароль",
+        "Как получить налоговый вычет за лечение?",
+        "Положена ли льгота по налогу на дачу?",
+        "Как оформить уход за пожилым?",
+        "Как записаться в МФЦ?"
       ]
     },
     "pension": {
@@ -414,7 +656,18 @@
       "examples": [
         "Когда будет индексация",
         "Как пересчитать пенсию",
-        "Что за письмо из Соцфонда"
+        "Что за письмо из Соцфонда",
+        "Почему пенсия стала меньше?",
+        "Положена ли надбавка после 80 лет?",
+        "Как узнать свой стаж?",
+        "Учли ли мой стаж в колхозе?",
+        "Как сменить банк для пенсии?",
+        "Положена ли доплата за иждивенца?",
+        "Работаю на пенсии, будет ли прибавка?",
+        "Как получать пенсию на почте?",
+        "Что такое баллы в пенсии?",
+        "Сфотографирую письмо из Соцфонда",
+        "Не пришла пенсия, что делать?"
       ]
     },
     "buy": {
@@ -433,12 +686,34 @@
       "examples": [
         "Сфотографирую товар",
         "Стоит ли брать в кредит",
-        "Сравни два телефона"
+        "Сравни два телефона",
+        "Сфотографирую объявление на Авито",
+        "Не дорого ли просят за это?",
+        "Какой взять телевизор?",
+        "Нужна ли мне эта страховка?",
+        "Предлагают прибор от всех болезней",
+        "Чем заменить подешевле?",
+        "Стоит ли покупать б/у холодильник?",
+        "Продавец просит предоплату, можно?",
+        "Какой выбрать пылесос?",
+        "Стоит ли брать эту путёвку?",
+        "Это настоящий товар или подделка?"
       ],
       "examples_en": [
         "I'll take a photo of the item",
         "Is it worth buying on credit?",
-        "Compare two phones"
+        "Compare two phones",
+        "Is this price fair?",
+        "I'll take a photo of the online ad",
+        "Which laptop for school work?",
+        "Seller wants payment first, is it safe?",
+        "Is this a real brand or a fake?",
+        "Cheaper alternative to this?",
+        "Should I buy this used?",
+        "Which air fryer should I get?",
+        "Is this sale too good to be true?",
+        "Do I really need this?",
+        "Is this insurance worth it?"
       ]
     },
     "screen": {
@@ -457,12 +732,34 @@
       "examples": [
         "Покажу экран телефона",
         "Покажу телевизор",
-        "Покажу компьютер"
+        "Покажу компьютер",
+        "Как ответить на видеозвонок?",
+        "Не могу найти фото в телефоне",
+        "Пропал звук на телевизоре",
+        "Как сделать буквы крупнее?",
+        "Выскочило окно, что нажать?",
+        "Как подключиться к Wi-Fi?",
+        "Как отправить фото дочке?",
+        "Как найти канал на телевизоре?",
+        "Телефон просит обновиться, нажимать?",
+        "Как оплатить через приложение банка?",
+        "Как удалить лишнее, память заполнена?"
       ],
       "examples_en": [
         "I'll show my phone screen",
         "I'll show my laptop",
-        "I'll show the TV"
+        "I'll show the TV",
+        "How do I join a video call?",
+        "I can't find my photos",
+        "There's no sound on the TV",
+        "How do I make the text bigger?",
+        "A pop-up appeared, what do I tap?",
+        "How do I connect to Wi-Fi?",
+        "How do I share a file with a friend?",
+        "How do I print from my laptop?",
+        "My phone wants to update, should I?",
+        "How do I free up storage?",
+        "How do I turn on subtitles?"
       ]
     },
     "gift": {
@@ -480,12 +777,34 @@
       "examples": [
         "Подарок внуку 7 лет",
         "Подарок подруге до 2000 ₽",
-        "Подарок мужу на юбилей"
+        "Подарок мужу на юбилей",
+        "Подарок жене на 8 Марта",
+        "Что подарить маме на день рождения",
+        "Недорогой подарок соседке",
+        "Подарок внучке-подростку 14 лет",
+        "Подарок молодым на свадьбу",
+        "Подарок мужчине, у которого всё есть",
+        "Подарок на новоселье",
+        "Подарок своими руками",
+        "Подарок коллеге при выходе на пенсию",
+        "Подарок врачу в благодарность",
+        "Подарок учительнице внука"
       ],
       "examples_en": [
         "Gift for a 7-year-old",
         "Gift for a friend",
-        "Gift for my boyfriend"
+        "Gift for my boyfriend",
+        "Gift for my mum's birthday",
+        "Gift for a colleague under RM50",
+        "Hari Raya gift ideas",
+        "Wedding gift for a couple",
+        "Small gifts for my students",
+        "Handmade gift ideas",
+        "Anniversary gift for my boyfriend",
+        "Housewarming gift",
+        "Gift for someone who has everything",
+        "Farewell gift for a teacher friend",
+        "Thank-you gift for a neighbour"
       ]
     },
     "kids": {
@@ -502,7 +821,18 @@
       "examples": [
         "Сказка на ночь",
         "Почему небо голубое?",
-        "Игра для ребёнка дома"
+        "Игра для ребёнка дома",
+        "Сказка про котёнка для малыша 4 лет",
+        "Сказка для того, кто боится темноты",
+        "Почему кошка мурлычет?",
+        "Внук спросил, откуда берётся дождь",
+        "Загадки для ребёнка 6 лет",
+        "Игра на прогулке во дворе",
+        "Чем занять внука в дороге",
+        "Короткий стишок, чтобы выучить",
+        "Поделка из бумаги вместе с внуком",
+        "Считалка для игры с друзьями",
+        "Как объяснить ребёнку, зачем спать"
       ]
     },
     "support": {
@@ -520,12 +850,34 @@
       "examples": [
         "Мне грустно",
         "Тревожно, не могу успокоиться",
-        "Чувствую себя одиноко"
+        "Чувствую себя одиноко",
+        "Не могу уснуть, мысли не дают",
+        "Хочу просто поговорить",
+        "Скучаю по детям, они далеко",
+        "Ссора с близким, на душе тяжело",
+        "Нет сил ни на что",
+        "Ничего не радует",
+        "Тоскую по ушедшему человеку",
+        "Волнуюсь перед походом к врачу",
+        "Переживаю из-за денег",
+        "Злюсь и не могу отпустить обиду",
+        "Беспокоюсь за здоровье родных"
       ],
       "examples_en": [
         "I feel sad",
         "I'm anxious",
-        "I feel lonely"
+        "I feel lonely",
+        "I can't sleep, my mind won't stop",
+        "I just want to talk",
+        "I miss my family",
+        "I had a fight with someone close",
+        "I feel exhausted",
+        "Nothing makes me happy lately",
+        "Work is stressing me out",
+        "Nervous about something tomorrow",
+        "I'm worried about money",
+        "I can't let go of being hurt",
+        "I feel like I'm not good enough"
       ]
     },
     "movies": {
@@ -544,12 +896,33 @@
         "Хорошая комедия",
         "Фильм о любви",
         "Сериал на вечер",
-        "Старое советское кино"
+        "Старое советское кино",
+        "Добрый фильм для всей семьи",
+        "Мультфильм посмотреть с внуками",
+        "Детектив, чтобы держал в напряжении",
+        "Фильм по реальной истории",
+        "Фильм как Москва слезам не верит",
+        "Документальный фильм о природе",
+        "Новый хороший российский сериал",
+        "Фильм про войну",
+        "Экранизация известной книги",
+        "Красивый фильм про путешествия"
       ],
       "examples_en": [
         "A good comedy",
         "A romantic movie",
-        "A series for tonight"
+        "A series for tonight",
+        "A feel-good family movie",
+        "A movie to watch with kids",
+        "A gripping thriller",
+        "A movie based on a true story",
+        "A good Korean drama",
+        "A Malay movie worth watching",
+        "A nature documentary",
+        "A movie like Crazy Rich Asians",
+        "A good animated film",
+        "A movie based on a famous book",
+        "A short series to finish this weekend"
       ]
     },
     "travel": {
@@ -567,12 +940,34 @@
       "examples": [
         "Санаторий для здоровья",
         "Что взять в поездку",
-        "Как доехать на поезде"
+        "Как доехать на поезде",
+        "Куда съездить на выходные недалеко",
+        "Недорогой отдых на море",
+        "Какие лекарства взять с собой",
+        "Как купить билет на поезд онлайн",
+        "Куда поехать с внуками",
+        "Как подготовиться к перелёту",
+        "Как получить путёвку в санаторий",
+        "Что посмотреть в Казани за 2 дня",
+        "Чтобы не укачивало в дороге",
+        "Какие документы нужны за границу",
+        "Сколько денег взять в поездку"
       ],
       "examples_en": [
         "Weekend trip ideas",
         "What to pack",
-        "How to get there by bus"
+        "How to get there by bus",
+        "Cheap beach getaway in Malaysia",
+        "Day trip from Kuala Lumpur",
+        "What to see in Penang in 2 days",
+        "Documents for a trip to Thailand",
+        "Tips for a long flight",
+        "Budget for a 3-day trip",
+        "Where to go with kids",
+        "Best time to visit Cameron Highlands",
+        "How to avoid motion sickness",
+        "Medicine to bring on a trip",
+        "How to book ETS train tickets"
       ]
     },
     "news": {
@@ -590,12 +985,34 @@
       "examples": [
         "Главное за сегодня",
         "Что с погодой на неделе",
-        "Новости в моём городе"
+        "Новости в моём городе",
+        "Что нового с пенсиями",
+        "Что случилось в мире за неделю",
+        "Новости здоровья и медицины",
+        "Какие законы вступают в силу",
+        "Что с ценами и курсом рубля",
+        "Новости спорта коротко",
+        "Что нового открыли учёные",
+        "Объясни непонятную новость",
+        "Новости кино и театра",
+        "Хорошие новости за сегодня",
+        "Что происходит в экономике"
       ],
       "examples_en": [
         "Today's main news",
         "Weather this week",
-        "News in my city"
+        "News in my city",
+        "Main news in Malaysia",
+        "World news this week",
+        "Good news today",
+        "Education news for teachers",
+        "Health news",
+        "What's happening with prices",
+        "Sports news in short",
+        "Science discoveries this week",
+        "Entertainment and movie news",
+        "Explain a news story to me",
+        "New rules coming into effect"
       ]
     },
     "explain": {
@@ -613,12 +1030,34 @@
       "examples": [
         "Что такое искусственный интеллект",
         "Как работает интернет",
-        "Что такое криптовалюта"
+        "Что такое криптовалюта",
+        "Что такое инфляция",
+        "Как растут проценты по вкладу",
+        "Как работает кредитная карта",
+        "Что такое облако в телефоне",
+        "Как распознать телефонных мошенников",
+        "Что такое QR-код",
+        "Что такое холестерин",
+        "Что такое Госуслуги и зачем они",
+        "Почему меняются времена года",
+        "Что такое ключевая ставка",
+        "Как работает микроволновка"
       ],
       "examples_en": [
         "What is artificial intelligence",
         "How does the internet work",
-        "What is inflation"
+        "What is inflation",
+        "What is a credit score",
+        "How do online scams work",
+        "What is the cloud on my phone",
+        "What is a QR code",
+        "How does interest on savings work",
+        "What is cholesterol",
+        "Why is there a monsoon season",
+        "What is climate change",
+        "How does Wi-Fi work",
+        "What is cryptocurrency",
+        "How does EPF savings grow"
       ]
     },
     "postcard": {
@@ -637,12 +1076,34 @@
       "examples": [
         "Открытка к дню рождения",
         "Открытка внукам",
-        "Открытка с праздником"
+        "Открытка с праздником",
+        "Открытка с Новым годом",
+        "Открытка с 8 Марта",
+        "Открытка ветерану к 9 Мая",
+        "Открытка молодым на свадьбу",
+        "Открытка с юбилеем 70 лет",
+        "Открытка с годовщиной свадьбы",
+        "Сфотографирую внучку для открытки",
+        "Открытка детям: скучаю",
+        "Открытка: поправляйся скорее",
+        "Открытка подруге просто так",
+        "Открытка к Пасхе"
       ],
       "examples_en": [
         "Birthday card",
         "Card for my students",
-        "Holiday card"
+        "Holiday card",
+        "Hari Raya greeting card",
+        "Chinese New Year card",
+        "Deepavali card",
+        "Teacher's Day card for a colleague",
+        "Wedding congratulations card",
+        "Anniversary card for my boyfriend",
+        "Get well soon card",
+        "Thank-you card for a friend",
+        "I'll take a photo for a card",
+        "Good luck card for exams",
+        "Miss you card for my family"
       ]
     },
     "translate": {
@@ -660,12 +1121,34 @@
       "examples": [
         "Переведи на английский",
         "Сфотографирую текст",
-        "Что значит это слово?"
+        "Что значит это слово?",
+        "Сфотографирую инструкцию к лекарству",
+        "Сфотографирую меню, переведи",
+        "Сфотографирую надпись на упаковке",
+        "Переведи письмо на русский",
+        "Переведи на малайский язык",
+        "Переведи на индонезийский",
+        "Как сказать спасибо по-английски",
+        "Как это правильно произносится?",
+        "Фразы для поездки в Турцию",
+        "Переведи слова песни",
+        "Переведи вежливо, как в письме"
       ],
       "examples_en": [
         "Translate into English",
         "I'll take a photo of the text",
-        "What does this word mean?"
+        "What does this word mean?",
+        "Translate into Malay",
+        "I'll take a photo of a sign",
+        "Translate a note for pupils' parents",
+        "Check my Malay grammar",
+        "How do I say this politely?",
+        "How do you pronounce this?",
+        "Translate a worksheet for my pupils",
+        "Translate this into simple English",
+        "What does this slang mean?",
+        "Basic Russian phrases to say hello",
+        "Translate song lyrics into English"
       ]
     },
     "plan": {
@@ -683,12 +1166,34 @@
       "examples": [
         "Урок математики, Тахун 2, 30 минут",
         "Урок английского, тема «Animals»",
-        "Урок науки, тема «Вода»"
+        "Урок науки, тема «Вода»",
+        "План урока: Year 3, наука, растения, 60 мин",
+        "RPH: Year 1, малайский, слоги, 30 мин",
+        "Year 5, математика: дроби, 60 мин",
+        "Year 4, английский: распорядок дня, 60 мин",
+        "Year 6, наука: пищевые цепи, 30 мин",
+        "Year 2, английский: фоника, краткие гласные",
+        "Year 3, математика: время по часам, 60 мин",
+        "Year 6: повторение математики к UASA, 60 мин",
+        "Year 1, физкультура: броски и ловля, 30 мин",
+        "Year 4, мораль: доброта, 30 мин",
+        "Year 5, английский: пишем открытку, 60 мин"
       ],
       "examples_en": [
         "Maths lesson, Year 2, 30 minutes",
         "English lesson: animals",
-        "Science lesson: water"
+        "Science lesson: water",
+        "Lesson plan: Year 3 Science, plants, 60 min",
+        "RPH: Year 1 Bahasa Melayu, suku kata, 30 min",
+        "Year 5 Maths: fractions, 60 min",
+        "Year 4 English: daily routines, 60 min",
+        "Year 6 Science: food chains, 30 min",
+        "Year 2 English: phonics, short vowels, 30 min",
+        "Year 3 Maths: telling time, 60 min",
+        "Year 6 Maths revision for UASA, 60 min",
+        "Year 1 PJ: throwing and catching, 30 min",
+        "Year 4 Pendidikan Moral: kindness, 30 min",
+        "Year 5 English: writing a postcard, 60 min"
       ]
     },
     "worksheet": {
@@ -706,12 +1211,34 @@
       "examples": [
         "Лист на сложение до 20",
         "Лист «Цвета» на английском",
-        "Лист по чтению для 1 класса"
+        "Лист по чтению для 1 класса",
+        "Year 2: вычитание с заёмом",
+        "Year 4: таблица умножения на 6-9",
+        "Year 3, английский: глаголы в прошедшем времени",
+        "Year 1, малайский: слоги типа KV+KV",
+        "Year 5, наука: состояния вещества",
+        "Year 3, математика: ринггиты и сены",
+        "Year 6, английский: понимание текста",
+        "Year 2, наука: живое и неживое",
+        "Year 4, малайский: kata nama am и khas",
+        "Year 5: площадь и периметр",
+        "Year 1, английский: прописи букв a-m"
       ],
       "examples_en": [
         "Addition up to 20",
         "Colours in English",
-        "Reading for year 1"
+        "Reading for year 1",
+        "Year 2 subtraction with borrowing",
+        "Year 4 times tables 6 to 9",
+        "Year 3 English: past tense verbs",
+        "Year 1 BM: suku kata KV+KV",
+        "Year 5 Science: states of matter",
+        "Year 3 Maths: Malaysian money, RM and sen",
+        "Year 6 English: reading comprehension",
+        "Year 2 Science: living and non-living things",
+        "Year 4 BM: kata nama am dan khas",
+        "Year 5 Maths: area and perimeter",
+        "Year 1 English: tracing letters a to m"
       ]
     },
     "quiz": {
@@ -729,12 +1256,34 @@
       "examples": [
         "Тест на 10 вопросов по математике",
         "Тест по английским словам",
-        "Викторина по природе"
+        "Викторина по природе",
+        "Year 4, наука: 15 вопросов про магниты",
+        "Year 2, английский: 10 вопросов на мн. число",
+        "Year 6: пробный UASA по математике, 20 вопр.",
+        "Year 3, малайский: 10 вопросов на kata kerja",
+        "Year 5, история: символы Малайзии, 12 вопр.",
+        "Year 1, математика: фигуры, 8 вопр. с картинками",
+        "Year 3, английский: верно/неверно по рассказу",
+        "Year 6, наука: 15 вопросов про электричество",
+        "Year 4: 10 задач на время",
+        "Year 2, наука: 10 вопросов про пять чувств",
+        "Викторина к Hari Merdeka на 10 вопросов"
       ],
       "examples_en": [
         "10-question maths quiz",
         "English vocabulary quiz",
-        "Nature quiz"
+        "Nature quiz",
+        "Year 4 Science: 15 questions on magnets",
+        "Year 2 English: 10 questions on plurals",
+        "Year 6 Maths: mock UASA, 20 questions",
+        "Year 3 BM: 10 questions on kata kerja",
+        "Year 5 Sejarah: national symbols, 12 questions",
+        "Year 1 Maths: shapes, 8 picture questions",
+        "Year 3 English: true/false quiz on a story",
+        "Year 6 Science: 15 questions on electricity",
+        "Year 4 Maths: 10 word problems on time",
+        "Year 2 Science: 10 questions on five senses",
+        "Merdeka Day class quiz, 10 questions"
       ]
     },
     "levels": {
@@ -752,12 +1301,34 @@
       "examples": [
         "Задачи на умножение",
         "Чтение текста",
-        "Английские слова"
+        "Английские слова",
+        "Year 3: задачи про деньги, 3 уровня",
+        "Year 5, английский: пишем короткое письмо",
+        "Year 1, малайский: чтение простых фраз",
+        "Year 4, наука: круговорот воды",
+        "Year 6, математика: отношения и пропорции",
+        "Year 2, английский: слова с sh и ch",
+        "Year 3, наука: группы животных",
+        "Year 4: деление столбиком",
+        "Year 5, малайский: короткое сочинение",
+        "Year 2: состав чисел до 100",
+        "Year 6, английский: союзы"
       ],
       "examples_en": [
         "Multiplication tasks",
         "Reading a text",
-        "English words"
+        "English words",
+        "Year 3 Maths: money word problems, 3 levels",
+        "Year 5 English: writing a short email",
+        "Year 1 BM: reading simple sentences",
+        "Year 4 Science: the water cycle",
+        "Year 6 Maths: ratio and proportion",
+        "Year 2 English: spelling sh and ch words",
+        "Year 3 Science: animal groups",
+        "Year 4 Maths: long division",
+        "Year 5 BM: menulis karangan pendek",
+        "Year 2 Maths: number bonds to 100",
+        "Year 6 English grammar: conjunctions"
       ]
     },
     "textbook": {
@@ -774,10 +1345,36 @@
       ],
       "action": "photo",
       "examples": [
-        "Сфотографирую страницу учебника"
+        "Сфотографирую страницу учебника",
+        "Сфотографирую учебник английского, Year 3",
+        "Сфотографирую текст для чтения на малайском",
+        "Фото страницы по математике: дай ещё примеров",
+        "Фото страницы по науке: тест на 5 вопросов",
+        "Фото рассказа: вопросы на понимание",
+        "Фото страницы: кратко пересказать для Year 1",
+        "Фото словарика урока: сделай карточки",
+        "Фото страницы: сделай домашнее задание",
+        "Фото страницы: 3 задания для работы в группах",
+        "Фото страницы на английском: перевод на малайский",
+        "Фото примера по математике: объясни просто",
+        "Фото страницы по истории: главное по пунктам",
+        "Фото рабочей тетради: составь ключ ответов"
       ],
       "examples_en": [
-        "I'll take a photo of the textbook page"
+        "I'll take a photo of the textbook page",
+        "I'll take a photo of a Year 3 English unit",
+        "I'll take a photo of a BM reading passage",
+        "Photo of a Maths page: make extra exercises",
+        "Photo of a Science page: make a 5-question quiz",
+        "Photo of a story: comprehension questions",
+        "Photo of a page: summarise it for Year 1",
+        "Photo of the vocab box: make word cards",
+        "Photo of a page: make a homework sheet",
+        "Photo of a page: 3 group activities for it",
+        "Photo of an English page: translate into Malay",
+        "Photo of a Maths example: explain it simply",
+        "Photo of a Sejarah page: key facts in points",
+        "Photo of the activity book: make answer key"
       ]
     },
     "kidsexplain": {
@@ -795,12 +1392,34 @@
       "examples": [
         "Почему идёт дождь",
         "Что такое дроби",
-        "Как растут растения"
+        "Как растут растения",
+        "Почему море солёное",
+        "Что такое Hari Merdeka, для Year 2",
+        "Почему бывает день и ночь",
+        "Как работают магниты, для Year 4",
+        "Что такое микробы и зачем мыть руки",
+        "Почему Луна меняет форму",
+        "Что такое существительное, для Year 1",
+        "Почему листья зелёные",
+        "Как электричество доходит до дома",
+        "Почему нельзя мусорить",
+        "Что такое тропический лес, для Year 3"
       ],
       "examples_en": [
         "Why does it rain",
         "What are fractions",
-        "How do plants grow"
+        "How do plants grow",
+        "Why is the sea salty",
+        "What is Merdeka Day, for Year 2",
+        "Why we have day and night",
+        "How magnets work, for Year 4",
+        "What are germs and why wash hands",
+        "Why the moon changes shape",
+        "What is a noun, for Year 1",
+        "Why leaves are green",
+        "How electricity gets to our home",
+        "Why we should not litter",
+        "What is a rainforest, for Year 3"
       ]
     },
     "project": {
@@ -818,12 +1437,34 @@
       "examples": [
         "Проект про экологию",
         "Проект про семью",
-        "Проект про здоровую еду"
+        "Проект про здоровую еду",
+        "Year 5: переработка мусора в школе, 3 недели",
+        "Year 3: праздники Малайзии",
+        "Year 4, наука: выращиваем фасоль",
+        "Year 6: профессия моей мечты",
+        "Year 2: наш школьный огород",
+        "Year 4: штаты Малайзии и их еда",
+        "Проект к Hari Merdeka для Year 5, 2 недели",
+        "Year 3, английский: книжка рассказов класса",
+        "Year 6: как экономить воду дома",
+        "Year 1: всё обо мне",
+        "Year 5, математика: магазин в классе"
       ],
       "examples_en": [
         "Project about the environment",
         "Project about family",
-        "Project about healthy food"
+        "Project about healthy food",
+        "Year 5: recycling at our school, 3 weeks",
+        "Year 3 project: Malaysian festivals",
+        "Year 4 Science: growing green beans",
+        "Year 6 project: my dream job",
+        "Year 2 project: our school garden",
+        "Year 4 project: Malaysian states and food",
+        "Merdeka project for Year 5, 2 weeks",
+        "Year 3 English: our class storybook",
+        "Year 6 project: saving water at home",
+        "Year 1 project: all about me",
+        "Year 5 Maths project: class shop"
       ]
     },
     "english": {
@@ -841,12 +1482,34 @@
       "examples": [
         "Урок «Животные»",
         "Урок «Цвета»",
-        "Урок «Моя семья»"
+        "Урок «Моя семья»",
+        "Year 1: приветствия и «меня зовут»",
+        "Year 2: еда и напитки, которые я люблю",
+        "Year 3: погода и одежда",
+        "Year 4: как пройти куда-то в городе",
+        "Year 5: рассказ о прошлых каникулах",
+        "Year 6: говорение, описание картинки",
+        "Year 1: числа от 1 до 20",
+        "Year 2: мой дом и комнаты",
+        "Year 3: предлоги in, on, under",
+        "Year 4: профессии людей",
+        "Year 5: сравнение животных, -er и -est"
       ],
       "examples_en": [
         "Lesson: animals",
         "Lesson: colours",
-        "Lesson: my family"
+        "Lesson: my family",
+        "Year 1: greetings and saying my name",
+        "Year 2: food and drinks I like",
+        "Year 3: weather and clothes",
+        "Year 4: giving directions in town",
+        "Year 5: talking about past holidays",
+        "Year 6 speaking: describing a picture",
+        "Year 1: numbers 1 to 20",
+        "Year 2: my house and rooms",
+        "Year 3: prepositions in, on, under",
+        "Year 4: jobs people do",
+        "Year 5: comparing animals, -er and -est"
       ]
     },
     "cards": {
@@ -864,12 +1527,34 @@
       "examples": [
         "Карточки «Фрукты»",
         "Карточки «Школа»",
-        "Карточки «Тело»"
+        "Карточки «Тело»",
+        "Карточки «Малайзийская еда», Year 2",
+        "Карточки «Погода»",
+        "Карточки: глаголы действия, Year 1",
+        "Карточки «Транспорт»",
+        "Карточки «Чувства и эмоции»",
+        "Карточки: sight words для Year 1",
+        "Карточки «Животные джунглей»",
+        "Карточки «Фигуры и размеры»",
+        "Карточки «Места в городе»",
+        "Карточки: научные слова Year 4, магниты",
+        "Карточки «Противоположности»"
       ],
       "examples_en": [
         "Cards: fruit",
         "Cards: school",
-        "Cards: body parts"
+        "Cards: body parts",
+        "Cards: Malaysian food, Year 2",
+        "Cards: weather words",
+        "Cards: action verbs for Year 1",
+        "Cards: transport",
+        "Cards: feelings and emotions",
+        "Cards: sight words for Year 1",
+        "Cards: rainforest animals",
+        "Cards: shapes and sizes",
+        "Cards: places in town",
+        "Cards: Year 4 Science words, magnets",
+        "Cards: opposites, big and small"
       ]
     },
     "songs": {
@@ -887,12 +1572,34 @@
       "examples": [
         "Песенка про цвета",
         "Речёвка про дни недели",
-        "Песенка про числа"
+        "Песенка про числа",
+        "Песенка про месяцы года",
+        "Речёвка на таблицу умножения на 2",
+        "Песенка про мытьё рук",
+        "Речёвка про правила класса",
+        "Песенка про планеты для Year 5",
+        "Речёвка, чтобы построиться, Year 1",
+        "Песенка про части тела",
+        "Речёвка про гласные a, e, i, o, u",
+        "Песенка для уборки в конце урока",
+        "Песенка про круговорот воды",
+        "Речёвка на малайские местоимения"
       ],
       "examples_en": [
         "Song about colours",
         "Chant for days of the week",
-        "Song about numbers"
+        "Song about numbers",
+        "Song about months of the year",
+        "Chant for the 2 times table",
+        "Song about washing hands",
+        "Chant for classroom rules",
+        "Song about the planets for Year 5",
+        "Lining-up chant for Year 1",
+        "Song about parts of the body",
+        "Chant for vowels a, e, i, o, u",
+        "Tidy-up song for the end of class",
+        "Song about the water cycle",
+        "Chant for BM kata ganti nama"
       ]
     },
     "check": {
@@ -909,10 +1616,36 @@
       ],
       "action": "photo",
       "examples": [
-        "Сфотографирую тетрадь"
+        "Сфотографирую тетрадь",
+        "Сфотографирую лист по математике",
+        "Сфотографирую сочинение на английском",
+        "Фото диктанта по словам, Year 1",
+        "Фото karangan на малайском, оценить из 20",
+        "Фото теста по науке, поставь балл",
+        "Фото пробного UASA, Year 6",
+        "Фото почерка: что улучшить",
+        "Фото 5 тетрадей: типичные ошибки",
+        "Фото диктанта, Year 3",
+        "Фото домашки: только добрый комментарий",
+        "Фото задачи: где ошибка в решении",
+        "Фото дневника чтения: проверь и прокомментируй",
+        "Фото теста Year 4, проверь по моему ключу"
       ],
       "examples_en": [
-        "I'll take a photo of the notebook"
+        "I'll take a photo of the notebook",
+        "I'll take a photo of a Maths worksheet",
+        "I'll take a photo of an English essay",
+        "Photo of a Year 1 spelling test",
+        "Photo of a BM karangan, mark out of 20",
+        "Photo of a Science quiz, give a score",
+        "Photo of a Year 6 UASA practice paper",
+        "Photo of handwriting: what to improve",
+        "Photo of 5 notebooks: common mistakes",
+        "Photo of a Year 3 dictation",
+        "Photo of homework: kind comment only",
+        "Photo of a word problem: where it went wrong",
+        "Photo of a reading log: check and comment",
+        "Photo of a Year 4 test, mark by my key"
       ]
     },
     "grades": {
@@ -929,11 +1662,35 @@
       ],
       "examples": [
         "Посчитать средние баллы",
-        "Кто отстаёт?"
+        "Кто отстаёт?",
+        "Тест Year 4 по математике: средний балл",
+        "Перевести баллы в проценты",
+        "Сравнить оценки за 1 и 2 семестр",
+        "Таблица оценок на 32 ученика",
+        "Кто набрал больше 50%",
+        "Перевести баллы в уровни TP1-TP6",
+        "Английский и математика: кто слаб в обоих",
+        "Топ-5 учеников Year 5 по науке",
+        "Средний балл по каждому предмету",
+        "Кто больше всех вырос с прошлого теста",
+        "Проверь мои подсчёты в списке оценок",
+        "Разбить учеников на группы для повторения"
       ],
       "examples_en": [
         "Calculate averages",
-        "Who is falling behind?"
+        "Who is falling behind?",
+        "Year 4 Maths test marks: class average",
+        "Turn marks into percentages",
+        "Compare Term 1 and Term 2 marks",
+        "Make a marks table for 32 pupils",
+        "Which pupils scored above 50%",
+        "Convert marks to TP1-TP6 levels",
+        "English and Maths: who is weak in both",
+        "Top 5 pupils in Year 5 Science",
+        "Average mark for each subject",
+        "Who improved most since the last test",
+        "Check my sums in this marks list",
+        "Group pupils by level for revision"
       ]
     },
     "rapor": {
@@ -951,12 +1708,34 @@
       "examples": [
         "Комментарии для всего класса",
         "Комментарий для сильного ученика",
-        "Комментарий для отстающего"
+        "Комментарий для отстающего",
+        "Для тихого, но старательного ученика",
+        "Для болтливого, но способного ученика",
+        "Комментарии на малайском для Year 2",
+        "Для новенького, который хорошо освоился",
+        "Силён в математике, слабо читает",
+        "Для ученика, который часто пропускает",
+        "10 комментариев, Year 4, английский",
+        "Для творческого ученика, любит рисовать",
+        "Для ответственного старосты класса",
+        "Итоговые комментарии для Year 6",
+        "Для ученика, который сильно подтянулся"
       ],
       "examples_en": [
         "Comments for the whole class",
         "Comment for a strong student",
-        "Comment for a struggling student"
+        "Comment for a struggling student",
+        "Comment for a shy but hardworking pupil",
+        "Comment for a chatty but bright pupil",
+        "Comments in Bahasa Melayu for Year 2",
+        "New pupil who settled in well",
+        "Good at Maths, weak in reading",
+        "Comment for a pupil often absent",
+        "10 comments for Year 4 English",
+        "Comment for a creative, artistic pupil",
+        "Comment for a helpful class monitor",
+        "End-of-year comments for Year 6",
+        "Comment for a pupil who improved a lot"
       ]
     },
     "parents": {
@@ -974,12 +1753,34 @@
       "examples": [
         "Напомнить о домашнем задании",
         "Пригласить на собрание",
-        "Ребёнок плохо себя ведёт"
+        "Ребёнок плохо себя ведёт",
+        "Напомнить о собрании PIBG в субботу",
+        "Ребёнок трижды забыл домашку",
+        "В пятницу школа закрывается раньше",
+        "Поблагодарить за помощь на Дне спорта",
+        "У ребёнка температура, заберите его",
+        "Принести вторсырьё на урок ИЗО",
+        "Через неделю экзамены, как помочь дома",
+        "Ребёнок отлично поработал на неделе",
+        "Вши в классе, просьба проверить детей",
+        "Сообщение на малайском о школьной форме",
+        "Пропали учебники, проверьте дома"
       ],
       "examples_en": [
         "Remind about homework",
         "Invite to a meeting",
-        "Child misbehaves"
+        "Child misbehaves",
+        "Reminder: PIBG meeting on Saturday",
+        "Child forgot homework three times",
+        "School closes early on Friday",
+        "Thank parents for help on Sports Day",
+        "Child has a fever, please pick up",
+        "Bring recycled items for art class",
+        "Exams next week, how to help at home",
+        "Child did really well this week",
+        "Head lice in class, please check",
+        "Message in BM about school uniform",
+        "Missing textbooks, please check at home"
       ]
     },
     "announce": {
@@ -997,12 +1798,34 @@
       "examples": [
         "Экскурсия",
         "Школьный праздник",
-        "Сбор денег на класс"
+        "Сбор денег на класс",
+        "День спорта 15 марта",
+        "Празднование Hari Raya в школе",
+        "Книжная ярмарка в актовом зале",
+        "Линейка ко Дню независимости",
+        "День встреч родителей и учителей",
+        "Дипавали: праздник в классе",
+        "Сбор макулатуры, несите старую бумагу",
+        "Ярмарка: ученики продают еду",
+        "Медосмотр у школьной медсестры",
+        "Задание на школьные каникулы",
+        "Праздник Китайского Нового года в классе"
       ],
       "examples_en": [
         "School trip",
         "School celebration",
-        "Collecting class money"
+        "Collecting class money",
+        "Sports Day on 15 March",
+        "Hari Raya celebration at school",
+        "Book fair in the school hall",
+        "Merdeka Day assembly",
+        "Parent-teacher day for Year 1 to 6",
+        "Deepavali party in class",
+        "Recycling drive: bring old paper",
+        "Market day: pupils sell food",
+        "Health check by the school nurse",
+        "Homework for the school holidays",
+        "Chinese New Year class party"
       ]
     },
     "paperwork": {
@@ -1020,12 +1843,34 @@
       "examples": [
         "Отчёт за месяц",
         "Протокол собрания",
-        "План на четверть"
+        "План на четверть",
+        "RPH на неделю, Year 3, английский",
+        "Отчёт о программе чтения",
+        "Протокол собрания панитии английского",
+        "OPR на одну страницу про День спорта",
+        "Письмо родителям об экскурсии",
+        "Годовой план RPT, Year 2",
+        "Отчёт о происшествии с учеником",
+        "Заявление на отпуск на 2 дня",
+        "Отчёт о прогрессе коррекционного класса",
+        "Инвентарный список кабинета английского",
+        "Годовые цели работы SKT"
       ],
       "examples_en": [
         "Monthly report",
         "Meeting minutes",
-        "Term plan"
+        "Term plan",
+        "Weekly RPH for Year 3 English",
+        "Report on the reading programme",
+        "Minutes: English panitia meeting",
+        "One-page report (OPR) for Sports Day",
+        "Letter to parents about a school trip",
+        "Yearly scheme of work (RPT), Year 2",
+        "Pupil incident report",
+        "Leave application for 2 days",
+        "Report on remedial class progress",
+        "Inventory list for the English room",
+        "My annual work targets (SKT)"
       ]
     },
     "speech": {
@@ -1043,12 +1888,34 @@
       "examples": [
         "Речь на выпускной",
         "Речь на День учителя",
-        "Приветствие родителям"
+        "Приветствие родителям",
+        "Речь на 2 минуты к Hari Merdeka",
+        "Открытие Дня спорта",
+        "Проводы учителя на пенсию, 3 мин",
+        "Речь на церемонию награждения",
+        "Приветствие новых учеников Year 1",
+        "Благодарность родительскому комитету PIBG",
+        "Короткая речь на праздник Hari Raya",
+        "Открытие Недели английского, 2 мин",
+        "Речь на линейке ко Дню матери",
+        "Слово на линейке о доброте, 3 мин",
+        "Речь ученика на прощании с Year 6"
       ],
       "examples_en": [
         "Graduation speech",
         "Teachers' Day speech",
-        "Welcome to parents"
+        "Welcome to parents",
+        "2-minute speech for Merdeka assembly",
+        "Opening speech for Sports Day",
+        "Farewell to a retiring teacher, 3 min",
+        "Speech for prize-giving day",
+        "Welcome speech for new Year 1 pupils",
+        "Thank-you speech to the PIBG",
+        "Short speech for Hari Raya celebration",
+        "English Week opening, 2 minutes",
+        "Speech for Mother's Day assembly",
+        "Assembly talk about kindness, 3 min",
+        "Pupil's speech for Year 6 farewell"
       ]
     },
     "games": {
@@ -1066,12 +1933,34 @@
       "examples": [
         "Разминка на 5 минут",
         "Игра на английские слова",
-        "Игра на счёт"
+        "Игра на счёт",
+        "Игра на орфографию, Year 2, 10 мин",
+        "Игра на таблицу умножения, Year 4",
+        "Спокойная игра для жаркого дня",
+        "Игра на малайские глаголы, 5 мин",
+        "Игра-повторение по науке: животные",
+        "Игра без сдвигания парт, 40 детей",
+        "Игра на фонику для Year 1",
+        "Разрядка после перемены",
+        "Игра для повторения в конце урока, 5 мин",
+        "Командная игра перед экзаменами",
+        "Игра на улице: счёт пятёрками"
       ],
       "examples_en": [
         "5-minute warm-up",
         "English word game",
-        "Counting game"
+        "Counting game",
+        "Spelling game for Year 2, 10 min",
+        "Times tables game for Year 4",
+        "Quiet game for a hot afternoon",
+        "BM kata kerja game, 5 min",
+        "Science review game: animals",
+        "Game without moving desks, 40 pupils",
+        "Phonics game for Year 1",
+        "Brain break after recess",
+        "End-of-lesson review game, 5 min",
+        "Team game for exam revision",
+        "Outdoor game: counting in 5s"
       ]
     },
     "behavior": {
@@ -1089,12 +1978,34 @@
       "examples": [
         "Ребёнок мешает на уроке",
         "Ребёнок часто плачет",
-        "Ребёнок отстаёт"
+        "Ребёнок отстаёт",
+        "Ученик бьёт одноклассников",
+        "Ребёнок молчит на уроках",
+        "Ученик никогда не делает домашку",
+        "Двое детей дерутся каждый день",
+        "Ребёнок всегда опаздывает",
+        "Ученик списывает у других",
+        "Ребёнок выглядит голодным и усталым",
+        "Ученик отказывается писать",
+        "Над ребёнком смеются одноклассники",
+        "Новенький не говорит по-малайски",
+        "Ребёнок говорит грубые слова"
       ],
       "examples_en": [
         "A child disrupts the lesson",
         "A child cries often",
-        "A child is falling behind"
+        "A child is falling behind",
+        "A pupil hits classmates",
+        "A child won't speak in class",
+        "A pupil never does homework",
+        "Two children fight every day",
+        "A child is always late to school",
+        "A pupil copies answers from others",
+        "A child seems hungry and tired",
+        "A pupil refuses to write",
+        "A child is teased by classmates",
+        "A new pupil can't speak Malay",
+        "A child uses rude words"
       ]
     },
     "rewards": {
@@ -1112,12 +2023,34 @@
       "examples": [
         "Таблица наклеек",
         "Баллы для класса",
-        "Как хвалить детей"
+        "Как хвалить детей",
+        "Баллы без всяких приложений",
+        "Поощрения для шумного класса Year 2",
+        "Баллы для 4 команд класса",
+        "Бесплатные награды, без денег",
+        "Классные обязанности как награда",
+        "Таблица наград за домашку",
+        "Мотивация Year 6 перед экзаменами",
+        "Идеи для «Звезды недели»",
+        "Фразы похвалы на английском и малайском",
+        "Как поощрять тихих детей, не только активных",
+        "Грамоты в конце семестра"
       ],
       "examples_en": [
         "Sticker chart",
         "Class points",
-        "How to praise children"
+        "How to praise children",
+        "Points system without any apps",
+        "Rewards for a noisy Year 2 class",
+        "House points for 4 groups",
+        "Free rewards, no money needed",
+        "Classroom jobs as a reward",
+        "Reward chart for homework",
+        "Motivate Year 6 before exams",
+        "Star of the week ideas",
+        "Praise phrases in English and BM",
+        "Reward quiet pupils, not just loud ones",
+        "Certificates for the end of term"
       ]
     },
     "story": {
@@ -1135,12 +2068,34 @@
       "examples": [
         "Сказка про дружбу",
         "Рассказ про природу",
-        "Сказка про честность"
+        "Сказка про честность",
+        "Сказка о том, как делиться, Year 1",
+        "Сказка про оленька Санг Канчиля",
+        "Рассказ про экономию воды",
+        "Рассказ на прошедшее время, Year 4",
+        "Рассказ про новенького в школе",
+        "Рассказ про Hari Raya в семье",
+        "Сказка про Луну и звёзды",
+        "Сказка про смелую черепаху, Year 2",
+        "Сказка с числами от 1 до 10",
+        "Рассказ про доброту к животным",
+        "Сказка про уважение к старшим"
       ],
       "examples_en": [
         "Story about friendship",
         "Story about nature",
-        "Story about honesty"
+        "Story about honesty",
+        "Story about sharing for Year 1",
+        "Sang Kancil the mouse deer story",
+        "Story about saving water",
+        "Story for past tense practice, Year 4",
+        "Story about a new pupil at school",
+        "Story about Hari Raya with family",
+        "Story about the moon and stars",
+        "Story about a brave turtle, Year 2",
+        "Story with numbers 1 to 10",
+        "Story about being kind to animals",
+        "Story about respecting elders"
       ]
     },
     "lessonvideo": {
@@ -1158,12 +2113,34 @@
       "examples": [
         "Ролик про круговорот воды",
         "Ролик про части растения",
-        "Ролик «Цвета» на английском"
+        "Ролик «Цвета» на английском",
+        "Ролик: зачем мыть руки",
+        "Ролик про Солнечную систему, Year 5",
+        "Ролик: жизнь бабочки",
+        "Ролик про флаг Малайзии",
+        "Ролик: как работают магниты",
+        "Ролик про пять чувств",
+        "Ролик: как узнать время по часам",
+        "Ролик про здоровую тарелку",
+        "Ролик: день и ночь",
+        "Ролик про переработку мусора в школе",
+        "Ролик: дроби на примере пиццы"
       ],
       "examples_en": [
         "Video: the water cycle",
         "Video: parts of a plant",
-        "Video: colours in English"
+        "Video: colours in English",
+        "Video: why we wash our hands",
+        "Video: the solar system for Year 5",
+        "Video: life cycle of a butterfly",
+        "Video: the Malaysian flag",
+        "Video: how magnets work",
+        "Video: the five senses",
+        "Video: telling time on a clock",
+        "Video: a healthy food plate",
+        "Video: day and night",
+        "Video: recycling at school",
+        "Video: fractions with pizza"
       ]
     },
     "week": {
@@ -1180,11 +2157,35 @@
       ],
       "examples": [
         "Спланируй мою неделю",
-        "Как всё успеть с проверкой тетрадей"
+        "Как всё успеть с проверкой тетрадей",
+        "Неделя: 24 урока плюс проверка",
+        "Экзамены: проверить 3 класса к пятнице",
+        "Тренировки ко Дню спорта плюс уроки",
+        "Последняя неделя перед каникулами",
+        "Как вписать RPH в вечера",
+        "Неделя с собранием PIBG в субботу",
+        "Как проверить 120 тетрадей",
+        "Что отложить, я перегружена",
+        "Расписание недели для английского Year 4",
+        "Неделя с двумя заменами",
+        "Табели: комментарии на 35 учеников",
+        "Был больничный: что перенести"
       ],
       "examples_en": [
         "Plan my week",
-        "How to keep up with marking"
+        "How to keep up with marking",
+        "Plan a week: 24 lessons plus marking",
+        "Exam week: mark 3 classes by Friday",
+        "Sports Day practice plus lessons",
+        "The last week before school holidays",
+        "Fit RPH writing into my evenings",
+        "Week with a PIBG meeting on Saturday",
+        "Plan marking 120 exercise books",
+        "What to drop, I'm overloaded",
+        "Weekly schedule for Year 4 English",
+        "Week with 2 relief classes",
+        "Report week: comments for 35 pupils",
+        "I was sick a day: what to move"
       ]
     },
     "teachercare": {
@@ -1202,12 +2203,34 @@
       "examples": [
         "Я очень устала",
         "Слишком много бумаг",
-        "Как отдыхать после работы"
+        "Как отдыхать после работы",
+        "Я теряю терпение с классом",
+        "Не могу перестать думать о работе",
+        "Выходные уходят на проверку",
+        "Родители жалуются, мне обидно",
+        "Плохо сплю перед экзаменами",
+        "Кажется, я плохой учитель",
+        "Отдых на 5 минут прямо в школе",
+        "Слишком много замен в этом семестре",
+        "Как отказаться от лишних поручений",
+        "К пятнице садится голос",
+        "Хочу снова радоваться работе"
       ],
       "examples_en": [
         "I'm very tired",
         "Too much paperwork",
-        "How to rest after work"
+        "How to rest after work",
+        "I lose patience with my class",
+        "I can't stop thinking about work",
+        "My weekends go on marking",
+        "Parents complain and I'm upset",
+        "I sleep badly before exams",
+        "I feel I'm not a good teacher",
+        "A 5-minute break at school",
+        "Too many relief classes this term",
+        "How to say no to extra duties",
+        "My voice is tired by Friday",
+        "I want to enjoy teaching again"
       ]
     },
     "birthdays": {
@@ -1221,13 +2244,33 @@
         "Запомни день рождения",
         "Чей день рождения скоро?",
         "Покажи весь список",
-        "Помоги с поздравлением"
+        "Помоги с поздравлением",
+        "Добавь день рождения внучки",
+        "Запомни дни рождения всей семьи",
+        "Исправь дату в списке",
+        "Удали день рождения из списка",
+        "У кого день рождения в этом месяце?",
+        "Когда день рождения у сына?",
+        "Сколько лет исполнится имениннику?",
+        "Что подарить имениннику?",
+        "Поздравление в стихах",
+        "Короткое поздравление для СМС"
       ],
       "examples_en": [
         "Remember a birthday",
         "Whose birthday is soon?",
         "Show the whole list",
-        "Help me write a greeting"
+        "Help me write a greeting",
+        "Add my mum's birthday",
+        "Save birthdays for my whole family",
+        "Fix a date in the list",
+        "Remove a birthday from the list",
+        "Who has a birthday this month?",
+        "When is my sister's birthday?",
+        "How old will they turn?",
+        "Gift idea for the birthday person",
+        "A short birthday poem",
+        "A short birthday text message"
       ],
       "for": [
         "mama",
@@ -1247,7 +2290,17 @@
         "Что есть для памяти каждый день",
         "Простой рецепт на ужин",
         "Какие продукты купить",
-        "Полезный завтрак"
+        "Полезный завтрак",
+        "Как просто приготовить рыбу",
+        "Какие орехи полезнее и сколько",
+        "Какие ягоды есть зимой",
+        "Полезный перекус между едой",
+        "Простой полезный суп",
+        "Чем заменить сладкое",
+        "Сколько воды пить в день",
+        "Меню на неделю для памяти",
+        "Пью таблетки от давления, что учесть",
+        "Полезный салат из простых продуктов"
       ],
       "for": [
         "mama",

@@ -832,8 +832,22 @@ function quickSend(text) {
 }
 function chipsRow(list, cls) {
   const row = el("div", "followups " + cls);
-  list.forEach((t) => { const b = el("button", "fu-chip"); b.type = "button"; b.textContent = t; b.onclick = () => quickSend(t); row.append(b); });
+  list.forEach((t) => { const b = el("button", "fu-chip"); b.type = "button"; b.textContent = t; b.onclick = () => { if (cls === "start") exMark(t, "used"); quickSend(t); }; row.append(b); });
   return row;
+}
+// Подсказки по кругу: из большого заранее написанного запаса показываем 4,
+// сначала те, что человек видел реже всего и ещё не задавал
+const EX_SHOW = 4;
+function exState() { const st = SESSION && store.get("exSeen:" + SESSION.user); return st && st.seen ? st : { seen: {}, used: {} }; }
+function exMark(t, kind) { const st = exState(); st[kind][t] = (st[kind][t] || 0) + 1; store.set("exSeen:" + SESSION.user, st); }
+function exPick(pool) {
+  const st = exState(), uniq = [...new Set(pool)];
+  const fresh = uniq.filter((t) => !st.used[t]);
+  const src = fresh.length >= EX_SHOW ? fresh : uniq;
+  const pick = src.map((t) => [t, (st.seen[t] || 0) + Math.random() * 0.9]).sort((a, b) => a[1] - b[1]).slice(0, EX_SHOW).map((x) => x[0]);
+  pick.forEach((t) => (st.seen[t] = (st.seen[t] || 0) + 1));
+  store.set("exSeen:" + SESSION.user, st);
+  return pick;
 }
 function showFollowups(list) { clearFollowups(); if (!list || !list.length) return; $("#messages").append(chipsRow(list, "after")); scrollDown(); }
 function showStarters(chat) {
@@ -841,7 +855,7 @@ function showStarters(chat) {
   const src = hp || CFG.presets[chat.preset] || {};
   const list = (LANG === "en" && src.examples_en) || src.examples;
   if (!list || !list.length) return;
-  $("#messages").append(chipsRow(list, "start"));
+  $("#messages").append(chipsRow(exPick(list), "start"));
 }
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
@@ -2081,11 +2095,47 @@ function vidNote(btn, text) {
   if (!n || !n.classList.contains("vid-note")) { n = el("div", "vid-note"); row.after(n); }
   n.textContent = text;
 }
+/* ===== Пока ролик собирается: экран не гаснет, а когда готов — уведомление, звук и заголовок ===== */
+let WAKE = null, TITLE0 = document.title, TITLE_BLINK = null;
+async function wakeOn() { try { if (navigator.wakeLock) WAKE = await navigator.wakeLock.request("screen"); } catch (_) {} }
+function wakeOff() { try { WAKE && WAKE.release(); } catch (_) {} WAKE = null; }
+// после возвращения на вкладку блокировка экрана снимается браузером — берём снова, если ролик ещё делается
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { if (VIDEO_BUSY && !WAKE) wakeOn(); if (TITLE_BLINK) { clearInterval(TITLE_BLINK); TITLE_BLINK = null; document.title = TITLE0; } }
+});
+function askNotify() { try { if (window.Notification && Notification.permission === "default") Notification.requestPermission().catch(() => {}); } catch (_) {} }
+function waitNote(btn, on) {
+  const row = btn.closest(".msg-actions"); if (!row) return;
+  let n = row.parentElement.querySelector(".vid-wait");
+  if (!on) { if (n) n.remove(); return; }
+  if (!n) { n = el("div", "vid-wait"); row.after(n); }
+  n.textContent = T("⏳ Ролик собирается. Можно переключиться на другое приложение, но не закрывайте это: когда ролик будет готов, придёт уведомление.");
+}
+async function videoDone(ok, title) {
+  try { navigator.vibrate && navigator.vibrate(ok ? [180, 90, 180] : [400]); } catch (_) {}
+  // звук «готово» — из выбранных звуков приложения
+  try { if (ok) { const b = sfx("success3"), ac = sharedAC ? sharedAC() : new AudioContext(); const buf = ac.createBuffer(1, b.length, VRATE); buf.getChannelData(0).set(b.map((x) => x * 0.6)); const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start(); } } catch (_) {}
+  if (!document.hidden) return;
+  const head = ok ? T("🎬 Ролик готов!") : T("⚠️ Ролик не получился");
+  TITLE0 = TITLE0 || document.title; let flip = false;
+  if (TITLE_BLINK) clearInterval(TITLE_BLINK);
+  TITLE_BLINK = setInterval(() => { flip = !flip; document.title = flip ? head : TITLE0; }, 1200);
+  try {
+    if (window.Notification && Notification.permission === "granted") {
+      const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration());
+      const body = ok ? `«${title}» — ${T("нажмите, чтобы посмотреть и отправить")}` : T("Откройте приложение и попробуйте ещё раз");
+      if (reg && reg.showNotification) await reg.showNotification(head, { body, icon: "icon-192.png", badge: "icon-192.png", tag: "video-ready", renotify: true });
+      else new Notification(head, { body, icon: "icon-192.png" });
+    }
+  } catch (_) {}
+}
+
 async function videoButton(btn, text, msg, opt = {}) {
   if (btn._ready) { track("Видео: отправка"); return openShare(btn._ready, btn._ctx); }
   if (VIDEO_BUSY) { toast("Подождите, видео ещё собирается"); return; }
   if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
   VIDEO_BUSY = true;
+  askNotify(); wakeOn(); waitNote(btn, true);
   btn.disabled = true;
   const label = (s) => { btn.textContent = s; fitRow(btn.closest(".msg-actions")); };
   // секундомер: идёт, пока видео собирается, и остаётся с итоговым временем
@@ -2166,6 +2216,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     label("📤 Отправить");
     btn.classList.add("ready");
     stopTimer(true);
+    waitNote(btn, false); wakeOff(); videoDone(true, title);
     if (opt.autoShare) openShare(btn._ready, btn._ctx);
   } catch (err) {
     console.error(err);
@@ -2173,7 +2224,8 @@ async function videoButton(btn, text, msg, opt = {}) {
     label("🎬 Видео");
     stopTimer(false);
     toast("Не получилось сделать видео: " + (err.message || err));
-  } finally { VIDEO_BUSY = false; }
+    videoDone(false, "");
+  } finally { VIDEO_BUSY = false; waitNote(btn, false); wakeOff(); }
 }
 
 async function saveVideo(file, btn) {
@@ -2659,7 +2711,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=72");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=73");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

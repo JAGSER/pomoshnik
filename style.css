@@ -380,3 +380,5 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .vid-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .vid-btns button { font: inherit; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 8px 12px; cursor: pointer; }
 .offer-vid { display: block; margin: 10px 0 0; width: 100%; text-align: center; border: 1.5px dashed var(--accent); background: transparent; color: var(--accent); border-radius: 14px; padding: 12px; font: inherit; font-weight: 700; cursor: pointer; }
+
+.vid-wait { margin: 8px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: .95em; line-height: 1.4; }
