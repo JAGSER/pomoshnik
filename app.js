@@ -2291,8 +2291,8 @@ function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); 
     if (mascotVisible() && !$("#mascot").classList.contains("talk")) {
       const r = Math.random();
       if (r < 0.25) mascotPlay("blink", 140);
-      else if (r < 0.85) { const pts = [[-1, 0], [1, 0], [-0.7, -0.6], [0.7, -0.6], [0, 1], [-0.7, 0.8], [0.7, 0.8], [0, 1]]; const [x, y] = pts[Math.floor(Math.random() * pts.length)]; mascotLook(x, y, 900 + Math.random() * 900); }
-      else { mascotLook(-1, 0); setTimeout(() => mascotLook(1, 0), 450); setTimeout(() => mascotLook(0, 0), 900); }
+      else if (r < 0.85) { const pts = [[-1, 0.5], [1, 0.5], [0, 1], [-0.7, 0.85], [0.7, 0.85], [0, 1], [-0.35, 1], [0.35, 1]]; const [x, y] = pts[Math.floor(Math.random() * pts.length)]; mascotLook(x, y, 900 + Math.random() * 900); }
+      else { mascotLook(-1, 0.6); setTimeout(() => mascotLook(1, 0.6), 450); setTimeout(() => mascotLook(0, 0), 900); }
     }
     mascotIdle();
   }, 1800 + Math.random() * 3500);
@@ -2314,7 +2314,7 @@ function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); 
 document.addEventListener("pointerdown", (e) => {
   const m = $("#mascot"); if (!mascotVisible() || m.classList.contains("talk") || e.target.closest("#mascot")) return;
   const r = m.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1;
-  mascotLook(dx / d, dy / d, 1200);
+  mascotLook(dx / d, Math.max(0.4, dy / d), 1200);
 });
 document.addEventListener("click", (e) => {
   if (e.target.closest("#mascot")) mascotTip();
@@ -2323,16 +2323,20 @@ document.addEventListener("click", (e) => {
 // редкие трюки: толкает имя, крутит шестерёнку, пружинит на линии, кувырок, кружится глаз
 const MASCOT_TRICKS = {
   push() {
-    const m = $("#mascot"), n = $("#hello");
-    mascotLook(-1, 0, 1600);
-    m.animate([{ transform: "none" }, { transform: "translateX(-10px) rotate(-6deg)", offset: 0.35 }, { transform: "translateX(-14px) rotate(-8deg)", offset: 0.6 }, { transform: "none" }], { duration: 1600, easing: "ease-in-out" });
-    n.animate([{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: "translateX(-18px)", offset: 0.6 }, { transform: "translateX(-18px)", offset: 0.8 }, { transform: "none" }], { duration: 1900, easing: "ease-in-out" });
+    // подъезжает вплотную к концу текста и толкает его
+    const m = $("#mascot"), n = $("#hello"), rg = document.createRange(); rg.selectNodeContents(n);
+    const gap = Math.max(0, m.getBoundingClientRect().left - rg.getBoundingClientRect().right - 2), P = 18;
+    mascotLook(-1, 0.4, 2600);
+    m.animate([{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(-4deg)`, offset: 0.3 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.5 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.65 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
+    n.animate([{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: `translateX(${-P}px)`, offset: 0.5 }, { transform: `translateX(${-P}px)`, offset: 0.7 }, { transform: "none", offset: 0.85 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
   },
   gear() {
-    const m = $("#mascot"), g = $("#btn-settings");
-    mascotLook(1, 0, 1800);
-    m.animate([{ transform: "none" }, { transform: "translateX(8px) rotate(8deg)", offset: 0.25 }, { transform: "translateX(8px) rotate(8deg)", offset: 0.8 }, { transform: "none" }], { duration: 1800, easing: "ease-in-out" });
-    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(0)", offset: 0.2 }, { transform: "rotate(540deg)" }], { duration: 1800, easing: "cubic-bezier(.2,.8,.3,1)" });
+    // подъезжает вплотную к шестерёнке и раскручивает её
+    const m = $("#mascot"), g = $("#btn-settings"), gi = g.getBoundingClientRect(), mr = m.getBoundingClientRect();
+    const gap = Math.max(0, gi.left + gi.width * 0.2 - mr.right);
+    mascotLook(1, 0.5, 2400);
+    m.animate([{ transform: "none" }, { transform: `translateX(${gap}px) rotate(6deg)`, offset: 0.25 }, { transform: `translateX(${gap}px) rotate(10deg) translateY(4px)`, offset: 0.4 }, { transform: `translateX(${gap}px) rotate(6deg)`, offset: 0.75 }, { transform: "none" }], { duration: 2400, easing: "ease-in-out" });
+    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(0)", offset: 0.3 }, { transform: "rotate(540deg)" }], { duration: 2400, easing: "cubic-bezier(.2,.8,.3,1)" });
   },
   bounce() {
     const m = $("#mascot"), bar = m.closest(".topbar");
@@ -3187,7 +3191,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=88");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=89");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
