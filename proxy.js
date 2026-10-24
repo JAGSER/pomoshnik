@@ -84,7 +84,12 @@ function loadAll() {
 
 // Возвращает пользователя или { err, status } с понятной причиной.
 // Без имени (вход только по паролю) ищем человека по паролю; пароли у всех должны быть разными.
-function auth(body, ip) {
+async function auth(body, ip) {
+  const rawId = String(body.user || "").toLowerCase();
+  if (/^[gu]_[a-z0-9]{8,}$/.test(rawId)) return acctAuth(rawId, body.password, ip);
+  return envAuth(body, ip);
+}
+function envAuth(body, ip) {
   const loaded = loadAll();
   if (loaded.err) return loaded;
   const all = loaded.all;
@@ -107,6 +112,56 @@ function auth(body, ip) {
   const [id, u] = found[0];
   return { id, ...u };
 }
+
+/* ===== Аккаунты без регистрации, тарифы и лимиты (хранятся в KV) ===== */
+const DAY = () => new Date().toISOString().slice(0, 10), MONTH = () => new Date().toISOString().slice(0, 7);
+const rnd = (n) => { const a = "abcdefghijkmnpqrstuvwxyz23456789"; return [...crypto.getRandomValues(new Uint8Array(n))].map((b) => a[b % a.length]).join(""); };
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+async function sha(s) { return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))); }
+async function pwHash(pw, salt) {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(norm(pw)), "PBKDF2", false, ["deriveBits"]);
+  return hex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 60000 }, k, 256));
+}
+// тарифы: что можно и сколько
+const PLANS = {
+  trial: { title: "Пробный", models: ["claude-sonnet-5-5", "claude-opus-5-5"], chatDay: 50, web: true, ttsDialog: true, creativeTotal: 3, videoSec: 180, maxTokens: 8000 },
+  free: { title: "Бесплатный", models: ["claude-haiku-5-5"], chatDay: 10, web: false, ttsDialog: false, ttsDayChars: 4000, creativeMonth: 1, videoSec: 40, maxTokens: 2500 },
+  family: { title: "Семья", models: ["claude-sonnet-5-5"], chatDay: 300, web: true, ttsDialog: true, creativeMonth: 30, videoSec: 180, maxTokens: 8000 },
+  familyplus: { title: "Семья+", models: ["claude-sonnet-5-5", "claude-opus-5-5"], chatDay: 500, web: true, ttsDialog: true, creativeMonth: 100, videoSec: 180, maxTokens: 16000, rename: true },
+};
+const TRIAL_DAYS = 7;
+// счётчики в KV хранятся как Deno.KvU64 — достаём число в любом виде
+const u64 = (v) => (v == null ? 0 : Number(typeof v === "object" && "value" in v ? v.value : v));
+async function kvNum(kv, key) { return u64((await kv.get(key)).value); }
+async function kvInc(kv, key, n = 1, ttlDays = 40) { await kv.atomic().sum(key, BigInt(n)).commit(); if (ttlDays) { const v = (await kv.get(key)).value; await kv.set(key, v, { expireIn: ttlDays * 86400_000 }); } }
+async function acctGet(id) { const kv = await kvOpen(); return kv ? (await kv.get(["acct", id])).value : null; }
+async function acctPut(a) { const kv = await kvOpen(); await kv.set(["acct", a.id], a); }
+async function acctAuth(id, password, ip) {
+  const limitKey = "a:" + id;
+  if (tooManyFails(limitKey)) return { err: "Слишком много неверных попыток. Подождите 10 минут.", status: 429 };
+  const a = await acctGet(id);
+  if (!a) return { err: "Аккаунт не найден. Войдите заново.", status: 401, gone: true };
+  const ok = a.pw ? safeEqual(await pwHash(password, a.pw.salt), a.pw.hash) : safeEqual(await sha(String(password || "")), a.secret || "");
+  if (!ok) { addFail(limitKey); return { err: "Неверный пароль", status: 401 }; }
+  return { id, acct: a, key: env("GUEST_KEY") || env("ANTHROPIC_KEY") || env("KEY_YURI").trim() };
+}
+// действующий тариф: пробный кончается через 7 дней или после 3 творческих роликов, оплаченный — в дату окончания
+async function planOf(user) {
+  const a = user.acct; if (!a) return null;
+  const kv = await kvOpen();
+  let p = a.plan || "free";
+  if (p === "trial" && (Date.now() > a.trialEnds || (await kvNum(kv, ["cvt", a.id])) >= PLANS.trial.creativeTotal)) p = "free";
+  if ((p === "family" || p === "familyplus") && a.planUntil && Date.now() > a.planUntil) p = "free";
+  if (p !== a.plan) { a.plan = p; await acctPut(a); }
+  return p;
+}
+async function usageOf(user, plan) {
+  const kv = await kvOpen(), P = PLANS[plan], id = user.id;
+  const creativeUsed = P.creativeTotal ? await kvNum(kv, ["cvt", id]) : await kvNum(kv, ["cvm", id, MONTH()]);
+  const creativeLimit = P.creativeTotal || P.creativeMonth || 0;
+  return { chatToday: await kvNum(kv, ["q", id, DAY()]), chatDay: P.chatDay, creativeUsed, creativeLimit, creativeLeft: Math.max(0, creativeLimit - creativeUsed) };
+}
+const ADMINS = () => env("ADMIN_USERS", "yuri").split(",").map((x) => x.trim().toLowerCase());
 
 async function callAnthropic(key, payload) {
   return fetch(API, {
@@ -224,7 +279,7 @@ async function blobGet(kv, prefix, n) {
 }
 async function vidCounts(kv, id) {
   const [v, hh] = await kv.getMany([["vidc", id, "views"], ["vidc", id, "hearts"]]);
-  return { views: v.value ? Number(v.value) : 0, hearts: hh.value ? Number(hh.value) : 0 };
+  return { views: u64(v.value), hearts: u64(hh.value) };
 }
 function rangeResponse(req, bytes, type, h) {
   const base = { ...h, "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable", "Accept-Ranges": "bytes", "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges" };
@@ -243,7 +298,7 @@ function reactLimited(ip) {
   arr.push(now); REACT_HITS.set(ip, arr);
   return arr.length > 40;
 }
-function headerAuth(req, ip) {
+async function headerAuth(req, ip) {
   const dec = (v) => { try { return decodeURIComponent(v || ""); } catch (_) { return ""; } };
   return auth({ user: dec(req.headers.get("X-User")), password: dec(req.headers.get("X-Pass")) }, ip);
 }
@@ -369,7 +424,7 @@ export async function handler(req, info) {
   }
   // загрузка ролика: тело — сам файл, пароль в заголовках
   if (req.method === "POST" && (url.pathname === "/video-upload" || url.pathname === "/video-poster")) {
-    const user = headerAuth(req, ip);
+    const user = await headerAuth(req, ip);
     if (user.err) return json({ error: user.err }, user.status, h);
     const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
     const bytes = new Uint8Array(await req.arrayBuffer());
@@ -414,13 +469,82 @@ export async function handler(req, info) {
   let body;
   try { body = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
 
-  const user = auth(body, ip);
-  if (user.err) return json({ error: user.err }, user.status, h);
+  // новый гость: заходит без регистрации, получает свой аккаунт с пробным периодом
+  if (url.pathname === "/guest") {
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const hour = new Date().toISOString().slice(0, 13), ipKey = ["gip", await sha(ip), hour];
+    if ((await kvNum(kv, ipKey)) >= Number(env("GUESTS_PER_IP_HOUR", "6"))) return json({ error: "Слишком много новых входов с этого адреса. Попробуйте через час." }, 429, h);
+    await kvInc(kv, ipKey, 1, 1);
+    const id = "g_" + rnd(12), secret = rnd(28), now = Date.now();
+    await acctPut({ id, kind: "guest", plan: "trial", created: now, trialEnds: now + TRIAL_DAYS * 86400_000, secret: await sha(secret), lang: body.lang === "en" ? "en" : "ru", ref: String(body.ref || "").slice(0, 20) });
+    return json({ ok: true, user: id, password: secret }, 200, h);
+  }
+  // вход по имени и паролю (зарегистрированные); без имени — как раньше, только по паролю
+  if (url.pathname === "/login" && body.login) {
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const login = norm(body.login).toLowerCase();
+    if (tooManyFails("l:" + login)) return json({ error: "Слишком много неверных попыток. Подождите 10 минут." }, 429, h);
+    const id = (await kv.get(["login", login])).value;
+    const a = id && (await acctGet(id));
+    if (!a || !a.pw || !safeEqual(await pwHash(body.password, a.pw.salt), a.pw.hash)) { addFail("l:" + login); return json({ error: "Неверное имя или пароль" }, 401, h); }
+    const plan = await planOf({ id, acct: a });
+    return json({ ok: true, user: id, models: PLANS[plan].models, webSearch: PLANS[plan].web, plan }, 200, h);
+  }
+
+  const user = await auth(body, ip);
+  if (user.err) return json({ error: user.err, gone: !!user.gone }, user.status, h);
+  const plan = user.acct ? await planOf(user) : null, P = plan ? PLANS[plan] : null;
+  if (P) { user.models = P.models; user.webSearch = P.web; user.maxTokens = P.maxTokens; }
 
   const models = user.models && user.models.length ? user.models : ["claude-sonnet-5-5"];
 
   if (url.pathname === "/login") {
-    return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch }, 200, h);
+    return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch, plan: plan || "owner" }, 200, h);
+  }
+  // тариф, лимиты и расход — для экрана «Тарифы»
+  if (url.pathname === "/me") {
+    if (!plan) return json({ ok: true, plan: "owner", registered: true, admin: ADMINS().includes(user.id) }, 200, h);
+    const a = user.acct;
+    return json({ ok: true, plan, title: P.title, registered: !!a.pw, login: a.login || "", name: a.name || "", trialEnds: a.trialEnds, planUntil: a.planUntil || 0,
+      ttsDialog: P.ttsDialog, videoSec: P.videoSec, rename: !!P.rename, usage: await usageOf(user, plan) }, 200, h);
+  }
+  // сохранить аккаунт: имя для входа и свой пароль; всё, что гость сделал, остаётся
+  if (url.pathname === "/register") {
+    if (!user.acct) return json({ error: "Этот аккаунт уже сохранён" }, 400, h);
+    const kv = await kvOpen(), login = norm(body.login).toLowerCase(), pw = norm(body.newPassword);
+    if (!/^[\p{L}\p{N}._@+-]{3,40}$/u.test(login)) return json({ error: "Имя для входа: от 3 до 40 букв или цифр, без пробелов" }, 400, h);
+    if (pw.length < 6) return json({ error: "Пароль должен быть не короче 6 символов" }, 400, h);
+    const taken = (await kv.get(["login", login])).value;
+    if (taken && taken !== user.id) return json({ error: "Это имя уже занято, придумайте другое" }, 409, h);
+    const a = user.acct, salt = rnd(16);
+    if (a.login && a.login !== login) await kv.delete(["login", a.login]);
+    Object.assign(a, { kind: "user", login, name: String(body.name || "").trim().slice(0, 40), pw: { salt, hash: await pwHash(pw, salt) } });
+    delete a.secret;
+    await kv.atomic().set(["acct", a.id], a).set(["login", login], a.id).commit();
+    return json({ ok: true, user: a.id, login }, 200, h);
+  }
+  // заявка на тариф (оплата подключается позже)
+  if (url.pathname === "/lead") {
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const lead = { at: Date.now(), user: user.id, plan: String(body.plan || "").slice(0, 20), contact: String(body.contact || "").trim().slice(0, 120), note: String(body.note || "").trim().slice(0, 600), company: String(body.company || "").trim().slice(0, 120) };
+    if (!lead.contact) return json({ error: "Оставьте телефон, Telegram или почту" }, 400, h);
+    await kv.set(["lead", lead.at + "-" + rnd(4)], lead);
+    return json({ ok: true }, 200, h);
+  }
+  // администратор: заявки и ручная смена тарифа
+  if (url.pathname === "/admin") {
+    if (!ADMINS().includes(user.id) || user.acct) return json({ error: "Нет доступа" }, 403, h);
+    const kv = await kvOpen();
+    if (body.action === "plan") {
+      let id = String(body.id || "").toLowerCase();
+      if (!/^[gu]_/.test(id)) id = (await kv.get(["login", id])).value || id;
+      const a = await acctGet(id); if (!a || !PLANS[body.plan]) return json({ error: "Нет такого аккаунта или тарифа" }, 404, h);
+      a.plan = body.plan; a.planUntil = body.months ? Date.now() + Number(body.months) * 31 * 86400_000 : 0; await acctPut(a);
+      return json({ ok: true, id, plan: a.plan }, 200, h);
+    }
+    const leads = []; for await (const e of kv.list({ prefix: ["lead"] }, { reverse: true, limit: 100 })) leads.push(e.value);
+    let guests = 0, users = 0; for await (const e of kv.list({ prefix: ["acct"] }, { limit: 5000 })) e.value.pw ? users++ : guests++;
+    return json({ ok: true, leads, guests, users, today: await kvNum(kv, ["q", "_guests", DAY()]) }, 200, h);
   }
   // Переезд: положить данные приложения на час, вернуть одноразовый код
   if (url.pathname === "/migrate") {
@@ -442,7 +566,7 @@ export async function handler(req, info) {
     for await (const e of kv.list({ prefix: ["vidu"] }, { limit: 500 })) {
       const [, uid, created, id] = e.key;
       const isMine = uid === user.id;
-      if (!isMine && created < weekAgo) continue;
+      if (!isMine && (created < weekAgo || user.acct || /^[gu]_/.test(uid))) continue;
       const meta = (await kv.get(["vid", id, "meta"])).value; if (!meta) continue;
       const c = await vidCounts(kv, id);
       const item = { id, title: meta.title, name: meta.name, user: uid, created, poster: !!meta.posterN, ...c };
@@ -514,6 +638,7 @@ export async function handler(req, info) {
   }
 
   // Расшифровка звука из видео (Gemini слышит, Claude — нет)
+  if (url.pathname === "/transcribe" && plan === "free") return json({ error: "Расшифровка видео есть на тарифе «Семья»", code: "plan" }, 402, h);
   if (url.pathname === "/transcribe") {
     const gkey = env("GEMINI_KEY");
     if (!gkey) return json({ error: "Нет ключа Gemini" }, 500, h);
@@ -542,7 +667,17 @@ export async function handler(req, info) {
   if (url.pathname === "/tts") {
     const text = String(body.text || "").slice(0, 5000);
     if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
-    const res = await geminiTTS(text, body.voice, body.model);
+    let ttsModel = body.model;
+    if (P) {
+      if (!P.ttsDialog && body.purpose !== "video") return json({ error: "Чтение вслух живым голосом есть на тарифе «Семья»", code: "tts_plan" }, 402, h);
+      if (P.ttsDayChars) {
+        const kv = await kvOpen(), k = ["tts", user.id, DAY()];
+        if ((await kvNum(kv, k)) + text.length > P.ttsDayChars) return json({ error: "На сегодня озвучка на бесплатном тарифе закончилась. Завтра снова можно.", code: "tts_limit" }, 402, h);
+        await kvInc(kv, k, text.length, 3);
+        ttsModel = "gemini-3.8-flash-lite-tts";
+      }
+    }
+    const res = await geminiTTS(text, body.voice, ttsModel);
     if (res.error) return json(res, res.status, h);
     return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": (res.backup ? "backup:" : "") + (res.model || "") } });
   }
@@ -568,12 +703,34 @@ export async function handler(req, info) {
   // живой режим: быстрые модели доступны всем (они дешевле основной)
   const LIVE_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5"];
   const isLive = body.purpose === "live";
-  const model = isLive && LIVE_MODELS.includes(body.model) ? body.model : models.includes(body.model) ? body.model : models[0];
+  const liveOk = isLive && LIVE_MODELS.includes(body.model) && (!user.acct || (user.models || []).includes(body.model) || body.model === "claude-haiku-5-5");
+  const model = liveOk ? body.model : (user.models || models).includes(body.model) ? body.model : (user.models || models)[0];
   if (!Array.isArray(body.messages) || !body.messages.length) {
     return json({ error: "Пустой разговор" }, 400, h);
   }
 
-  const think = !!body.think && !isLive;
+  if (P) {
+    const kv = await kvOpen();
+    if (body.purpose === "video") {
+      const vid = String(body.videoId || "").slice(0, 40);
+      if (!vid) return json({ error: "Нет номера ролика" }, 400, h);
+      const callsKey = ["cvid", user.id, vid], calls = await kvNum(kv, callsKey);
+      if (!calls) {
+        const u = await usageOf(user, plan);
+        if (u.creativeLeft <= 0) return json({ error: plan === "free" ? "Творческий ролик на бесплатном тарифе: 1 в месяц. Сделаю обычный ролик." : "Творческие ролики на этот месяц закончились. Сделаю обычный ролик.", code: "creative_limit" }, 402, h);
+        await kvInc(kv, ["cvt", user.id], 1, 0); await kvInc(kv, ["cvm", user.id, MONTH()], 1, 40);
+      } else if (calls >= 6) return json({ error: "Слишком много правок одного ролика", code: "creative_calls" }, 429, h);
+      await kvInc(kv, callsKey, 1, 2);
+    } else {
+      const u = await usageOf(user, plan);
+      if (u.chatToday >= P.chatDay) return json({ error: plan === "free" ? `На бесплатном тарифе ${P.chatDay} вопросов в день. Завтра снова можно, а без ограничений на тарифе «Семья».` : "На сегодня вопросы закончились, завтра снова можно.", code: "chat_limit" }, 402, h);
+      const all = await kvNum(kv, ["q", "_guests", DAY()]);
+      if (all >= Number(env("GUEST_DAILY", "500"))) return json({ error: "Сейчас очень много желающих. Попробуйте чуть позже.", code: "busy" }, 503, h);
+      await kvInc(kv, ["q", user.id, DAY()], 1, 3); await kvInc(kv, ["q", "_guests", DAY()], 1, 3);
+    }
+    if (isLive && !P.models.includes(body.model)) body.model = P.models[0];
+  }
+  const think = !!body.think && !isLive && (!P || plan !== "free");
   const payload = {
     model,
     // творческое видео: длинный код ролика — даём больший запас длины ответа

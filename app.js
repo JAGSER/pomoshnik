@@ -238,8 +238,11 @@ async function init() {
   if (mig) await importMigration(mig[1]);
 
   SESSION = store.get("session");
-  if (SESSION && CFG.users[SESSION.user] && userLang(SESSION.user) !== LANG) { setLang(userLang(SESSION.user)); return; }
-  if (SESSION && CFG.users[SESSION.user]) startHome();
+  const valid = SESSION && (CFG.users[SESSION.user] || isAcct(SESSION.user));
+  if (valid && CFG.users[SESSION.user] && userLang(SESSION.user) !== LANG) { setLang(userLang(SESSION.user)); return; }
+  if (valid) startHome();
+  // первый заход: сразу в приложение, без имени и пароля
+  else if (!store.get("wantLogin")) { try { await newGuest(); startHome(); } catch (e) { startLogin(); $("#login-error").textContent = e.message; } }
   else startLogin();
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
@@ -264,6 +267,176 @@ async function importMigration(code) {
   } catch (_) {}
 }
 
+/* ===== Гость: пользуется сразу, регистрация потом ===== */
+const isAcct = (id) => /^[gu]_/.test(id || "");
+let PLAN = null;
+const LL = (ru, en) => (LANG === "en" ? en : ru);
+async function newGuest() {
+  const ref = (location.search.match(/[?&]ref=([\w-]{1,20})/) || [])[1] || "";
+  const r = await fetch(CFG.proxy + "/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang: LANG, ref }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || LL("Нет связи. Проверьте интернет и обновите страницу.", "No connection. Check the internet and reload."));
+  SESSION = { user: d.user, password: d.password };
+  store.set("session", SESSION); store.del("wantLogin");
+  track("Гость");
+}
+async function loadPlan() {
+  try { PLAN = await apiPost("/me", {}); } catch (e) { if (/не найден|not found/i.test(e.message)) { store.del("session"); location.reload(); } }
+  return PLAN;
+}
+
+/* ===== Тарифы ===== */
+// своё название приложения (тариф «Семья+») — только внутри приложения, в роликах всегда «Помощник AI»
+function appTitle() { return (PLAN && PLAN.rename && SESSION && store.get("appTitle:" + SESSION.user)) || ""; }
+const PLANS_P = () => [
+  { id: "trial", name: LL("Пробный", "Trial"), price: "0 ₽", per: LL("7 дней или 3 творческих ролика", "7 days or 3 creative videos"), tag: LL("Для начала", "To start"),
+    items: LL(["Всё, что есть в «Семье+»", "3 творческих ролика с анимацией, музыкой и звуками", "Лучшая модель Claude и живой голос", "Отправка ссылкой, просмотры, сердечки, ответы", "Все помощники и живой режим с камерой"],
+      ["Everything in Family+", "3 creative videos with animation, music and sound", "The best Claude model and a natural voice", "Send by link, see views, hearts and replies", "All helpers and live camera mode"]) },
+  { id: "free", name: LL("Бесплатный", "Free"), price: "0 ₽", per: LL("навсегда", "forever"), tag: LL("Навсегда", "Forever"),
+    items: LL(["Claude Haiku, 10 вопросов в день", "Простые ролики до 40 секунд с живым голосом", "Отправка ссылкой, просмотры и ответы", "1 творческий ролик в месяц в подарок", "Основные помощники", "Чтение ответов вслух голосом телефона"],
+      ["Claude Haiku, 10 questions a day", "Simple videos up to 40 seconds with a natural voice", "Send by link, views and replies", "1 creative video a month as a gift", "Main helpers", "Answers read aloud by the phone's voice"]) },
+  { id: "family", name: LL("Семья", "Family"), price: "590 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true, buy: true,
+    items: LL(["До 4 человек, у каждого свои разговоры", "Claude Sonnet, вопросы без дневного лимита", "Живой голос для чтения и роликов", "30 творческих роликов в месяц на семью", "Ролики до 3 минут", "Музыка на выбор и звуки", "Все помощники, видеооткрытки ко дням рождения", "«Ролики семьи»: кто посмотрел и что ответил"],
+      ["Up to 4 people, each with their own chats", "Claude Sonnet, no daily question limit", "Natural voice for reading and videos", "30 creative videos a month for the family", "Videos up to 3 minutes", "Choose music, plus sound effects", "All helpers, birthday video cards", "Family videos: who watched and what they replied"]) },
+  { id: "familyplus", name: LL("Семья+", "Family+"), price: "1 190 ₽", per: LL("в месяц", "a month"), tag: LL("Максимум", "Maximum"), buy: true,
+    items: LL(["Всё из «Семьи»", "До 6 человек", "Claude Opus и режим «Подумать» для сложных вопросов", "100 творческих роликов в месяц", "Своё название внутри приложения: «Мамин помощник»", "Живой режим с камерой без ограничений"],
+      ["Everything in Family", "Up to 6 people", "Claude Opus and Think mode for hard questions", "100 creative videos a month", "Your own name inside the app", "Unlimited live camera mode"]) },
+];
+const PLANS_B = () => [
+  { id: "expert", name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
+    items: LL(["30 творческих роликов в месяц", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
+      ["30 creative videos a month", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
+  { id: "start", name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
+    items: LL(["60 творческих роликов в месяц", "До 3 сотрудников", "Свой логотип, цвета и шрифты", "1 персональный аватар бренда", "Формат 9:16, ролики до 60 секунд", "Музыка и звуки"],
+      ["60 creative videos a month", "Up to 3 team members", "Your logo, colours and fonts", "1 personal brand avatar", "9:16, videos up to 60 seconds", "Music and sound effects"]) },
+  { id: "business", name: LL("Бизнес", "Business"), price: "290 000 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true,
+    items: LL(["400 творческих роликов в месяц", "До 10 сотрудников", "Брендбук: стиль держится сам", "3 персональных аватара", "Свой голос: клон голоса основателя или диктора", "Форматы 9:16, 16:9 и 1:1, ролики до 3 минут", "Субтитры и несколько языков", "Личный менеджер"],
+      ["400 creative videos a month", "Up to 10 team members", "Brand book: your style is kept automatically", "3 personal avatars", "Your own cloned voice", "9:16, 16:9 and 1:1, videos up to 3 minutes", "Subtitles and several languages", "A personal manager"]) },
+  { id: "studio", name: LL("Студия", "Studio"), price: "1 190 000 ₽", per: LL("в месяц", "a month"), tag: LL("Агентствам и сетям", "Agencies and chains"),
+    items: LL(["До 2 000 творческих роликов в месяц", "Сотрудники без ограничений", "Несколько брендов в одном кабинете", "Аватары и голоса без ограничений", "Своё приложение на своём домене для клиентов", "Доступ по API", "Приоритетная очередь и выделенная поддержка"],
+      ["Up to 2,000 creative videos a month", "Unlimited team members", "Several brands in one account", "Unlimited avatars and voices", "Your own app on your own domain", "API access", "Priority queue and dedicated support"]) },
+];
+let PLANTAB = "personal", LEAD = null;
+function planLine() {
+  if (!PLAN) return "";
+  if (PLAN.plan === "owner") return LL("Семейный доступ без ограничений", "Family access, no limits");
+  const u = PLAN.usage || {}, days = Math.max(0, Math.ceil((PLAN.trialEnds - Date.now()) / 86400000));
+  if (PLAN.plan === "trial") return LL(`Пробный период: осталось ${days} дн., творческих роликов ${u.creativeLeft} из ${u.creativeLimit}`, `Trial: ${days} days left, ${u.creativeLeft} of ${u.creativeLimit} creative videos`);
+  if (PLAN.plan === "free") return LL(`Бесплатный: сегодня ${u.chatToday} из ${u.chatDay} вопросов, творческих роликов в этом месяце ${u.creativeLeft} из ${u.creativeLimit}`, `Free: ${u.chatToday} of ${u.chatDay} questions today, ${u.creativeLeft} of ${u.creativeLimit} creative videos this month`);
+  return LL(`Тариф «${PLAN.title}»: творческих роликов осталось ${u.creativeLeft} из ${u.creativeLimit}`, `${PLAN.title} plan: ${u.creativeLeft} of ${u.creativeLimit} creative videos left`);
+}
+function renderPlanBanner() {
+  const box = $("#plan-banner"); if (!box) return;
+  box.innerHTML = ""; box.hidden = true;
+  if (!PLAN || PLAN.plan === "owner" || curScreen() !== "screen-home") return;
+  const lines = [planLine()];
+  if (!PLAN.registered) lines.push(LL("Сохраните аккаунт, чтобы не потерять разговоры и ролики", "Save your account so you don't lose your chats and videos"));
+  const b = el("button", "plan-banner-row"); b.type = "button";
+  b.innerHTML = lines.map((l, i) => `<span${i ? ' class="sub"' : ""}>${i ? "🔐 " : PLAN.plan === "trial" ? "🎁 " : "💎 "}${esc(l)}</span>`).join("");
+  b.onclick = () => (!PLAN.registered && PLAN.plan !== "free" ? openSettings() : openPlans());
+  box.append(b); box.hidden = false;
+}
+function openPlans(tab) {
+  if (tab) PLANTAB = tab;
+  LEAD = null;
+  openVSheet("plans-sheet");
+  renderPlans();
+  if (!PLAN) loadPlan().then(renderPlans);
+}
+function renderPlans() {
+  document.querySelectorAll("#plans-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === PLANTAB));
+  $("#plans-now").textContent = planLine();
+  const box = $("#plans-list"); box.innerHTML = "";
+  (PLANTAB === "personal" ? PLANS_P() : PLANS_B()).forEach((p) => {
+    const c = el("article", "plan-card" + (p.top ? " top" : "") + (PLANTAB === "business" ? " biz" : ""));
+    const mine = PLAN && PLAN.plan === p.id;
+    c.innerHTML = `<span class="pc-tag">${esc(mine ? LL("Ваш тариф", "Your plan") : p.tag)}</span><h3>${esc(p.name)}</h3><div class="pc-price">${esc(p.price)} <small>${esc(p.per)}</small></div><ul>${p.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    if ((p.buy || PLANTAB === "business") && !mine) {
+      const b = el("button", "btn btn-primary btn-wide pc-buy"); b.type = "button";
+      b.textContent = PLANTAB === "business" ? LL("Оставить заявку", "Request") : LL("Оформить", "Get it");
+      b.onclick = () => { LEAD = p; renderLead(); };
+      c.append(b);
+    }
+    box.append(c);
+  });
+  renderLead();
+}
+function renderLead() {
+  const f = $("#plans-lead");
+  if (!LEAD) { f.hidden = true; return; }
+  f.hidden = false;
+  const biz = PLANTAB === "business";
+  $("#lead-title").textContent = LL(`Заявка: тариф «${LEAD.name}»`, `Request: ${LEAD.name} plan`);
+  $("#lead-hint").textContent = biz ? LL("Расскажем, как это работает, и сделаем 3 демо-ролика в стиле вашего бренда.", "We'll show how it works and make 3 demo videos in your brand style.")
+    : LL("Оплата картой появится совсем скоро. Оставьте телефон, Telegram или почту, и мы подключим тариф.", "Card payment is coming very soon. Leave your phone, Telegram or email and we'll switch your plan on.");
+  $("#lead-company").hidden = !biz;
+  $("#lead-status").textContent = "";
+  setTimeout(() => f.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+}
+$("#lead-send").onclick = async () => {
+  const st = $("#lead-status");
+  st.textContent = LL("Отправляю…", "Sending…");
+  try {
+    await apiPost("/lead", { plan: LEAD.id, contact: $("#lead-contact").value, company: $("#lead-company").value, note: $("#lead-note").value });
+    st.textContent = LL("Спасибо! Мы свяжемся с вами в ближайшее время.", "Thank you! We'll be in touch soon.");
+    $("#lead-contact").value = ""; $("#lead-note").value = ""; track("Заявка", { plan: LEAD.id });
+  } catch (e) { st.textContent = e.message; }
+};
+document.querySelectorAll("#plans-tabs button").forEach((b) => (b.onclick = () => { PLANTAB = b.dataset.tab; LEAD = null; renderPlans(); }));
+$("#plans-close").onclick = () => navBack();
+$("#plans-sheet").onclick = (e) => { if (e.target.id === "plans-sheet") navBack(); };
+
+// аккаунт в настройках: тариф, сохранение аккаунта, своё название, заявки для администратора
+function renderAcct() {
+  const box = $("#acct-box"); if (!box || !SESSION) return;
+  box.innerHTML = "";
+  const row = el("button", "acct-plan"); row.type = "button";
+  row.innerHTML = `<span>💎 ${esc(planLine() || LL("Тарифы", "Plans"))}</span><b>${LL("Тарифы", "Plans")} ›</b>`;
+  row.onclick = () => openPlans();
+  box.append(row);
+  if (PLAN && PLAN.plan !== "owner") {
+    if (!PLAN.registered) {
+      const f = el("div", "acct-form");
+      f.innerHTML = `<p class="hint">${LL("Сейчас вы пользуетесь без регистрации. Придумайте имя для входа и пароль, чтобы не потерять разговоры и войти с другого телефона.", "You're using the app without an account. Choose a login and password to keep your chats and sign in from another phone.")}</p>
+        <input id="reg-login" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="${LL("Имя для входа, например lena75", "Login, e.g. lena75")}">
+        <input id="reg-pass" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="${LL("Пароль, не короче 6 символов", "Password, at least 6 characters")}">
+        <button type="button" id="reg-save" class="btn btn-primary btn-wide">${LL("Сохранить аккаунт", "Save my account")}</button><p id="reg-status" class="hint"></p>`;
+      box.append(f);
+      $("#reg-save").onclick = async () => {
+        const st = $("#reg-status"), login = $("#reg-login").value.trim(), pw = $("#reg-pass").value.trim();
+        st.textContent = LL("Сохраняю…", "Saving…");
+        try {
+          await apiPost("/register", { login, newPassword: pw, name: profile().name || "" });
+          SESSION.password = pw; store.set("session", SESSION); track("Регистрация");
+          await loadPlan(); renderAcct(); toast(LL(`Аккаунт сохранён. Вход: ${login}`, `Account saved. Login: ${login}`));
+        } catch (e) { st.textContent = e.message; }
+      };
+    } else {
+      const p = el("p", "hint"); p.textContent = LL(`Вы вошли как: ${PLAN.login}`, `Signed in as: ${PLAN.login}`); box.append(p);
+    }
+    if (PLAN.rename) {
+      const r = el("div", "acct-form");
+      r.innerHTML = `<label class="hint" for="app-title-in">${LL("Название приложения на главном экране", "App name on the home screen")}</label><input id="app-title-in" maxlength="30" placeholder="${LL("Например, Мамин помощник", "For example, Mum's helper")}">`;
+      box.append(r);
+      const inp = $("#app-title-in"); inp.value = store.get("appTitle:" + SESSION.user) || "";
+      inp.onchange = () => store.set("appTitle:" + SESSION.user, inp.value.trim());
+    }
+  }
+  if (PLAN && PLAN.plan === "owner" && PLAN.admin) {
+    const b = el("button", "btn btn-ghost btn-wide"); b.type = "button"; b.textContent = "📋 Заявки и гости";
+    const out = el("pre", "creative-log");
+    b.onclick = async () => {
+      out.textContent = "Загружаю…";
+      try {
+        const d = await apiPost("/admin", {});
+        out.textContent = `Гостей: ${d.guests}, сохранённых аккаунтов: ${d.users}, вопросов гостей сегодня: ${d.today}\n\n` +
+          (d.leads.length ? d.leads.map((l) => `${new Date(l.at).toLocaleString(LOCALE())} · ${l.plan} · ${l.contact}${l.company ? " · " + l.company : ""}${l.note ? "\n  " + l.note : ""} · ${l.user}`).join("\n") : "Заявок пока нет");
+      } catch (e) { out.textContent = e.message; }
+    };
+    box.append(b, out);
+  }
+}
+
 /* ===== Вход (только пароль — прослойка сама находит человека) ===== */
 function startLogin() {
   document.documentElement.classList.remove("big");
@@ -285,17 +458,18 @@ $("#pass-toggle").onclick = () => {
 };
 $("#login-form").onsubmit = async (e) => {
   e.preventDefault();
-  const password = $("#login-pass").value.trim();
+  const password = $("#login-pass").value.trim(), login = ($("#login-name").value || "").trim();
   if (!password) return;
   $("#login-error").textContent = "Проверяю…";
   try {
     const r = await fetch(CFG.proxy + "/login", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(login ? { login, password } : { password }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { $("#login-error").textContent = d.error || "Не получилось войти"; return; }
-    if (!CFG.users[d.user]) { $("#login-error").textContent = "Пользователь не найден в настройках приложения"; return; }
+    if (!CFG.users[d.user] && !isAcct(d.user)) { $("#login-error").textContent = "Пользователь не найден в настройках приложения"; return; }
+    store.del("wantLogin");
     SESSION = { user: d.user, password, models: d.models, webSearch: d.webSearch };
     store.set("session", SESSION);
     track("Вход");
@@ -307,7 +481,7 @@ $("#login-form").onsubmit = async (e) => {
 };
 
 /* ===== Главная ===== */
-function me() { return CFG.users[SESSION.user]; }
+function me() { return CFG.users[SESSION.user] || { name: "", presets: ["ask"], guest: true }; }
 
 async function startHome() {
   stopSnippet();
@@ -315,9 +489,11 @@ async function startHome() {
   const u = me();
   document.documentElement.classList.toggle("big", !!u.bigText);
   show("screen-home");
-  $("#hello").textContent = personalOn() ? `Здравствуйте, ${profile().name}!` : "Здравствуйте!";
+  const nm = profile().name;
+  $("#hello").textContent = appTitle() || (personalOn() && nm ? `Здравствуйте, ${nm}!` : "Здравствуйте!");
 
   renderBdayBanner();
+  loadPlan().then(renderPlanBanner);
   const grid = $("#preset-grid");
   grid.innerHTML = "";
   (u.presets || Object.keys(CFG.presets)).forEach((pid) => {
@@ -393,10 +569,15 @@ async function startHome() {
   }
 }
 $("#btn-logout").onclick = () => {
-  if (!confirm("Выйти? Потом нужно будет снова ввести пароль.")) return;
-  store.del("session");
-  SESSION = null;
+  const guest = PLAN && PLAN.plan !== "owner" && !PLAN.registered;
+  if (!confirm(guest ? LL("Выйти? Аккаунт не сохранён: без имени и пароля в него больше не войти.", "Log out? Your account isn't saved: you won't be able to log back in.") : "Выйти? Потом нужно будет снова ввести пароль.")) return;
+  store.del("session"); store.set("wantLogin", true);
+  SESSION = null; PLAN = null;
   startLogin();
+};
+$("#login-guest").onclick = async () => {
+  $("#login-error").textContent = LL("Открываю…", "Opening…");
+  try { await newGuest(); startHome(); } catch (e) { $("#login-error").textContent = e.message; }
 };
 
 /* ===== Разговор ===== */
@@ -642,7 +823,7 @@ async function ask() {
   // Чтение вслух начинается, пока Claude ещё пишет ответ
   stopSpeaking();
   const autoRead = LIVE ? true : $("#autoread").checked;
-  const live = LIVE ? new LiveSpeaker() : autoRead && useGemini() ? new Speaker() : null;
+  const live = LIVE ? new LiveSpeaker() : autoRead && dialogGemini() ? new Speaker() : null;
   let pre = null;
   try {
     const r = await fetch(CFG.proxy + "/chat", {
@@ -655,8 +836,8 @@ async function ask() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      if (r.status === 401 && /пароль/i.test(d.error || "")) { store.del("session"); throw new Error("Пароль больше не подходит. Войдите заново."); }
-      throw new Error(d.error || "Не получилось получить ответ");
+      if (r.status === 401 && (/пароль/i.test(d.error || "") || d.gone)) { store.del("session"); throw new Error("Пароль больше не подходит. Войдите заново."); }
+      const er = new Error(d.error || "Не получилось получить ответ"); er.code = d.code; throw er;
     }
     const reader = r.body.getReader();
     const dec = new TextDecoder();
@@ -685,7 +866,7 @@ async function ask() {
           if (live) live.push(shown);
           if (LIVE) $("#live-answer").textContent = liveTail(plain(shown));
           // предзапись первой фразы, даже если чтение вслух выключено, — чтобы «Вслух» звучал сразу
-          else if (!pre && useGemini()) { const c = firstChunk(plain(full), false); if (c) { pre = c; ttsFetch(c).catch(() => {}); } }
+          else if (!pre && dialogGemini()) { const c = firstChunk(plain(full), false); if (c) { pre = c; ttsFetch(c).catch(() => {}); } }
           scrollDown();
         } else if (ev.type === "error") {
           throw new Error(ev.error?.type === "overloaded_error" ? "Claude перегружен, попробуйте через минуту" : "Ошибка при ответе");
@@ -707,7 +888,7 @@ async function ask() {
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
-    if (!live && useGemini()) {
+    if (!live && dialogGemini()) {
       if (!pre) { pre = firstChunk(plain(full), true); if (pre) ttsFetch(pre).catch(() => {}); }
       if (pre && !msg.tts) { msg.tts = [pre]; save(); }
     }
@@ -731,7 +912,8 @@ async function ask() {
         retry.style.cssText = "margin-left:10px;border:1px solid currentColor;background:none;color:inherit;border-radius:10px;padding:6px 12px;cursor:pointer";
         const last = lastUserFromDom();
         retry.onclick = () => { e.remove(); if (last) { CHAT.messages.push(last); ask(); } };
-        e.append(retry);
+        if (err.code) { const pb = el("button"); pb.textContent = LL("💎 Тарифы", "💎 Plans"); pb.style.cssText = retry.style.cssText; pb.onclick = () => openPlans(); e.append(pb); }
+        else e.append(retry);
       }
       $("#messages").append(e);
       scrollDown();
@@ -860,7 +1042,12 @@ function showStarters(chat) {
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
 // помощники, которые положены этому человеку (в config.json у каждого есть список "for")
-function allowedHelpers(uid) { uid = uid || SESSION.user; return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(uid)); }
+function allowedHelpers(uid) {
+  uid = uid || SESSION.user;
+  const known = !!CFG.users[uid];
+  // у гостей и зарегистрированных — общие помощники (без школьных и семейных настроек)
+  return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || (known ? h.for.includes(uid) : h.group !== "school" && ["mama", "papa", "sister", "vie"].some((x) => h.for.includes(x))));
+}
 // человек сам прячет ненужных помощников в настройках (хранится на устройстве)
 function hiddenHelpers() { return (SESSION && store.get("helpersHidden:" + SESSION.user)) || []; }
 function myHelpers(uid) { const hid = !uid || uid === SESSION.user ? hiddenHelpers() : []; return allowedHelpers(uid).filter(([id]) => !hid.includes(id)); }
@@ -1440,12 +1627,14 @@ let SPEAKER = null;
 let GEMINI_OFF = false;
 function isSpeaking() { return !!SPEAKER; }
 function useGemini() { return (CFG.voice || {}).engine === "gemini" && !GEMINI_OFF; }
+// живой голос для чтения ответов: на бесплатном тарифе читает голос телефона
+function dialogGemini() { return useGemini() && !(PLAN && PLAN.ttsDialog === false); }
 
 function speakText(text, owner, msg) {
   stopSpeaking();
   const t = plain(text).trim();
   if (!t) return;
-  const sp = useGemini() ? new Speaker() : new BrowserSpeaker();
+  const sp = dialogGemini() ? new Speaker() : new BrowserSpeaker();
   sp.setOwner(owner);
   if (sp.preset && msg && msg.tts) sp.preset(text, msg.tts);
   sp.push(text);
@@ -1479,13 +1668,13 @@ const TTS_INFLIGHT = new Map();
 // диалоги читает облегчённая модель (дешевле на треть), ролики — полная (живее интонация)
 function ttsDialogModel() { return (CFG.voice || {}).dialogModel || "gemini-3.8-flash-lite-tts"; }
 function ttsVideoModel() { return (CFG.voice || {}).videoModel || "gemini-3.8-flash-tts"; }
-async function ttsBlob(chunk, voice, model) {
+async function ttsBlob(chunk, voice, model, purpose) {
   voice = voice || userVoice(); model = model || ttsDialogModel();
   const key = ttsKey(chunk, voice, model);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
   if (TTS_INFLIGHT.has(key)) return TTS_INFLIGHT.get(key);
-  const p = ttsLoad(chunk, voice, model).then((b) => {
+  const p = ttsLoad(chunk, voice, model, purpose).then((b) => {
     // запасной голос (когда основной упёрся в лимит) не запоминаем — в следующий раз запишется основным
     if (!b._backup) { TTS_MEM.set(key, b); ADB.put(key, b); }
     return b;
@@ -1503,11 +1692,11 @@ async function ttsSlot() {
   TTS_ACTIVE++;
 }
 function ttsRelease() { TTS_ACTIVE--; const n = TTS_WAIT.shift(); if (n) n(); }
-async function ttsLoad(chunk, voice, model) {
+async function ttsLoad(chunk, voice, model, purpose) {
   await ttsSlot();
   try {
     for (let attempt = 0; ; attempt++) {
-      try { return await ttsLoadOnce(chunk, voice, model); }
+      try { return await ttsLoadOnce(chunk, voice, model, purpose); }
       catch (err) {
         // лимит в минуту: один раз ждём, сколько просит Google (не дольше 25 секунд), и пробуем снова
         if (err.retryAfter && attempt === 0 && err.retryAfter <= 25) { await new Promise((r) => setTimeout(r, err.retryAfter * 1000)); continue; }
@@ -1518,7 +1707,7 @@ async function ttsLoad(chunk, voice, model) {
     }
   } finally { ttsRelease(); }
 }
-async function ttsLoadOnce(chunk, voice, model) {
+async function ttsLoadOnce(chunk, voice, model, purpose) {
   const v = CFG.voice || {};
   // не ждём дольше 70 секунд: сервер сам ждёт лимит до 30 с, плюс озвучка
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
@@ -1527,7 +1716,7 @@ async function ttsLoadOnce(chunk, voice, model) {
     r = await fetch(CFG.proxy + "/tts", {
     signal: ctl.signal,
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: model || v.model }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: model || v.model, purpose: purpose || "dialog" }),
     });
   } catch (e) { clearTimeout(timer); const er = new Error(ctl.signal.aborted ? "Голос Gemini не ответил вовремя" : "Нет связи с сервером озвучки"); er.network = true; throw er; }
   if (r.status === 501) GEMINI_OFF = true;
@@ -1609,7 +1798,7 @@ class Speaker {
   // каждый кусок сразу отправляем на озвучку — пока звучит первый, остальные уже готовятся
   add(chunk) {
     if (!chunk.trim()) return;
-    const item = { text: chunk, p: useGemini() ? ttsFetch(chunk) : null };
+    const item = { text: chunk, p: dialogGemini() ? ttsFetch(chunk) : null };
     if (item.p) item.p.catch(() => {});
     this.queue.push(item); this.all.push(chunk); this.count++;
   }
@@ -1800,7 +1989,7 @@ async function playSnippet(chat, btn) {
   SNIPPET = me_;
   btn.classList.add("playing");
   const done = () => { if (SNIPPET === me_) { btn.classList.remove("playing"); SNIPPET = null; } };
-  if (!useGemini()) { browserSpeak(first, done); return; }
+  if (!dialogGemini()) { browserSpeak(first, done); return; }
   // всё, что уже записано подряд с начала, играем целиком; иначе — только первую фразу
   let parts = [first];
   if (last.tts && last.tts.length > 1) {
@@ -1889,6 +2078,7 @@ function stopPreview() {
 function openSettings() {
   stopSpeaking();
   show("screen-settings");
+  renderAcct(); loadPlan().then(renderAcct);
   const list = $("#voice-list");
   list.innerHTML = "";
   const cur = userVoice();
@@ -2136,6 +2326,12 @@ async function videoButton(btn, text, msg, opt = {}) {
   if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
   VIDEO_BUSY = true;
   askNotify(); wakeOn(); waitNote(btn, true);
+  CUR_VID = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  // бесплатный тариф: ролик до 40 секунд — берём начало ответа по целым предложениям
+  if (PLAN && PLAN.videoSec && PLAN.videoSec < 120) {
+    const lim = PLAN.videoSec * 14, pt = plain(text);
+    if (pt.length > lim) { const sents = pt.match(/[^.!?…]+[.!?…]*\s*/g) || [pt]; let cut = ""; for (const x of sents) { if ((cut + x).length > lim && cut) break; cut += x; } text = cut.trim(); msg = null; vidNote(btn, LL(`ℹ️ На бесплатном тарифе ролик до ${PLAN.videoSec} секунд, поэтому в нём начало ответа.`, `ℹ️ On the free plan videos are up to ${PLAN.videoSec} seconds, so this one uses the start of the answer.`)); }
+  }
   btn.disabled = true;
   const label = (s) => { btn.textContent = s; fitRow(btn.closest(".msg-actions")); };
   // секундомер: идёт, пока видео собирается, и остаётся с итоговым временем
@@ -2157,7 +2353,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     const parts = [];
     let done = 0;
     label(`⏳ 0/${chunks.length}`);
-    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c, undefined, ttsVideoModel()).then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
+    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c, undefined, ttsVideoModel(), "video").then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
@@ -2178,7 +2374,9 @@ async function videoButton(btn, text, msg, opt = {}) {
     // звуки и музыка под голос
     try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat); } catch (e) { console.warn("Музыка:", e); }
     let scene = null;
-    if (creativeOn()) {
+    const creativeLeft = !PLAN || !PLAN.usage || PLAN.usage.creativeLeft > 0;
+    if (creativeOn() && !creativeLeft) vidNote(btn, LL("ℹ️ Творческие ролики на этот период закончились, сделан обычный. Больше роликов на тарифе «Семья».", "ℹ️ No creative videos left for now, so this is a simple one. More on the Family plan."));
+    if (creativeOn() && creativeLeft) {
       try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
       catch (e) {
         console.warn("Творческий режим:", e);
@@ -2217,6 +2415,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     btn.classList.add("ready");
     stopTimer(true);
     waitNote(btn, false); wakeOff(); videoDone(true, title);
+    if (PLAN && PLAN.plan !== "owner") loadPlan();
     if (opt.autoShare) openShare(btn._ready, btn._ctx);
   } catch (err) {
     console.error(err);
@@ -2354,6 +2553,8 @@ async function refreshVidBanner() {
 let VIDTAB = "mine";
 async function openVideos(tab) {
   if (tab) VIDTAB = tab;
+  const fam = !!CFG.users[SESSION.user];
+  $("#videos-tabs").hidden = !fam; if (!fam) VIDTAB = "mine";
   openVSheet("videos-sheet");
   const list = $("#videos-list"); list.innerHTML = `<p class="sheet-hint">${T("Загружаю…")}</p>`;
   const st = await loadVidStats();
@@ -2718,7 +2919,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=74");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=75");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3399,10 +3600,11 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Звуки подчёркивают события на экране: появление предмета, смена сцены, набегающее число, печатающийся текст, итог. Ставь их точно в те моменты, когда это происходит в draw.
 - Главное — голос, под ним ещё будет музыка: громкость 0.08…0.2, в среднем не чаще одного звука в 1–1,5 с (серия тиков у счётчика — один звук). Финальную заставку озвучивает приложение.`;
 
+let CUR_VID = null;
 async function directorCall(messages, onChars, model) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", system: DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: DIRECTOR_PROMPT, messages }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   const reader = r.body.getReader(), dec = new TextDecoder();

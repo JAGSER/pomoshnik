@@ -387,3 +387,28 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .vid-btn.hint { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; animation: vidpulse 1.4s ease-in-out 6; }
 @keyframes vidpulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); transform: scale(1.05); } }
 @media (prefers-reduced-motion: reduce) { .vid-btn.hint { animation: none; } }
+
+/* ===== Тарифы и аккаунт ===== */
+.plan-banner { margin-bottom: 12px; }
+.plan-banner-row { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 4px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px; padding: 12px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.plan-banner-row .sub { font-weight: 500; color: var(--accent); }
+.acct-box { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.acct-plan { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 14px; padding: 12px 14px; font: inherit; cursor: pointer; }
+.acct-plan b { color: var(--accent); white-space: nowrap; }
+.acct-form { display: flex; flex-direction: column; gap: 8px; }
+.acct-form input, .plans-lead input, .plans-lead textarea, .login-name { width: 100%; font: inherit; font-size: 1.05em; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; }
+.login-name { margin-bottom: 6px; }
+.plans-card #plans-tabs { margin: 10px 0 6px; }
+.plans-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.plan-card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.plan-card.top { border-color: var(--accent); }
+.pc-tag { align-self: flex-start; font-size: .72em; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.plan-card h3 { margin: 0; font-size: 1.25em; }
+.pc-price { font-size: 1.5em; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pc-price small { font-size: .55em; font-weight: 500; color: var(--muted); }
+.plan-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: .95em; }
+.plan-card li { display: grid; grid-template-columns: 16px 1fr; gap: 6px; }
+.plan-card li::before { content: "✓"; color: var(--accent); font-weight: 800; }
+.pc-buy { margin-top: auto; }
+.plans-lead { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 18px; padding: 14px; }
+.plans-lead h3 { margin: 0; }
