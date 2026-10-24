@@ -365,6 +365,7 @@ function newChat(presetId) {
 }
 
 function openChat(chat) {
+  BACK_TO_HELPERS = false;
   stopSnippet();
   track(chat.messages && chat.messages.length ? "Открыт разговор" : "Новый разговор", { preset: chat.preset });
   CHAT = chat;
@@ -402,7 +403,14 @@ function openChat(chat) {
   scrollDown();
   if (!matchMedia("(pointer: coarse)").matches) $("#input").focus();
 }
-$("#btn-back").onclick = () => { if (ABORT) ABORT.abort(); stopAutoSend(); stopListening(); startHome(); };
+// если разговор открыт из списка помощников — «назад» возвращает к этому списку
+let BACK_TO_HELPERS = false;
+$("#btn-back").onclick = async () => {
+  if (ABORT) ABORT.abort(); stopAutoSend(); stopListening();
+  const toHelpers = BACK_TO_HELPERS; BACK_TO_HELPERS = false;
+  await startHome();
+  if (toHelpers && helpersOn()) openHelpers();
+};
 
 /* ===== Названия разговоров ===== */
 function chatTitle(c) {
@@ -814,6 +822,7 @@ function pickHelper(id) {
   const chat = newChat("ask");
   chat.helper = id; chat.title = T(hTitle(h)); chat.emoji = h.icon;
   openChat(chat);
+  BACK_TO_HELPERS = true;
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
 }
@@ -2313,7 +2322,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=58");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=59");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
