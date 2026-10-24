@@ -2363,10 +2363,14 @@ function mascotTrick(name) {
   MASCOT_LAST = k; MASCOT_TRICKS[k]();
 }
 // обычно раз в 3–6 минут; у администратора для проверки — каждые 10 секунд
-(function mascotTricks() {
-  const test = SESSION && me().admin;
-  setTimeout(() => { mascotTrick(); mascotTricks(); }, test ? 10000 : 180000 + Math.random() * 180000);
-})();
+let MASCOT_NEXT = Date.now() + 180000 + Math.random() * 180000;
+setInterval(() => {
+  const test = !!(SESSION && CFG && CFG.users && me().admin);
+  if (!test && Date.now() < MASCOT_NEXT) return;
+  if (!mascotVisible()) return;
+  mascotTrick();
+  MASCOT_NEXT = Date.now() + 180000 + Math.random() * 180000;
+}, 10000);
 
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL_EVT = e; updateInstall(); });
 window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstall(); });
@@ -3183,7 +3187,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=87");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=88");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
