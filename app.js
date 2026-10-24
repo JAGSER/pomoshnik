@@ -2321,74 +2321,111 @@ document.addEventListener("click", (e) => {
   else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
 });
 // редкие трюки: толкает имя, крутит шестерёнку, пружинит на линии, кувырок, кружится глаз
-// ключевые кадры с плавностью внутри каждого отрезка (общая плавность сдвигает тайминги)
-function mAnim(node, frames, opt) { return node.animate(frames.map((f) => ({ easing: opt.easing || "ease-in-out", ...f })), { duration: opt.duration, delay: opt.delay || 0 }); }
-const MASCOT_TRICKS = {
-  push() {
-    // подъезжает вплотную к концу текста и толкает его
-    const m = $("#mascot"), n = $("#hello"), rg = document.createRange(); rg.selectNodeContents(n);
-    const gap = Math.max(0, m.getBoundingClientRect().left - rg.getBoundingClientRect().right - 2), P = 18;
-    mascotLook(-1, 0.4, 2600);
-    mAnim(m, [{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(-4deg)`, offset: 0.3 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.5 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.65 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
-    mAnim(n, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: `translateX(${-P}px)`, offset: 0.5 }, { transform: `translateX(${-P}px)`, offset: 0.7 }, { transform: "none", offset: 0.85 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
-  },
-  gear() {
-    // подъезжает вплотную к шестерёнке и раскручивает её
-    const m = $("#mascot"), g = $("#btn-settings"), gi = g.getBoundingClientRect(), mr = m.getBoundingClientRect();
-    const gap = Math.max(0, gi.left + gi.width * 0.2 - mr.right);
-    mascotLook(1, 0.5, 2800);
-    // подходит, задерживается, толкает лапкой-краем — и только тогда шестерёнка раскручивается
-    mAnim(m, [{ transform: "none" }, { transform: `translateX(${gap}px) rotate(2deg)`, offset: 0.28 }, { transform: `translateX(${gap - 3}px) rotate(-4deg)`, offset: 0.36 },
-      { transform: `translateX(${gap}px) rotate(14deg) translateY(3px)`, offset: 0.42 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.55 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.78 }, { transform: "none" }], { duration: 2800, easing: "ease-in-out" });
-    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(540deg)" }], { duration: 1500, delay: 2800 * 0.41, easing: "cubic-bezier(.15,.9,.3,1)" });
-  },
-  bounce() {
-    // спрыгивает на линию под шапкой и пружинит, касаясь её низом
-    const m = $("#mascot"), bar = m.closest(".topbar");
-    const d = Math.max(4, bar.getBoundingClientRect().bottom - 1 - m.getBoundingClientRect().bottom);
-    mascotLook(0, 1, 2000);
-    const o = "50% 100%";
-    mAnim(m, [
-      { transform: "none", transformOrigin: o }, { transform: `translateY(-8px)`, transformOrigin: o, offset: 0.12, easing: "ease-in" },
-      { transform: `translateY(${d}px)`, transformOrigin: o, offset: 0.24 }, { transform: `translateY(${d + 6}px) scale(1.18,.78)`, transformOrigin: o, offset: 0.3, easing: "ease-out" },
-      { transform: "translateY(-18px) scale(.94,1.08)", transformOrigin: o, offset: 0.46, easing: "ease-in" },
-      { transform: `translateY(${d}px)`, transformOrigin: o, offset: 0.6 }, { transform: `translateY(${d + 4}px) scale(1.1,.86)`, transformOrigin: o, offset: 0.65, easing: "ease-out" },
-      { transform: "translateY(-6px)", transformOrigin: o, offset: 0.77, easing: "ease-in" },
-      { transform: `translateY(${d}px) scale(1.04,.95)`, transformOrigin: o, offset: 0.86, easing: "ease-out" }, { transform: "none", transformOrigin: o },
-    ], { duration: 2000, easing: "ease-in-out" });
-    // линия прогибается под ним
-    const ln = el("div", "m-line"), mr = m.getBoundingClientRect(), br = bar.getBoundingClientRect();
-    ln.style.left = mr.left - br.left - 10 + "px"; ln.style.width = mr.width + 20 + "px"; bar.append(ln);
-    mAnim(ln, [{ transform: "scaleY(0)" }, { transform: "scaleY(0)", offset: 0.24 }, { transform: "scaleY(1)", offset: 0.3 }, { transform: "scaleY(0)", offset: 0.4 }, { transform: "scaleY(0)", offset: 0.6 }, { transform: "scaleY(.6)", offset: 0.65 }, { transform: "scaleY(0)", offset: 0.75 }, { transform: "scaleY(0)", offset: 0.86 }, { transform: "scaleY(.25)", offset: 0.9 }, { transform: "scaleY(0)" }], { duration: 2000 }).onfinish = () => ln.remove();
-  },
-  flip() {
-    const m = $("#mascot");
-    mAnim(m, [{ transform: "none" }, { transform: "translateY(4px) scale(1.1,.85)", offset: 0.2 }, { transform: "translateY(-22px) rotate(180deg)", offset: 0.55 }, { transform: "translateY(0) rotate(360deg) scale(1.1,.88)", offset: 0.85 }, { transform: "rotate(360deg)" }], { duration: 1300, easing: "ease-in-out" });
-    setTimeout(() => mascotPlay("happy", 1000), 1100);
-  },
-  dizzy() {
-    // глаз крутится по кругу, лицо покачивается
-    let a = 0; const t = setInterval(() => { a += 0.5; mascotLook(Math.cos(a), Math.sin(a)); if (a > 12) { clearInterval(t); mascotLook(0, 0); } }, 70);
-    mAnim($("#mascot"), [{ transform: "none" }, { transform: "rotate(-10deg)" }, { transform: "rotate(10deg)" }, { transform: "rotate(-6deg)" }, { transform: "none" }], { duration: 1700, easing: "ease-in-out" });
-  },
-};
-let MASCOT_LAST = "";
-function mascotTrick(name) {
+/* ===== Трюки логотипа (в своей области, чтобы имена не пересекались с остальным кодом) ===== */
+const mascotTrick = (() => {
+// ключевые кадры с плавностью внутри каждого отрезка
+function A(el, frames, dur, o = {}) { return el.animate(frames.map((f) => ({ easing: o.easing || "ease-in-out", ...f })), { duration: dur, delay: o.delay || 0, fill: o.fill || "none" }); }
+function look(c, dx, dy, back) { mascotLook(dx, dy, back); }
+function geo(c) {
+  const b = c.bar.getBoundingClientRect(), m = c.m.getBoundingClientRect(), g = c.g.getBoundingClientRect();
+  const rg = document.createRange(); rg.selectNodeContents(c.n); const n = rg.getBoundingClientRect();
+  return { b, m, g, n, cx: m.left - b.left + m.width / 2, cy: m.top - b.top + m.height / 2, toLine: b.bottom - 1 - m.bottom, toName: m.left - n.right - 2, toGear: g.left + g.width * 0.15 - m.right };
+}
+// частица (эмодзи) от центра логотипа
+function fx(c, txt, dx, dy, frames, dur, o = {}) {
+  const G = geo(c), s = document.createElement("span"); s.className = "mascot-fx"; s.textContent = txt;
+  if (o.size) s.style.fontSize = o.size + "px"; if (o.color) s.style.color = o.color;
+  s.style.left = G.cx + dx + "px"; s.style.top = G.cy + dy + "px"; s.style.transform = "translate(-50%,-50%)";
+  c.bar.append(s);
+  A(s, frames.map((f) => ({ ...f, transform: "translate(-50%,-50%) " + (f.transform || "") })), dur, { delay: o.delay || 0, fill: "both" }).onfinish = () => s.remove();
+}
+const rise = (h = 34, x = 0) => [{ opacity: 0, transform: "scale(.4)" }, { opacity: 1, transform: `translate(${x * 0.3}px,-8px) scale(1)`, offset: 0.2 }, { opacity: 1, transform: `translate(${x * 0.7}px,${-h * 0.7}px)`, offset: 0.7 }, { opacity: 0, transform: `translate(${x}px,${-h}px) scale(.8)` }];
+const ORB = "50% 100%";
+
+// приветствие по буквам для «волны»; через 3 секунды текст возвращается как был
+function splitName(c) { const t = c.n.textContent; c.n.innerHTML = [...t].map((ch) => `<span style="display:inline-block;white-space:pre">${esc(ch)}</span>`).join(""); setTimeout(() => { if (c.n.querySelector("span")) c.n.textContent = t; }, 3000); return [...c.n.querySelectorAll("span")]; }
+function smile(c, ms) { A(c.S, [{ transform: "none" }, { transform: "scale(1.15,1.3)", offset: 0.25 }, { transform: "scale(1.15,1.3)", offset: 0.75 }, { transform: "none" }], ms); A(c.B, [{ transform: "none" }, { transform: "scaleY(.45)", offset: 0.25 }, { transform: "scaleY(.45)", offset: 0.75 }, { transform: "none" }], ms); }
+function trampoline(c, k) {
+  const d = Math.max(4, geo(c).toLine); look(c, 0, 1, 2000);
+  const f = (o, t, e) => ({ transform: t, transformOrigin: ORB, offset: o, ...(e ? { easing: e } : {}) });
+  A(c.m, [f(0, "none"), f(0.12, "translateY(-8px)", "ease-in"), f(0.24, `translateY(${d}px)`), f(0.3, `translateY(${d + 6 * k}px) scale(${1 + 0.18 * k},${1 - 0.22 * k})`, "ease-out"), f(0.46, "translateY(-18px) scale(.94,1.08)", "ease-in"), f(0.6, `translateY(${d}px)`), f(0.65, `translateY(${d + 4 * k}px) scale(${1 + 0.1 * k},${1 - 0.14 * k})`, "ease-out"), f(0.77, "translateY(-6px)", "ease-in"), f(0.86, `translateY(${d}px) scale(1.04,.95)`, "ease-out"), f(1, "none")], 2000);
+  const G = geo(c), ln = document.createElement("div"); ln.className = "m-line"; ln.style.left = G.m.left - G.b.left - 10 + "px"; ln.style.width = G.m.width + 20 + "px"; c.bar.append(ln);
+  A(ln, [{ transform: "scaleY(0)" }, { transform: "scaleY(0)", offset: 0.24 }, { transform: `scaleY(${k})`, offset: 0.3 }, { transform: "scaleY(0)", offset: 0.4 }, { transform: "scaleY(0)", offset: 0.6 }, { transform: `scaleY(${0.6 * k})`, offset: 0.65 }, { transform: "scaleY(0)", offset: 0.75 }, { transform: "scaleY(0)", offset: 0.86 }, { transform: `scaleY(${0.25 * k})`, offset: 0.9 }, { transform: "scaleY(0)" }], 2000).onfinish = () => ln.remove();
+}
+function hideUnder(c) {
+  const G = geo(c), d = G.m.height + Math.max(0, G.toLine) + 2; c.bar.style.overflow = "hidden"; look(c, 0, 1, 2400);
+  A(c.m, [{ transform: "none" }, { transform: "translateY(-6px)", offset: 0.1, easing: "ease-in" }, { transform: `translateY(${d}px)`, offset: 0.3 }, { transform: `translateY(${d}px)`, offset: 0.62 }, { transform: "translateY(-8px)", offset: 0.82, easing: "ease-in" }, { transform: "none" }], 2600).onfinish = () => (c.bar.style.overflow = "");
+}
+
+// трюки, которые выбрал Юрий (номера со страницы выбора)
+const MASCOT_TRICKS = [
+["Толкает имя", "Подходит вплотную к приветствию и сдвигает его.", (c) => { const G = geo(c), gap = Math.max(0, G.toName), P = 18; look(c, -1, 0.4, 2600);
+  A(c.m, [{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(-4deg)`, offset: 0.3 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.5 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.65 }, { transform: "none" }], 2600);
+  A(c.n, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: `translateX(${-P}px)`, offset: 0.5 }, { transform: `translateX(${-P}px)`, offset: 0.7 }, { transform: "none", offset: 0.85 }, { transform: "none" }], 2600); }],
+["Крутит шестерёнку", "Подходит, толкает краем, и только тогда шестерёнка раскручивается.", (c) => { const G = geo(c), gap = Math.max(0, G.toGear); look(c, 1, 0.5, 2800);
+  A(c.m, [{ transform: "none" }, { transform: `translateX(${gap}px) rotate(2deg)`, offset: 0.28 }, { transform: `translateX(${gap - 3}px) rotate(-4deg)`, offset: 0.36 }, { transform: `translateX(${gap}px) rotate(14deg) translateY(3px)`, offset: 0.42 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.55 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.78 }, { transform: "none" }], 2800);
+  A(c.g, [{ transform: "rotate(0)" }, { transform: "rotate(540deg)" }], 1500, { delay: 1150, easing: "cubic-bezier(.15,.9,.3,1)" }); }],
+["Батут на линии", "Спрыгивает на линию, она прогибается, он отскакивает.", (c) => trampoline(c, 1)],
+["Сальто", "Приседает, делает кувырок в воздухе и приземляется.", (c) => { A(c.m, [{ transform: "none", transformOrigin: ORB }, { transform: "scale(1.12,.84)", transformOrigin: ORB, offset: 0.18 }, { transform: "translateY(-26px) rotate(180deg)", transformOrigin: "50% 50%", offset: 0.5, easing: "ease-in" }, { transform: "translateY(0) rotate(360deg) scale(1.12,.86)", transformOrigin: ORB, offset: 0.82 }, { transform: "rotate(360deg)", transformOrigin: ORB }], 1400); smile(c, 1300); }],
+["Голова кружится", "Глаз бегает по кругу, логотип покачивается.", (c) => { let a = 0; const t = setInterval(() => { a += 0.5; look(c, Math.cos(a), Math.sin(a) * 0.6 + 0.3); if (a > 12) { clearInterval(t); look(c, 0, 0); } }, 70);
+  A(c.m, [{ transform: "none" }, { transform: "rotate(-10deg)" }, { transform: "rotate(10deg)" }, { transform: "rotate(-6deg)" }, { transform: "none" }], 1700); }],
+["Засыпает", "Глаз медленно закрывается, плывут «з-з-з», потом вздрагивает и просыпается.", (c) => { A(c.B, [{ transform: "none" }, { transform: "scaleY(.14)", offset: 0.25 }, { transform: "scaleY(.14)", offset: 0.82 }, { transform: "scale(1.25)", offset: 0.88 }, { transform: "none" }], 3200);
+  A(c.m, [{ transform: "none" }, { transform: "rotate(-6deg) translateY(3px)", offset: 0.3 }, { transform: "rotate(-6deg) translateY(3px)", offset: 0.82 }, { transform: "translateY(-10px)", offset: 0.88 }, { transform: "none" }], 3200);
+  [0, 700, 1400].forEach((d, i) => fx(c, "z", 14 + i * 4, -18, rise(30, 14), 1300, { delay: 600 + d, size: 12 + i * 3, color: "var(--muted)" })); }],
+["Выглядывает", "Прячется, выглядывает наполовину, осматривается и вылезает.", (c) => { const d = geo(c).m.height + Math.max(0, geo(c).toLine) + 2; c.bar.style.overflow = "hidden";
+  A(c.m, [{ transform: "none" }, { transform: `translateY(${d}px)`, offset: 0.18, easing: "ease-in" }, { transform: `translateY(${d}px)`, offset: 0.3 }, { transform: `translateY(${d * 0.5}px)`, offset: 0.4 }, { transform: `translateY(${d * 0.5}px)`, offset: 0.78 }, { transform: "translateY(-6px)", offset: 0.9 }, { transform: "none" }], 3200).onfinish = () => (c.bar.style.overflow = "");
+  setTimeout(() => look(c, -1, 0.5), 1300); setTimeout(() => look(c, 1, 0.5), 1900); setTimeout(() => look(c, 0, 0), 2500); }],
+["Катится к имени", "Катится колесом до приветствия и обратно.", (c) => { const gap = Math.max(0, geo(c).toName), turn = gap / 24 * 57; A(c.m, [{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(${-turn}deg)`, offset: 0.45 }, { transform: `translateX(${-gap}px) rotate(${-turn}deg)`, offset: 0.55 }, { transform: "none" }], 2600); }],
+["Катится к шестерёнке", "Укатывается к шестерёнке, стукается и возвращается.", (c) => { const gap = Math.max(0, geo(c).toGear); A(c.m, [{ transform: "none" }, { transform: `translateX(${gap}px) rotate(${gap * 2.4}deg)`, offset: 0.4, easing: "ease-in" }, { transform: `translateX(${gap - 6}px) rotate(${gap * 2.4 - 15}deg)`, offset: 0.5 }, { transform: "none" }], 1800);
+  A(c.g, [{ transform: "none" }, { transform: "none", offset: 0.4 }, { transform: "translateX(4px) rotate(20deg)", offset: 0.48 }, { transform: "none", offset: 0.6 }, { transform: "none" }], 1800); }],
+["Читает имя", "Наклоняется к приветствию и ведёт глазом по буквам.", (c) => { A(c.m, [{ transform: "none" }, { transform: "translateX(-6px) rotate(-8deg)", offset: 0.15 }, { transform: "translateX(-6px) rotate(-8deg)", offset: 0.85 }, { transform: "none" }], 2800);
+  look(c, -1, 0.7); setTimeout(() => look(c, -0.2, 0.7), 900); setTimeout(() => look(c, -1, 0.7), 1300); setTimeout(() => look(c, -0.2, 0.7), 2100); setTimeout(() => { look(c, 0, 0); smile(c, 800); }, 2500); }],
+["Даёт пять шестерёнке", "Подскакивает к шестерёнке, она подпрыгивает навстречу.", (c) => { const gap = Math.max(0, geo(c).toGear); look(c, 1, 0.4, 1800);
+  A(c.m, [{ transform: "none" }, { transform: `translate(${gap * 0.6}px,-12px)`, offset: 0.25 }, { transform: `translate(${gap}px,-4px) rotate(12deg)`, offset: 0.38 }, { transform: `translate(${gap * 0.4}px,-6px)`, offset: 0.55 }, { transform: "none", offset: 0.75 }, { transform: "none" }], 1800);
+  A(c.g, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: "translate(-4px,-8px) rotate(-30deg)", offset: 0.38 }, { transform: "translateY(0) rotate(20deg)", offset: 0.55 }, { transform: "none", offset: 0.7 }, { transform: "none" }], 1800);
+  fx(c, "✋", 30, -20, [{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1, transform: "scale(1.2)", offset: 0.42 }, { opacity: 0, transform: "translateY(-12px)" }], 1800, { size: 14 }); }],
+["Тянет имя", "Цепляется за конец приветствия и растягивает его, оно пружинит назад.", (c) => { const gap = Math.max(0, geo(c).toName); look(c, -1, 0.4, 2600); c.n.style.transformOrigin = "0 50%";
+  A(c.m, [{ transform: "none" }, { transform: `translateX(${-gap}px)`, offset: 0.3 }, { transform: `translateX(${-gap + 14}px) rotate(10deg)`, offset: 0.55 }, { transform: `translateX(${-gap + 14}px) rotate(10deg)`, offset: 0.65 }, { transform: "translateX(6px) rotate(-6deg)", offset: 0.78 }, { transform: "none" }], 2600);
+  A(c.n, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: "scaleX(1.1)", offset: 0.55 }, { transform: "scaleX(1.1)", offset: 0.65 }, { transform: "scaleX(.94)", offset: 0.72 }, { transform: "scaleX(1.03)", offset: 0.8 }, { transform: "none" }], 2600); }],
+["Буквы-волна", "Кивает, и буквы приветствия по очереди подпрыгивают.", (c) => { A(c.m, [{ transform: "none" }, { transform: "translateY(4px) rotate(-8deg)", offset: 0.15 }, { transform: "none", offset: 0.3 }, { transform: "none" }], 1800); look(c, -1, 0.5, 1800);
+  splitName(c).reverse().forEach((s, i) => A(s, [{ transform: "none" }, { transform: "translateY(-9px)", offset: 0.4 }, { transform: "none" }], 420, { delay: 250 + i * 55 })); }],
+["Подкидывает шестерёнку", "Подталкивает шестерёнку вверх, она кувыркается и падает на место.", (c) => { const gap = Math.max(0, geo(c).toGear); look(c, 1, 0.3, 2200);
+  A(c.m, [{ transform: "none" }, { transform: `translateX(${gap}px)`, offset: 0.25 }, { transform: `translateX(${gap}px) translateY(-8px) rotate(10deg)`, offset: 0.32 }, { transform: `translateX(${gap}px)`, offset: 0.45 }, { transform: `translateX(${gap}px)`, offset: 0.7 }, { transform: "none" }], 2200);
+  A(c.g, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: "translateY(-34px) rotate(360deg)", offset: 0.5, easing: "ease-in" }, { transform: "translateY(0) rotate(720deg)", offset: 0.68 }, { transform: "translateY(-5px) rotate(720deg)", offset: 0.75 }, { transform: "rotate(720deg)" }], 2200);
+  setTimeout(() => look(c, 1, -0.3), 650); setTimeout(() => look(c, 1, 0.3), 1300); }],
+["Подходит ближе", "Приближается к экрану, разглядывает, отходит.", (c) => { look(c, 0, 0.4, 1800); A(c.m, [{ transform: "none" }, { transform: "scale(1.5) translateY(6px)", offset: 0.3 }, { transform: "scale(1.5) translateY(6px)", offset: 0.7 }, { transform: "none" }], 2200); A(c.B, [{ transform: "none" }, { transform: "scale(1.2)", offset: 0.35 }, { transform: "scaleY(.15)", offset: 0.5 }, { transform: "scale(1.2)", offset: 0.55 }, { transform: "none" }], 2200); }],
+["Лунная походка", "Скользит назад маленькими шагами и возвращается.", (c) => { const f = []; for (let i = 0; i <= 6; i++) f.push({ transform: `translateX(${-i * 7}px) translateY(${i % 2 ? -3 : 0}px) rotate(${i % 2 ? 5 : 0}deg)`, offset: i / 6 * 0.6 }); f.push({ transform: "translateX(-42px)", offset: 0.7 }); f.push({ transform: "none" }); look(c, 1, 0.5, 2600); A(c.m, f, 2800); }],
+["Думает", "Смотрит вниз, рядом появляются три точки, потом кивает.", (c) => { look(c, -0.6, 0.8, 2400); A(c.m, [{ transform: "none" }, { transform: "rotate(-8deg)", offset: 0.15 }, { transform: "rotate(-8deg)", offset: 0.8 }, { transform: "translateY(3px)", offset: 0.88 }, { transform: "none" }], 2800);
+  [0, 1, 2].forEach((i) => fx(c, "•", 18 + i * 8, -26, [{ opacity: 0 }, { opacity: 1, offset: 0.1 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], 2000 - i * 300, { delay: 300 + i * 300, size: 16, color: "var(--muted)" })); }],
+["Скачет к имени", "Тремя прыжками по линии добирается до приветствия и обратно.", (c) => { const G = geo(c), gap = Math.max(0, G.toName), d = Math.max(0, G.toLine), f = [{ transform: "none", transformOrigin: ORB }];
+  for (let i = 1; i <= 3; i++) { f.push({ transform: `translate(${-gap * (i - 0.5) / 3}px,-16px)`, transformOrigin: ORB, offset: i * 0.17 - 0.08, easing: "ease-in" }); f.push({ transform: `translate(${-gap * i / 3}px,${d}px) scale(1.12,.86)`, transformOrigin: ORB, offset: i * 0.17 }); }
+  f.push({ transform: `translate(${-gap}px,0)`, transformOrigin: ORB, offset: 0.62 }); f.push({ transform: "none", transformOrigin: ORB }); look(c, -1, 0.6, 2800); A(c.m, f, 3000); }],
+["Воздушный поцелуй", "Наклоняется и посылает сердечко прямо в экран.", (c) => { A(c.m, [{ transform: "none" }, { transform: "rotate(-10deg) scale(.95)", offset: 0.25 }, { transform: "rotate(4deg) scale(1.05)", offset: 0.4 }, { transform: "none" }], 1800); A(c.S, [{ transform: "none" }, { transform: "scale(.4,.6)", offset: 0.25 }, { transform: "scale(.4,.6)", offset: 0.4 }, { transform: "none" }], 1800);
+  fx(c, "💗", 0, 10, [{ opacity: 0, transform: "scale(.3)" }, { opacity: 1, transform: "scale(.8)", offset: 0.35 }, { opacity: 1, transform: "translateY(20px) scale(2)", offset: 0.8 }, { opacity: 0, transform: "translateY(26px) scale(2.6)" }], 1600, { delay: 500, size: 14 }); }],
+["Юла", "Раскручивается волчком и, пошатываясь, останавливается.", (c) => { A(c.m, [{ transform: "rotate(0)" }, { transform: "rotate(720deg)", offset: 0.6, easing: "cubic-bezier(.2,.7,.4,1)" }, { transform: "rotate(735deg)", offset: 0.75 }, { transform: "rotate(712deg)", offset: 0.88 }, { transform: "rotate(720deg)" }], 2200); }],
+["Подглядывает за шестерёнкой", "Заходит за шестерёнку и выглядывает из-за неё.", (c) => { const gap = Math.max(0, geo(c).toGear); c.g.style.position = "relative"; c.g.style.zIndex = 4;
+  A(c.m, [{ transform: "none" }, { transform: `translateX(${gap + 26}px) scale(.8)`, offset: 0.3 }, { transform: `translateX(${gap + 26}px) scale(.8)`, offset: 0.42 }, { transform: `translateX(${gap + 6}px) scale(.8) rotate(-12deg)`, offset: 0.52 }, { transform: `translateX(${gap + 26}px) scale(.8)`, offset: 0.62 }, { transform: `translateX(${gap + 4}px) scale(.8) rotate(-14deg)`, offset: 0.72 }, { transform: "none" }], 3200).onfinish = () => { c.g.style.zIndex = ""; };
+  setTimeout(() => look(c, -1, 0.5), 1600); setTimeout(() => look(c, 0, 0), 3000); }]
+];
+let MASCOT_LAST = -1;
+function trick(i) {
   if (!mascotVisible() || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const tip = $("#mascot-tip"); if (tip && !tip.hidden) return;
-  const all = Object.keys(MASCOT_TRICKS).filter((k) => k !== MASCOT_LAST);
-  const k = name || all[Math.floor(Math.random() * all.length)];
-  MASCOT_LAST = k; MASCOT_TRICKS[k]();
+  const m = $("#mascot");
+  const c = { m, bar: m.closest(".topbar"), n: $("#hello"), g: $("#btn-settings"), E: m.querySelector(".m-eye"), B: m.querySelector(".m-ball"), M: m.querySelector(".m-mouth"), S: m.querySelector(".m-smile"), Bl: [] };
+  if (i == null) { do { i = Math.floor(Math.random() * MASCOT_TRICKS.length); } while (i === MASCOT_LAST && MASCOT_TRICKS.length > 1); }
+  MASCOT_LAST = i;
+  try { MASCOT_TRICKS[i][2](c); } catch (e) { console.warn("Трюк", e); }
 }
-// обычно раз в 3–6 минут; у администратора для проверки — каждые 10 секунд
-let MASCOT_NEXT = Date.now() + 180000 + Math.random() * 180000;
+// трюк примерно раз в 2 минуты, пока открыт главный экран
+let MASCOT_NEXT = Date.now() + 100000 + Math.random() * 40000;
 setInterval(() => {
-  const test = !!(SESSION && CFG && CFG.users && me().admin);
-  if (!test && Date.now() < MASCOT_NEXT) return;
-  if (!mascotVisible()) return;
-  mascotTrick();
-  MASCOT_NEXT = Date.now() + 180000 + Math.random() * 180000;
-}, 10000);
+  if (Date.now() < MASCOT_NEXT || !mascotVisible()) return;
+  trick();
+  MASCOT_NEXT = Date.now() + 100000 + Math.random() * 40000;
+}, 5000);
+return trick;
+})();
 
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL_EVT = e; updateInstall(); });
 window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstall(); });
@@ -3205,7 +3242,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=90");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=91");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
