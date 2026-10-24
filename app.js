@@ -703,7 +703,7 @@ async function ask() {
     const acts = actions(full, msg);
     bubble.append(acts);
     if (msg.options) showFollowups(msg.options);
-    if (!LIVE) offerVideo(acts, full, msg);
+    if (!LIVE) { offerVideo(acts, full, msg); hintVideo(acts.querySelector(".vid-btn")); }
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
@@ -2392,6 +2392,13 @@ document.querySelectorAll("#videos-tabs button").forEach((b) => (b.onclick = () 
 $("#videos-close").onclick = () => navBack();
 $("#videos-sheet").onclick = (e) => { if (e.target.id === "videos-sheet") navBack(); };
 
+// кнопка «Видео» под свежим ответом мягко пульсирует, чтобы её заметили (как иконки на главном экране)
+function hintVideo(b) {
+  document.querySelectorAll(".vid-btn.hint").forEach((x) => x.classList.remove("hint"));
+  if (!b || b.disabled) return;
+  b.classList.add("hint");
+  b.addEventListener("click", () => b.classList.remove("hint"), { once: true });
+}
 // под полезным ответом — предложение сделать ролик и отправить семье
 function offerVideo(acts, text, msg) {
   if (CHAT && CHAT.autoVideo) {
@@ -2711,7 +2718,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=73");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=74");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

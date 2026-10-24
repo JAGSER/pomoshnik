@@ -382,3 +382,8 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .offer-vid { display: block; margin: 10px 0 0; width: 100%; text-align: center; border: 1.5px dashed var(--accent); background: transparent; color: var(--accent); border-radius: 14px; padding: 12px; font: inherit; font-weight: 700; cursor: pointer; }
 
 .vid-wait { margin: 8px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: .95em; line-height: 1.4; }
+
+/* подсказка: кнопка «Видео» под свежим ответом пульсирует несколько раз и остаётся выделенной */
+.vid-btn.hint { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; animation: vidpulse 1.4s ease-in-out 6; }
+@keyframes vidpulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .vid-btn.hint { animation: none; } }
