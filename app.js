@@ -2587,6 +2587,12 @@ function renderVideos(st) {
     const rep = c.querySelector(".vid-replies");
     (v.replies || []).slice(0, 5).forEach((r) => { const p = el("p", "vid-reply"); p.textContent = `💬 ${r.name || T("Кто-то")}: ${r.text}`; rep.append(p); });
     c.querySelector(".vid-open").onclick = () => window.open(vidLink(v.id), "_blank");
+    if (VIDTAB !== "family") {
+      const sb = el("button", "vid-stat"); sb.type = "button"; sb.textContent = "📊 " + LL("Статистика", "Stats");
+      const box = el("div", "vid-detail"); box.hidden = true;
+      sb.onclick = () => { box.hidden = !box.hidden; if (!box.hidden && !box.dataset.ok) vidDetail(v.id, box); };
+      c.querySelector(".vid-btns").append(sb); c.querySelector(".vid-body").append(box);
+    }
     c.querySelector(".vid-again").onclick = () => shareText((v.title ? v.title + "\n" : "") + vidLink(v.id));
     list.append(c);
   });
@@ -2602,6 +2608,44 @@ function hintVideo(b) {
   b.classList.add("hint");
   b.addEventListener("click", () => b.classList.remove("hint"), { once: true });
 }
+// подробная статистика ролика: города, устройства, откуда открыли, сколько досмотрели, имена
+const TZ_RU = { Moscow: "Москва", Samara: "Самара", Yekaterinburg: "Екатеринбург", Omsk: "Омск", Novosibirsk: "Новосибирск", Krasnoyarsk: "Красноярск", Irkutsk: "Иркутск", Yakutsk: "Якутск", Vladivostok: "Владивосток", Magadan: "Магадан", Kamchatka: "Камчатка", Kaliningrad: "Калининград", Volgograd: "Волгоград", Saratov: "Саратов", Astrakhan: "Астрахань", Ulyanovsk: "Ульяновск", Barnaul: "Барнаул", Tomsk: "Томск", Novokuznetsk: "Новокузнецк", Chita: "Чита", Kyiv: "Киев", Kiev: "Киев", Minsk: "Минск", Almaty: "Алматы", Astana: "Астана", Tashkent: "Ташкент", Tbilisi: "Тбилиси", Yerevan: "Ереван", Baku: "Баку", Istanbul: "Стамбул", Kuala_Lumpur: "Куала-Лумпур", Makassar: "Бали / Макассар", Jakarta: "Джакарта", Bangkok: "Бангкок", Dubai: "Дубай", Berlin: "Берлин", London: "Лондон", Paris: "Париж", Riga: "Рига", Tallinn: "Таллин", Vilnius: "Вильнюс", Warsaw: "Варшава", Prague: "Прага", Belgrade: "Белград" };
+function tzCity(tz) { const c = (tz || "").split("/").pop(); return c ? (LANG === "ru" && TZ_RU[c]) || c.replace(/_/g, " ") : LL("неизвестно", "unknown"); }
+function langCountry(l) { const r = ((l || "").split("-")[1] || "").split(/[@_]/)[0]; if (!/^[A-Za-z]{2}$/.test(r)) return ""; try { return new Intl.DisplayNames([LANG], { type: "region" }).of(r.toUpperCase()) || r; } catch (_) { return r; } }
+async function vidDetail(id, box) {
+  box.innerHTML = `<p class="sheet-hint">${LL("Загружаю…", "Loading…")}</p>`;
+  try {
+    const d = await apiPost("/video-detail", { id });
+    box.dataset.ok = "1";
+    const vs = d.views || [], uniq = vs.filter((x) => !x.repeat), full = vs.filter((x) => x.pct >= 90).length;
+    const avg = vs.length ? Math.round(vs.reduce((a, x) => a + (x.pct || 0), 0) / vs.length) : 0;
+    const tally = (f) => { const m = {}; vs.forEach((x) => { const k = f(x); if (k) m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ") || "—"; };
+    const names = [...new Set(vs.map((x) => x.name).concat((d.reacts || []).map((r) => r.name)).filter(Boolean))];
+    const line = (x) => {
+      const where = [tzCity(x.tz), langCountry(x.lang)].filter(Boolean).join(", ");
+      return `${new Date(x.at).toLocaleString(LOCALE(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${where}${x.os ? " · " + x.os : ""}${x.app ? " · " + x.app : ""}${x.name ? " · " + x.name : ""} · ${x.pct || 0}%${x.repeat ? " · " + LL("повторно", "again") : ""}`;
+    };
+    box.innerHTML = "";
+    const sum = el("div", "vd-sum");
+    sum.innerHTML = [
+      `<b>${LL("Просмотров", "Views")}:</b> ${vs.length} (${LL("разных зрителей", "different viewers")} ~${uniq.length}) · ❤️ ${d.hearts}`,
+      `<b>${LL("Досмотрели", "Watched")}:</b> ${LL("до конца", "to the end")} ${full}, ${LL("в среднем", "on average")} ${avg}%`,
+      `<b>${LL("Откуда", "Where")}:</b> ${esc(tally((x) => tzCity(x.tz)))}`,
+      `<b>${LL("Страна по языку телефона", "Country by phone language")}:</b> ${esc(tally((x) => langCountry(x.lang)))}`,
+      `<b>${LL("Устройства", "Devices")}:</b> ${esc(tally((x) => x.os))}`,
+      `<b>${LL("Открыли из", "Opened from")}:</b> ${esc(tally((x) => x.app || LL("браузер", "browser")))}`,
+      names.length ? `<b>${LL("Имена", "Names")}:</b> ${esc(names.join(", "))}` : "",
+      `<span class="vd-exp">${LL("Ролик хранится до", "Kept until")} ${new Date(d.expires).toLocaleDateString(LOCALE())}</span>`,
+    ].filter(Boolean).map((x) => `<p>${x}</p>`).join("");
+    box.append(sum);
+    if (vs.length) {
+      const ul = el("ul", "vd-list");
+      vs.slice(0, 40).forEach((x) => { const li = el("li"); li.textContent = line(x); ul.append(li); });
+      box.append(ul);
+    }
+  } catch (e) { box.innerHTML = `<p class="sheet-hint">${esc(e.message)}</p>`; }
+}
+
 // под полезным ответом — предложение сделать ролик и отправить семье
 function offerVideo(acts, text, msg) {
   if (CHAT && CHAT.autoVideo) {
@@ -2921,7 +2965,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=77");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=78");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

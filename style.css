@@ -412,3 +412,8 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .pc-buy { margin-top: auto; }
 .plans-lead { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 18px; padding: 14px; }
 .plans-lead h3 { margin: 0; }
+
+.vid-detail { margin-top: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px; font-size: .92em; }
+.vd-sum p { margin: 0 0 4px; }
+.vd-exp { color: var(--muted); font-size: .9em; }
+.vd-list { margin: 8px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9em; font-variant-numeric: tabular-nums; }

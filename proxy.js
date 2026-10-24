@@ -402,16 +402,26 @@ export async function handler(req, info) {
     return json({ id: meta.id, title: meta.title, caption: meta.caption, name: meta.name, lang: meta.lang, created: meta.created, type: meta.type, poster: !!meta.posterN, ...(await vidCounts(kv, meta.id)) }, 200, h);
   }
   // просмотр и реакции — без пароля (их оставляют получатели)
-  if (req.method === "POST" && (url.pathname === "/video-view" || url.pathname === "/video-react")) {
+  if (req.method === "POST" && (url.pathname === "/video-view" || url.pathname === "/video-react" || url.pathname === "/video-watch")) {
     let b; try { b = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
     const id = String(b.id || ""); if (!/^[A-Za-z0-9]{8}$/.test(id)) return json({ error: "Неверный ролик" }, 400, h);
     const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
     if (!(await kv.get(["vid", id, "meta"])).value) return json({ error: "Ролик не найден" }, 404, h);
     const ipKey = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip + id)))].slice(0, 8).map((x) => x.toString(16).padStart(2, "0")).join("");
+    const clip = (v, n) => String(v || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
     if (url.pathname === "/video-view") {
       const seenKey = ["vidv", id, ipKey];
-      if (!(await kv.get(seenKey)).value) await kv.atomic().set(seenKey, 1, { expireIn: 6 * 3600_000 }).sum(["vidc", id, "views"], 1n).commit();
-      return json({ ok: true, ...(await vidCounts(kv, id)) }, 200, h);
+      const fresh = !(await kv.get(seenKey)).value;
+      if (fresh) await kv.atomic().set(seenKey, 1, { expireIn: 6 * 3600_000 }).sum(["vidc", id, "views"], 1n).commit();
+      // подробная запись просмотра: что сообщает сам телефон зрителя (без IP)
+      const key = Date.now() + "-" + rnd(6);
+      await kv.set(["vidlog", id, key], { at: Date.now(), tz: clip(b.tz, 40), lang: clip(b.lang, 12), os: clip(b.os, 12), app: clip(b.app, 14), name: clip(b.name, 40), viewer: clip(b.viewer, 30), repeat: !fresh, pct: 0, ip: ipKey.slice(0, 6) }, VID_TTL);
+      return json({ ok: true, key, ...(await vidCounts(kv, id)) }, 200, h);
+    }
+    if (url.pathname === "/video-watch") {
+      const k = ["vidlog", id, clip(b.key, 30)], rec = (await kv.get(k)).value;
+      if (rec) { rec.pct = Math.max(rec.pct || 0, Math.min(100, Math.round(Number(b.pct) || 0))); if (b.name) rec.name = clip(b.name, 40); await kv.set(k, rec, VID_TTL); }
+      return json({ ok: true }, 200, h);
     }
     if (reactLimited(ip)) return json({ error: "Слишком много, попробуйте позже" }, 429, h);
     const kind = b.kind === "reply" ? "reply" : "heart";
@@ -591,6 +601,19 @@ export async function handler(req, info) {
     mine.sort((a, b) => b.created - a.created); family.sort((a, b) => b.views + b.hearts * 3 - (a.views + a.hearts * 3));
     every.sort((a, b) => b.created - a.created);
     return json({ mine: mine.slice(0, 50), family: family.slice(0, 20), all: isAdmin ? every : undefined }, 200, h);
+  }
+
+  // подробная статистика ролика
+  if (url.pathname === "/video-detail") {
+    const kv = await kvOpen(), id = String(body.id || "");
+    const meta = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["vid", id, "meta"])).value;
+    if (!meta) return json({ error: "Ролик не найден" }, 404, h);
+    if (meta.user !== user.id && !(!user.acct && ADMINS().includes(user.id))) return json({ error: "Нет доступа" }, 403, h);
+    const views = [], reacts = [];
+    for await (const e of kv.list({ prefix: ["vidlog", id] }, { reverse: true, limit: 300 })) views.push(e.value);
+    for await (const e of kv.list({ prefix: ["vidr", id] }, { reverse: true, limit: 100 })) reacts.push(e.value);
+    const c = await vidCounts(kv, id);
+    return json({ ok: true, title: meta.title, created: meta.created, expires: meta.created + 180 * 86400_000, views, reacts, viewCount: c.views, hearts: c.hearts }, 200, h);
   }
 
   // забрать треки из Runway (только с его CDN) и положить в хранилище; уже лежащие не трогаем
