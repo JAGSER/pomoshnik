@@ -2657,7 +2657,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     }
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
-    label("📤 Отправить");
+    label("✈️ Отправить");
     btn.classList.add("ready");
     stopTimer(true);
     waitNote(btn, false); wakeOff(); videoDone(true, title);
@@ -2845,7 +2845,7 @@ function renderVideos(st) {
   if (VIDTAB === "authors") { renderAuthors(list); return; }
   const items = VIDTAB === "mine" ? st.mine : VIDTAB === "all" ? st.all : st.family;
   if (!items.length) {
-    list.innerHTML = `<p class="sheet-hint">${VIDTAB === "all" ? LL("Пока никто не отправлял роликов.", "No videos yet.") : VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
+    list.innerHTML = `<p class="sheet-hint">${VIDTAB === "all" ? LL("Пока никто не отправлял роликов.", "No videos yet.") : VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «✈️ Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
     return;
   }
   const seen = vidSeen();
@@ -3268,7 +3268,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=98");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=99");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
