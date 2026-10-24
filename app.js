@@ -2446,7 +2446,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=66");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=67");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2609,50 +2609,94 @@ async function aacSupported() {
 
 /* ===== Звуковые эффекты: синтезируются кодом, бесплатно ===== */
 function sfxOn() { return !SESSION || store.get("sfx:" + SESSION.user) !== false; }
-function sfxRand(seed) { let x = seed || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647) * 2 - 1; }
-const SFX = {
-  // «вжух»: шум с плавающим фильтром
-  whoosh(len = 0.55, up = true) {
-    const n = Math.round(VRATE * len), out = new Float32Array(n), r = sfxRand(7); let lp = 0;
-    for (let i = 0; i < n; i++) {
-      const p = i / n, cut = 0.02 + 0.25 * (up ? p : 1 - p), env = Math.sin(Math.PI * p) ** 2;
-      lp += cut * (r() - lp); out[i] = lp * env * 2.2;
-    }
-    return out;
-  },
-  // мягкий «поп»
-  pop(f0 = 680) {
-    const n = Math.round(VRATE * 0.12), out = new Float32Array(n); let ph = 0;
-    for (let i = 0; i < n; i++) { const p = i / n, f = f0 * (1 - 0.45 * p); ph += 2 * Math.PI * f / VRATE; out[i] = Math.sin(ph) * Math.exp(-p * 7); }
-    return out;
-  },
-  // колокольчик для концовки
-  chime() {
-    const n = Math.round(VRATE * 1.6), out = new Float32Array(n), fs = [1046.5, 1568, 2093, 2637], am = [1, 0.6, 0.35, 0.2];
-    for (let i = 0; i < n; i++) { const t = i / VRATE; let v = 0; fs.forEach((f, k) => (v += am[k] * Math.sin(2 * Math.PI * f * t) * Math.exp(-t * (2.2 + k)))); out[i] = v * 0.45 * Math.min(1, i / 200); }
-    return out;
-  },
-  // лёгкий щелчок
-  tick() {
-    const n = Math.round(VRATE * 0.04), out = new Float32Array(n);
-    for (let i = 0; i < n; i++) { const p = i / n; out[i] = Math.sin(2 * Math.PI * 2200 * i / VRATE) * Math.exp(-p * 9) * 0.6; }
-    return out;
-  },
-};
+// Библиотека звуков, сделанных кодом (выбраны Юрием). Одна и та же функция работает в приложении и в песочнице ролика.
+function SFX_LIB(R) {
+  const buf = (sec) => new Float32Array(Math.max(1, Math.round(sec * R)));
+  const rnd = (seed) => { let x = seed || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647) * 2 - 1; };
+  function partials(f, list, sec, att = 0.002) { // [ratio, amp, decay]
+    const o = buf(sec);
+    for (let i = 0; i < o.length; i++) { const t = i / R; let v = 0; for (const [k, a, d] of list) v += a * Math.sin(2 * Math.PI * f * k * t) * Math.exp(-t * d); o[i] = v * Math.min(1, t / att); }
+    return o;
+  }
+  function sweep(f0, f1, sec, decay, type = "sine", curve = 1) {
+    const o = buf(sec); let ph = 0;
+    for (let i = 0; i < o.length; i++) { const p = i / o.length, f = f0 + (f1 - f0) * Math.pow(p, curve); ph += f / R; const x = ph % 1;
+      const w = type === "tri" ? 4 * Math.abs(x - 0.5) - 1 : type === "square" ? (x < .5 ? .6 : -.6) : Math.sin(2 * Math.PI * x);
+      o[i] = w * Math.exp(-p * sec * decay) * Math.min(1, i / 60) * (p > .96 ? (1 - p) / .04 : 1); }
+    return o;
+  }
+  function bandNoise(sec, fc, q, env, seed = 5) { // полосовой шум (biquad)
+    const o = buf(sec), r = rnd(seed), w = 2 * Math.PI * fc / R, al = Math.sin(w) / (2 * q), a0 = 1 + al;
+    const b0 = al / a0, b2 = -al / a0, a1 = -2 * Math.cos(w) / a0, a2 = (1 - al) / a0; let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (let i = 0; i < o.length; i++) { const x = r(); const y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; o[i] = y * env(i / o.length, i / R); }
+    return o;
+  }
+  function pluck(f, sec, bright = 0.5, seed = 3) { // струна (Карплус-Стронг)
+    const o = buf(sec), n = Math.round(R / f), line = new Float32Array(n), r = rnd(seed);
+    for (let i = 0; i < n; i++) line[i] = r();
+    let p = 0, prev = 0;
+    for (let i = 0; i < o.length; i++) { const cur = line[p]; const nx = line[(p + 1) % n]; line[p] = (cur * (0.5 + bright * 0.5) + nx * (0.5 - bright * 0.5)) * 0.996; o[i] = cur; prev = cur; p = (p + 1) % n; }
+    return o;
+  }
+  function fmBell(f, ratio, index, sec, decay) {
+    const o = buf(sec);
+    for (let i = 0; i < o.length; i++) { const t = i / R, e = Math.exp(-t * decay); o[i] = Math.sin(2 * Math.PI * f * t + index * e * Math.sin(2 * Math.PI * f * ratio * t)) * e * Math.min(1, t / 0.002); }
+    return o;
+  }
+  function mix(len, parts) { const o = buf(len); for (const [at, b, g = 1] of parts) { const s = Math.round(at * R); for (let i = 0; i < b.length && s + i < o.length; i++) o[s + i] += b[i] * g; } return o; }
+  const S = {
+    pop_soft: () => mix(0.14, [[0, sweep(520, 280, 0.14, 28)], [0, bandNoise(0.01, 3000, 1, (p) => 1 - p), 0.25]]),
+    bubble: () => sweep(320, 1100, 0.12, 20, "sine", 0.6),
+    marimba: () => partials(660, [[1, 1, 9], [3.93, 0.35, 28], [9.8, 0.12, 60]], 0.6),
+    wood: () => partials(820, [[1, 1, 40], [1.62, 0.5, 55], [2.6, 0.3, 75]], 0.16),
+    kalimba: () => partials(880, [[1, 1, 6], [5.4, 0.18, 30], [9.1, 0.08, 50]], 0.9),
+    drop: () => mix(0.25, [[0, sweep(1400, 380, 0.09, 22)], [0.05, partials(380, [[1, 0.5, 30]], 0.2)]]),
+    sparkle: () => { const r = rnd(3), parts = []; for (let i = 0; i < 7; i++) parts.push([(r() + 1) / 2 * 0.45, partials(1800 + (r() + 1) * 1300, [[1, 1, 25]], 0.2), 0.4]); return mix(0.65, parts); },
+    success: () => mix(0.7, [[0, partials(784, [[1, 1, 7], [3.9, 0.2, 30]], 0.5)], [0.12, partials(1046.5, [[1, 1, 6], [3.9, 0.2, 30]], 0.55)]]),
+    notify: () => mix(0.6, [523, 659, 784].map((f, i) => [i * 0.08, partials(f, [[1, 1, 9], [2, 0.15, 20]], 0.35), 0.8])),
+    magic: () => mix(1, [[0, sweep(600, 1800, 0.6, 2, "sine", 1.3), 0.4], [0.3, S.sparkle(), 0.8]]),
+    tick: () => partials(2200, [[1, 1, 120]], 0.04, 0.0005),
+    type: () => mix(0.05, [[0, bandNoise(0.03, 4000, 1.5, (p) => Math.exp(-p * 8), 11)], [0, partials(1800, [[1, 0.5, 150]], 0.03, 0.0005)]]),
+    click: () => mix(0.03, [[0, partials(1300, [[1, 1, 200]], 0.03, 0.0003)], [0, bandNoise(0.01, 2500, 1, (p) => 1 - p), 0.3]]),
+    counter: () => mix(0.62, [...Array(10)].map((_, i) => [i * 0.055 + i * i * 0.0012, partials(2000 + i * 40, [[1, 1, 120]], 0.03, 0.0005), 0.7])),
+    bamboo: () => mix(0.25, [[0, partials(520, [[1, 1, 25], [2.1, 0.35, 40]], 0.25, 0.0008)], [0, bandNoise(0.015, 1800, 1, (p) => 1 - p, 6), 0.25]]),
+    woodblock: () => partials(1250, [[1, 1, 50], [2.3, 0.4, 70]], 0.12, 0.0004),
+    rim: () => mix(0.1, [[0, bandNoise(0.06, 2600, 2, (p) => Math.exp(-p * 9), 8)], [0, partials(820, [[1, 0.6, 80]], 0.06, 0.0004)]]),
+    pop_high: () => mix(0.1, [[0, sweep(900, 520, 0.1, 35)], [0, bandNoise(0.008, 4000, 1, (p) => 1 - p), 0.2]]),
+    pop_double: () => mix(0.26, [[0, sweep(520, 280, 0.12, 30)], [0.11, sweep(700, 380, 0.12, 30), 0.85]]),
+    bubble_down: () => sweep(1100, 320, 0.13, 18, "sine", 0.7),
+    marimba_run: () => mix(0.7, [523, 587, 659, 784, 880, 1046.5].map((f, i) => [i * 0.045, partials(f, [[1, 1, 12], [3.93, 0.3, 30]], 0.35), 0.75])),
+    kalimba_run: () => mix(0.9, [587, 698.5, 880, 1046.5, 1174.7].map((f, i) => [i * 0.06, partials(f, [[1, 1, 6], [5.4, 0.15, 30]], 0.5), 0.7])),
+    success3: () => mix(0.8, [523, 659, 784].map((f, i) => [i * 0.1, partials(f, [[1, 1, 7], [3.93, 0.25, 30]], 0.5), 0.8])),
+    ta_da: () => mix(1.2, [[0, mix(0.2, [523, 659, 784].map((f) => [0, partials(f, [[1, 1, 18]], 0.2), 0.4]))], [0.16, mix(1, [523, 659, 784, 1046.5].map((f) => [0, partials(f, [[1, 1, 3], [2, 0.2, 8]], 1), 0.35]))]]),
+    fanfare_soft: () => mix(1.1, [392, 494, 587, 784].map((f, i) => [i * 0.02, partials(f, [[1, 1, 3], [2, 0.6, 4], [3, 0.3, 6]], 1, 0.008), 0.35])),
+    error_soft: () => mix(0.5, [[0, partials(523, [[1, 1, 10], [3.93, 0.2, 30]], 0.3)], [0.13, partials(392, [[1, 1, 8], [3.93, 0.2, 30]], 0.35)]]),
+    toggle_on: () => mix(0.16, [[0, partials(900, [[1, 1, 60]], 0.06, 0.0004)], [0.06, partials(1350, [[1, 1, 60]], 0.08, 0.0004)]]),
+    toggle_off: () => mix(0.16, [[0, partials(1350, [[1, 1, 60]], 0.06, 0.0004)], [0.06, partials(900, [[1, 1, 60]], 0.08, 0.0004)]]),
+    key_soft: () => mix(0.05, [[0, bandNoise(0.035, 1500, 1, (p) => Math.exp(-p * 10), 17)], [0, partials(600, [[1, 0.5, 120]], 0.03, 0.0005)]]),
+    abacus: () => { const r = rnd(5); return mix(0.7, [...Array(5)].map((_, i) => [i * 0.11 + (r() + 1) * 0.02, partials(1100 + (r() + 1) * 200, [[1, 1, 55], [2.3, 0.35, 75]], 0.1, 0.0004), 0.8])); },
+    odometer: () => mix(0.75, [...Array(14)].map((_, i) => [i * 0.045, partials(1500 + i * 70, [[1, 1, 140]], 0.025, 0.0004), 0.55])),
+    tally: () => mix(0.5, [0, 0.12, 0.24, 0.36].map((t) => [t, S.tick(), 0.8])),
+  };
+  const cache = {};
+  return { names: Object.keys(S), get(name) { if (!S[name]) return null; if (!cache[name]) { const d = S[name](); let pk = 0; for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); const k = pk ? 0.8 / pk : 1; for (let i = 0; i < d.length; i++) d[i] *= k; cache[name] = d; } return cache[name]; } };
+}
+let SFXL = null;
+function sfx(name) { SFXL = SFXL || SFX_LIB(VRATE); return SFXL.get(name); }
 function sfxMix(pcm, snd, at, gain) {
   const o = Math.round(at * VRATE);
   for (let i = 0; i < snd.length && o + i < pcm.length; i++) if (o + i >= 0) pcm[o + i] += snd[i] * gain;
 }
 function addSfxOutro(pcm, speech, outro) {
-  if (outro) { sfxMix(pcm, SFX.whoosh(0.5, false), speech - 0.1, 0.14); sfxMix(pcm, SFX.chime(), speech + 0.35, 0.22); }
+  if (outro) sfxMix(pcm, sfx("ta_da"), speech + 0.25, 0.2);
 }
+// стандартный набор для простого видео
 function addSfx(pcm, subs, speech, outro, nPhotos) {
-  sfxMix(pcm, SFX.whoosh(0.6, true), 0, 0.16);
-  sfxMix(pcm, SFX.pop(760), 0.45, 0.12);
-  // смена фраз — тихий щелчок, переходы фото — «вжух»
-  subs.forEach((s, i) => { if (i > 0 && s.t0 > 1) sfxMix(pcm, SFX.tick(), s.t0 - 0.02, 0.07); });
-  if (nPhotos > 1) { const per = speech / nPhotos; for (let i = 1; i < nPhotos; i++) sfxMix(pcm, SFX.whoosh(0.5, i % 2 === 0), i * per - 0.3, 0.12); }
-  if (outro) { sfxMix(pcm, SFX.whoosh(0.5, false), speech - 0.1, 0.14); sfxMix(pcm, SFX.chime(), speech + 0.35, 0.22); }
+  sfxMix(pcm, sfx("bubble"), 0.05, 0.14);
+  sfxMix(pcm, sfx("pop_soft"), 0.45, 0.12);
+  subs.forEach((x, i) => { if (i > 0 && x.t0 > 1) sfxMix(pcm, sfx("tick"), x.t0 - 0.02, 0.05); });
+  if (nPhotos > 1) { const per = speech / nPhotos; for (let i = 1; i < nPhotos; i++) sfxMix(pcm, sfx(i % 2 ? "marimba_run" : "kalimba_run"), i * per - 0.2, 0.09); }
+  addSfxOutro(pcm, speech, outro);
 }
 
 /* ===== Музыка: библиотека треков из music.json, подставляется сама или выбранная ===== */
@@ -2873,31 +2917,16 @@ function WORKER_MAIN() {
     get g() { return g; }, get amp() { return level; },
   };
   function makeSound(fn, R, len, dur, subs) {
-    const out = new Float32Array(len); let count = 0, budget = R * 40; // не больше 40 с звуков суммарно
-    const rnd = (seed) => { let x = (seed | 0) || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647); };
-    const env = (p, a, d) => (p < a ? p / a : Math.exp(-(p - a) * d));
+    const out = new Float32Array(len), lib = SFX_LIB(R); let count = 0;
     const s = {
-      rate: R, duration: dur, subs,
-      rand: rnd,
-      synth(sec, f) { const n = Math.max(1, Math.min(R * 8, Math.round(sec * R))); const b = new Float32Array(n); for (let i = 0; i < n; i++) { const v = +f(i / R, i / n); b[i] = isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0; } return b; },
-      tone(freq, sec = 0.3, o = {}) { const type = o.type || "sine", a = o.attack ?? 0.005, d = o.decay ?? 6, f1 = o.to ?? freq; let ph = 0;
-        return s.synth(sec, (t, p) => { const f = freq + (f1 - freq) * p; ph += f / R; const x = ph % 1;
-          const w = type === "square" ? (x < 0.5 ? 1 : -1) * 0.6 : type === "saw" ? (2 * x - 1) * 0.6 : type === "tri" ? (4 * Math.abs(x - 0.5) - 1) : Math.sin(2 * Math.PI * x);
-          return w * env(t, a, d) * (p > 0.97 ? (1 - p) / 0.03 : 1); }); },
-      noise(sec = 0.4, o = {}) { const r = rnd(o.seed || 7), lp0 = o.lp ?? 0.08, lp1 = o.lpTo ?? lp0; let y = 0;
-        return s.synth(sec, (t, p) => { const c = lp0 + (lp1 - lp0) * p; y += c * ((r() * 2 - 1) - y); return y * (o.shape ? o.shape(p) : Math.sin(Math.PI * p)) * (1.5 / Math.sqrt(c + 0.02)); }); },
-      whoosh(sec = 0.55, up = true) { return s.noise(sec, { lp: up ? 0.02 : 0.27, lpTo: up ? 0.27 : 0.02, shape: (p) => Math.sin(Math.PI * p) ** 2 }); },
-      pop(freq = 700) { return s.tone(freq, 0.12, { to: freq * 0.55, decay: 40 }); },
-      tick() { return s.tone(2200, 0.04, { decay: 120 }); },
-      thud() { return s.tone(90, 0.35, { to: 45, decay: 14 }); },
-      chime(base = 1046.5) { const p = [1, 1.5, 2, 2.52], a = [1, 0.6, 0.35, 0.2]; return s.synth(1.6, (t) => p.reduce((v, k, j) => v + a[j] * Math.sin(2 * Math.PI * base * k * t) * Math.exp(-t * (2.2 + j)), 0) * 0.45 * Math.min(1, t * 200)); },
-      rise(sec = 1) { return s.tone(300, sec, { to: 1200, attack: sec * 0.9, decay: 30, type: "tri" }); },
-      sparkle(sec = 0.6, seed = 3) { const r = rnd(seed), n = 7, at = [...Array(n)].map(() => r() * sec * 0.8), fr = [...Array(n)].map(() => 1800 + r() * 2600);
-        return s.synth(sec, (t) => at.reduce((v, a, j) => v + (t >= a ? Math.sin(2 * Math.PI * fr[j] * (t - a)) * Math.exp(-(t - a) * 25) : 0), 0) * 0.35); },
-      play(t, buf, gain = 0.25) {
-        if (!buf || !buf.length || !(t >= 0)) return; gain = Math.max(0, Math.min(0.6, +gain || 0));
-        const o = Math.round(t * R); if (o >= len || budget <= 0) return; count++; budget -= buf.length;
-        for (let i = 0; i < buf.length && o + i < len; i++) out[o + i] += buf[i] * gain;
+      names: lib.names, duration: dur, subs,
+      rand: (seed) => { let x = (seed | 0) || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647); },
+      // звук name в момент t; pitch — во сколько раз выше/ниже (0.5…2)
+      play(t, name, gain = 0.15, o = {}) {
+        const b = lib.get(name); if (!b || !(t >= 0) || count >= 120) return;
+        gain = Math.max(0, Math.min(0.4, +gain || 0)); const k = Math.max(0.5, Math.min(2, +(o.pitch || 1)));
+        const o0 = Math.round(t * R), n = Math.floor(b.length / k); count++;
+        for (let i = 0; i < n && o0 + i < len; i++) { const x = i * k, j = x | 0, f = x - j; out[o0 + i] += ((b[j] || 0) * (1 - f) + (b[j + 1] || 0) * f) * gain; }
       },
     };
     fn(s);
@@ -3023,7 +3052,7 @@ function FRAME_MAIN(workerSrc) {
 class Sandbox {
   constructor() {
     this.id = 0; this.wait = new Map();
-    const workerSrc = `${mascotDraw}\n${outroDraw}\n(${WORKER_MAIN})();`;
+    const workerSrc = `${mascotDraw}\n${outroDraw}\n${SFX_LIB}\n(${WORKER_MAIN})();`;
     const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'"><body><script>(${FRAME_MAIN})(${JSON.stringify(workerSrc)});<\/script></body>`;
     this.frameEl = document.createElement("iframe");
     this.frameEl.setAttribute("sandbox", "allow-scripts");
@@ -3086,9 +3115,15 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Код компактный (до ~350 строк): сцены описывай массивом данных и общими функциями, без копирования одинаковых кусков.
 - Если пришлют замечания или кадры — ответь исправленным кодом целиком.
 
-ЗВУК: в том же блоке объяви function sound(s) — звуковые эффекты ролика, которые ты придумываешь под свою анимацию и пишешь кодом. Она вызывается один раз и раскладывает звуки по времени: s.play(t, звук, громкость 0.05…0.4). Готовые звуки (можно менять параметры): s.whoosh(сек, вверх?), s.pop(частота), s.tick(), s.thud(), s.chime(частота), s.rise(сек), s.sparkle(сек, seed), s.tone(частота, сек, {type:'sine'|'square'|'saw'|'tri', to: конечная частота, attack, decay}), s.noise(сек, {lp, lpTo, shape: p=>огибающая}). Свой звук: s.synth(сек, (t, p) => сэмпл -1…1). Ещё есть s.duration, s.subs, s.rand(seed).
-- Звуки подчёркивают события на экране: появление предмета — «поп», смена сцены — «вжух», набегающее число — тики, важный итог — колокольчик. Ставь их точно в те моменты, когда это происходит в draw.
-- Главное — голос, под ним ещё будет музыка: звуки короткие и тихие (0.08…0.25), в среднем не чаще одного в 1–1,5 с, без длинных гудящих тонов под речью. Финальную заставку озвучивает приложение.`;
+ЗВУК: в том же блоке объяви function sound(s) — звуковые эффекты под твою анимацию. Она вызывается один раз и раскладывает звуки по времени: s.play(t, "имя", громкость 0.05…0.3, {pitch}) — pitch от 0.5 до 2 сдвигает высоту (удобно для серии). Других звуков нет, свои не синтезируй. Есть s.duration, s.subs, s.rand(seed).
+Звуки (имя — что это):
+- появление: pop_soft (мягкий поп), pop_high (звонкий поп), pop_double (поп-поп), bubble (пузырёк вверх), bubble_down (пузырёк вниз), drop (капля), marimba (нота маримбы), kalimba (нота калимбы), wood (деревянный стук), bamboo (полый стук), woodblock (высокий стук), rim (щелчок по ободу барабана);
+- смена сцены: marimba_run (лесенка маримбы вверх), kalimba_run (лесенка калимбы вверх);
+- итог и успех: success (две ноты вверх), success3 (три ноты вверх), notify (три мягкие ноты), sparkle (искорки), magic (взлёт с искорками), ta_da (та-дам), fanfare_soft (мягкие фанфары), error_soft (две ноты вниз — «так не надо», «ошибка»);
+- кнопки: click (щелчок), toggle_on (включение), toggle_off (выключение), key_soft (клавиша);
+- числа и текст: tick (тик), type (печатная машинка), counter (серия тиков ~0.6 с), odometer (тики вверх ~0.7 с), abacus (счёты), tally (четыре тика по одному).
+- Звуки подчёркивают события на экране: появление предмета, смена сцены, набегающее число, печатающийся текст, итог. Ставь их точно в те моменты, когда это происходит в draw.
+- Главное — голос, под ним ещё будет музыка: громкость 0.08…0.2, в среднем не чаще одного звука в 1–1,5 с (серия тиков у счётчика — один звук). Финальную заставку озвучивает приложение.`;
 
 async function directorCall(messages, onChars, model) {
   const r = await fetch(CFG.proxy + "/chat", {
