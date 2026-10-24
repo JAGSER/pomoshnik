@@ -2751,12 +2751,12 @@ function openShare(file, ctx = {}) {
     if (!S.id) { try { await openShare(file, ctx); } catch (_) {} return; }
     const text = cap.value.trim();
     if (msg) { msg.vidCaption = text; save(); }
-    track("Видео: ссылка");
+    track("Видео: ссылка"); pubVideo(S);
     await shareText((text ? text + "\n" : "") + vidLink(S.id));
   };
   // «Отправить файлом» — меню телефона (мессенджеры); «Сохранить» — сразу файлом в телефон
   $("#share-file").onclick = async () => {
-    track("Видео: файл");
+    track("Видео: файл"); pubVideo(S);
     const text = cap.value.trim();
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], text: text || undefined }); return; } catch (e) { if (e.name === "AbortError") return; }
@@ -2779,6 +2779,8 @@ function openShare(file, ctx = {}) {
   openVSheet("share-sheet");
 }
 // кто из семьи увидит ролик в ленте: по умолчанию все, выбор спрятан в неброскую строку
+// ролик попадает в семейную ленту только когда им поделились (ссылкой или файлом), а не при сохранении себе
+function pubVideo(S) { (async () => { try { const id = S.id || (S.up && (await S.up)); if (id && !S.pub) { await apiPost("/video-pub", { id }); S.pub = true; } } catch (_) {} })(); }
 function renderAud(S, msg) {
   const box = $("#share-aud");
   const fam = CFG.users[SESSION.user] ? Object.entries(CFG.users).filter(([id]) => id !== SESSION.user) : [];
@@ -3292,7 +3294,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=101");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=102");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

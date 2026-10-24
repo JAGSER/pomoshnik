@@ -467,8 +467,8 @@ export async function handler(req, info) {
     const id = vidId(), created = Date.now();
     const n = await blobPut(kv, ["vid", id, "d"], bytes);
     const meta = { id, user: user.id, name: String(m.name || "").slice(0, 40), title: String(m.title || "").slice(0, 80), caption: String(m.caption || "").slice(0, 600),
-      lang: m.lang === "en" ? "en" : "ru", type: /webm/.test(req.headers.get("Content-Type") || "") ? "video/webm" : "video/mp4", size: bytes.length, n, created };
-    await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).set(["vidu", user.id, created, id], 1, VID_TTL).sum(["mk", user.id, "shared"], 1n).commit();
+      lang: m.lang === "en" ? "en" : "ru", type: /webm/.test(req.headers.get("Content-Type") || "") ? "video/webm" : "video/mp4", size: bytes.length, n, created, pub: false };
+    await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).set(["vidu", user.id, created, id], 1, VID_TTL).commit();
     return json({ ok: true, id }, 200, h);
   }
   if (url.pathname === "/samples") {
@@ -639,7 +639,7 @@ export async function handler(req, info) {
       // кому автор показал ролик: никому не выбрал — всем в его круге; выбрал людей — только им (даже из другого круга)
       let inFamily = !isMine && created >= weekAgo && !user.acct && !!circles[user.id];
       let metaPre = null;
-      if (inFamily) { metaPre = (await kv.get(["vid", id, "meta"])).value; inFamily = !!metaPre && (Array.isArray(metaPre.aud) ? metaPre.aud.includes(user.id) : !!theirs && myCircles.includes(theirs)); }
+      if (inFamily) { metaPre = (await kv.get(["vid", id, "meta"])).value; inFamily = !!metaPre && metaPre.pub !== false && (Array.isArray(metaPre.aud) ? metaPre.aud.includes(user.id) : !!theirs && myCircles.includes(theirs)); }
       if (isAdmin && every.length < 150) {
         const meta = (await kv.get(["vid", id, "meta"])).value;
         if (meta) every.push({ id, title: meta.title, name: meta.name || (/^[gu]_/.test(uid) ? "" : uid), user: uid, created, poster: !!meta.posterN, ...(await vidCounts(kv, id)) });
@@ -661,6 +661,14 @@ export async function handler(req, info) {
   }
 
   // автор выбирает, кто из семьи увидит ролик в ленте: null — все, [] — только по ссылке, [...] — выбранные
+  // автор поделился роликом (ссылкой или файлом) — только тогда он появляется в семейной ленте
+  if (url.pathname === "/video-pub") {
+    const kv = await kvOpen(), id = String(body.id || "");
+    const meta = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["vid", id, "meta"])).value;
+    if (!meta || meta.user !== user.id) return json({ error: "Ролик не найден" }, 404, h);
+    if (meta.pub === false) { meta.pub = true; await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).sum(["mk", user.id, "shared"], 1n).commit(); }
+    return json({ ok: true }, 200, h);
+  }
   if (url.pathname === "/video-aud") {
     const kv = await kvOpen(), id = String(body.id || "");
     const meta = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["vid", id, "meta"])).value;
