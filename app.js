@@ -3292,7 +3292,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=100");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=101");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3587,24 +3587,26 @@ async function addMusic(pcm, speech, outro, ctxText, chat) {
   const off = new OfflineAudioContext(1, Math.ceil(au.duration * VRATE), VRATE);
   const src = off.createBufferSource(); src.buffer = au; src.connect(off.destination); src.start();
   const m = (await off.startRendering()).getChannelData(0);
+  // выравниваем громкость трека: все треки к одному уровню, тихие подтягиваем
+  let ss = 0, n = 0; for (let i = 0; i < m.length; i += 16) { ss += m[i] * m[i]; n++; }
+  const rms = Math.sqrt(ss / Math.max(1, n)) || 0.1, norm = Math.min(4, 0.2 / rms);
   // огибающая голоса — музыка тише, когда говорят
   const win = Math.round(VRATE * 0.05), env = new Float32Array(Math.ceil(pcm.length / win));
   for (let k = 0; k < env.length; k++) { let a = 0; for (let i = k * win; i < Math.min(pcm.length, (k + 1) * win); i += 8) a = Math.max(a, Math.abs(pcm[i])); env[k] = a; }
   const start = Math.round((tr.skip || 0) * VRATE), fadeIn = VRATE * 0.6, fadeOut = VRATE * 1.2;
-  let duck = 0.32;
+  let duck = 0.5;
   for (let i = 0; i < pcm.length; i++) {
     const t = i / VRATE;
-    const target = t > speech ? 0.6 : env[Math.floor(i / win)] > 0.04 ? 0.18 : 0.32;
+    const target = t > speech ? 0.9 : env[Math.floor(i / win)] > 0.04 ? 0.3 : 0.5;
     duck += (target - duck) * 0.0004;
-    let g = duck * (tr.gain || 1);
+    let g = duck * norm * (tr.gain || 1);
     if (i < fadeIn) g *= i / fadeIn;
     if (i > pcm.length - fadeOut) g *= (pcm.length - i) / fadeOut;
     const j = (start + i) % m.length;
     pcm[i] += m[j] * g;
   }
-  // защита от перегруза
-  let peak = 0; for (let i = 0; i < pcm.length; i += 4) peak = Math.max(peak, Math.abs(pcm[i]));
-  if (peak > 0.98) { const k = 0.98 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= k; }
+  // мягкий ограничитель: срезает только редкие пики, общую громкость голоса не трогает
+  for (let i = 0; i < pcm.length; i++) { const x = pcm[i], a = Math.abs(x); if (a > 0.9) pcm[i] = Math.sign(x) * (0.9 + 0.09 * Math.tanh((a - 0.9) / 0.09)); }
 }
 
 /* ===== Финальная заставка и настройки видео ===== */
