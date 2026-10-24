@@ -2263,19 +2263,52 @@ function mascotTip() {
   if (!pool.length) { pool = tips.map((_, i) => i); seen.length = 0; }
   const i = pool[Math.floor(Math.random() * pool.length)];
   seen.push(i); store.set("tipsSeen", seen);
+  store.set("tipsClicks", (store.get("tipsClicks") || 0) + 1);
   const box = $("#mascot-tip");
   box.innerHTML = tips[i] + `<span class="m-next">${LL("Нажмите на значок ещё раз для следующего совета", "Tap the logo again for another tip")}</span>`;
   box.hidden = false;
   clearTimeout(mascotTip.t); mascotTip.t = setTimeout(() => (box.hidden = true), 9000);
-  mascotMove("nod");
+  const m = $("#mascot"); m.classList.remove("hinting");
+  // «говорит»: рот двигается, глаз смотрит на сообщение
+  mascotLook(-0.5, 1);
+  m.classList.add("talk"); clearTimeout(mascotTip.k);
+  mascotTip.k = setTimeout(() => { m.classList.remove("talk"); mascotLook(0, 0); }, 600 + tips[i].length * 22);
 }
-function mascotMove(kind) {
-  const m = $("#mascot"); if (!m || m.hidden || document.hidden) return;
-  const k = kind || ["hop", "wiggle", "nod", "laugh"][Math.floor(Math.random() * 4)];
-  m.classList.remove("hop", "wiggle", "nod", "laugh"); void m.offsetWidth; m.classList.add(k);
-  setTimeout(() => m.classList.remove(k), 1100);
-}
-(function mascotLoop() { setTimeout(() => { mascotMove(); mascotLoop(); }, 40000 + Math.random() * 50000); })();
+// куда смотрит глаз: dx, dy от -1 до 1
+function mascotLook(dx, dy) { const p = document.querySelector("#mascot .m-pupil"); if (p) p.style.transform = `translate(${dx * 24}px, ${dy * 20}px)`; }
+function mascotVisible() { const m = $("#mascot"); return !!m && !m.hidden && !document.hidden && curScreen() === "screen-home"; }
+function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); void m.offsetWidth; m.classList.add(cls); setTimeout(() => m.classList.remove(cls), ms); }
+// осматривается и моргает
+(function mascotIdle() {
+  setTimeout(() => {
+    if (mascotVisible() && !$("#mascot").classList.contains("talk")) {
+      const r = Math.random();
+      if (r < 0.25) mascotPlay("blink", 140);
+      else if (r < 0.85) { const pts = [[-1, 0], [1, 0], [-0.7, -0.7], [0.7, -0.7], [0, 0], [0, 0.8], [-1, 0.4], [1, 0.4]]; const [x, y] = pts[Math.floor(Math.random() * pts.length)]; mascotLook(x, y); }
+      else { mascotLook(-1, 0); setTimeout(() => mascotLook(1, 0), 450); setTimeout(() => mascotLook(0, 0), 900); }
+    }
+    mascotIdle();
+  }, 1800 + Math.random() * 3500);
+})();
+// время от времени зовёт нажать: подпрыгивает, смотрит на человека, показывает лампочку
+(function mascotHint() {
+  const clicks = store.get("tipsClicks") || 0;
+  setTimeout(() => {
+    const tip = $("#mascot-tip");
+    if (mascotVisible() && tip && tip.hidden) {
+      const m = $("#mascot");
+      mascotLook(0, 0.6); mascotPlay(Math.random() < 0.5 ? "hop" : "wiggle", 1000); setTimeout(() => mascotPlay("happy", 1000), 300);
+      m.classList.add("hinting"); setTimeout(() => m.classList.remove("hinting"), 5000);
+    }
+    mascotHint();
+  }, (clicks < 3 ? 30000 : 70000) + Math.random() * 40000);
+})();
+// смотрит туда, куда нажали
+document.addEventListener("pointerdown", (e) => {
+  const m = $("#mascot"); if (!mascotVisible() || m.classList.contains("talk") || e.target.closest("#mascot")) return;
+  const r = m.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1;
+  mascotLook(dx / d, dy / d);
+});
 document.addEventListener("click", (e) => {
   if (e.target.closest("#mascot")) mascotTip();
   else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
@@ -3095,7 +3128,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=83");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=84");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
