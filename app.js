@@ -2341,19 +2341,6 @@ function mascotLook(dx, dy, back) {
 }
 function mascotVisible() { const m = $("#mascot"); return !!m && !m.hidden && !document.hidden && curScreen() === "screen-home"; }
 function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); void m.offsetWidth; m.classList.add(cls); setTimeout(() => m.classList.remove(cls), ms); }
-// время от времени зовёт нажать: подпрыгивает, смотрит на человека, показывает лампочку
-(function mascotHint() {
-  const clicks = store.get("tipsClicks") || 0;
-  setTimeout(() => {
-    const tip = $("#mascot-tip");
-    if (mascotVisible() && tip && tip.hidden) {
-      const m = $("#mascot");
-      mascotLook(0, 0.7, 1500); mascotPlay(Math.random() < 0.5 ? "hop" : "wiggle", 1000); setTimeout(() => mascotPlay("happy", 1000), 300);
-      m.classList.add("hinting"); setTimeout(() => m.classList.remove("hinting"), 5000);
-    }
-    mascotHint();
-  }, (clicks < 3 ? 30000 : 70000) + Math.random() * 40000);
-})();
 document.addEventListener("click", (e) => {
   if (e.target.closest("#mascot")) mascotTip();
   else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
@@ -3286,7 +3273,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=95");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=96");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
