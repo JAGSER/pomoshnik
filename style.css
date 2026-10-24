@@ -417,3 +417,9 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .vd-sum p { margin: 0 0 4px; }
 .vd-exp { color: var(--muted); font-size: .9em; }
 .vd-list { margin: 8px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9em; font-variant-numeric: tabular-nums; }
+
+.share-aud { margin-top: 2px; }
+.aud-line { width: 100%; background: none; border: 0; padding: 6px 2px; font: inherit; font-size: .88em; color: var(--muted); text-align: center; cursor: pointer; }
+.aud-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 4px; }
+.aud-chip { font: inherit; font-size: .92em; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+.aud-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }

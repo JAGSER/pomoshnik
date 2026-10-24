@@ -620,13 +620,16 @@ export async function handler(req, info) {
       const [, uid, created, id] = e.key;
       const isMine = uid === user.id;
       const theirs = circles[uid] ? circles[uid][0] : null;
-      const inFamily = !isMine && created >= weekAgo && theirs && myCircles.includes(theirs);
+      // кому автор показал ролик: никому не выбрал — всем в его круге; выбрал людей — только им (даже из другого круга)
+      let inFamily = !isMine && created >= weekAgo && !user.acct && !!circles[user.id];
+      let metaPre = null;
+      if (inFamily) { metaPre = (await kv.get(["vid", id, "meta"])).value; inFamily = !!metaPre && (Array.isArray(metaPre.aud) ? metaPre.aud.includes(user.id) : !!theirs && myCircles.includes(theirs)); }
       if (isAdmin && every.length < 150) {
         const meta = (await kv.get(["vid", id, "meta"])).value;
         if (meta) every.push({ id, title: meta.title, name: meta.name || (/^[gu]_/.test(uid) ? "" : uid), user: uid, created, poster: !!meta.posterN, ...(await vidCounts(kv, id)) });
       }
       if (!isMine && !inFamily) continue;
-      const meta = (await kv.get(["vid", id, "meta"])).value; if (!meta) continue;
+      const meta = metaPre || (await kv.get(["vid", id, "meta"])).value; if (!meta) continue;
       const c = await vidCounts(kv, id);
       const item = { id, title: meta.title, name: meta.name, user: uid, created, poster: !!meta.posterN, ...c };
       if (isMine) {
@@ -641,6 +644,15 @@ export async function handler(req, info) {
     return json({ mine: mine.slice(0, 50), family: family.slice(0, 20), all: isAdmin ? every : undefined }, 200, h);
   }
 
+  // автор выбирает, кто из семьи увидит ролик в ленте: null — все, [] — только по ссылке, [...] — выбранные
+  if (url.pathname === "/video-aud") {
+    const kv = await kvOpen(), id = String(body.id || "");
+    const meta = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["vid", id, "meta"])).value;
+    if (!meta || meta.user !== user.id) return json({ error: "Ролик не найден" }, 404, h);
+    meta.aud = Array.isArray(body.aud) ? body.aud.map((x) => String(x).toLowerCase().slice(0, 30)).slice(0, 20) : null;
+    await kv.set(["vid", id, "meta"], meta, VID_TTL);
+    return json({ ok: true, aud: meta.aud }, 200, h);
+  }
   // подробная статистика ролика
   if (url.pathname === "/video-detail") {
     const kv = await kvOpen(), id = String(body.id || "");

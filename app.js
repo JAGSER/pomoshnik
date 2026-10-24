@@ -2515,7 +2515,40 @@ function openShare(file, ctx = {}) {
     saveVideo(file);
   };
   $("#share-save").onclick = () => { track("Видео сохранено"); saveVideo(file); };
+  renderAud(S, msg);
   openVSheet("share-sheet");
+}
+// кто из семьи увидит ролик в ленте: по умолчанию все, выбор спрятан в неброскую строку
+function renderAud(S, msg) {
+  const box = $("#share-aud");
+  const fam = CFG.users[SESSION.user] ? Object.entries(CFG.users).filter(([id]) => id !== SESSION.user) : [];
+  box.hidden = !fam.length; if (!fam.length) return;
+  if (S.aud === undefined) S.aud = msg && msg.vidAud !== undefined ? msg.vidAud : null;
+  const label = () => S.aud === null ? LL("все", "everyone") : !S.aud.length ? LL("только по ссылке", "link only") : S.aud.map((id) => (CFG.users[id] || {}).name || id).join(", ");
+  const apply = async () => {
+    if (msg) { msg.vidAud = S.aud; save(); }
+    try { const id = S.id || (S.up && (await S.up)); if (id) await apiPost("/video-aud", { id, aud: S.aud }); } catch (_) {}
+  };
+  const draw = (open) => {
+    box.innerHTML = "";
+    const line = el("button", "aud-line"); line.type = "button";
+    line.textContent = `👥 ${LL("Увидят в семье", "Family will see")}: ${label()} · ${open ? LL("готово", "done") : LL("изменить", "change")}`;
+    line.onclick = () => draw(!open);
+    box.append(line);
+    if (!open) return;
+    const chips = el("div", "aud-chips");
+    const mk = (text, on, fn) => { const b = el("button", "aud-chip" + (on ? " on" : "")); b.type = "button"; b.textContent = text; b.onclick = () => { fn(); apply(); draw(true); }; chips.append(b); };
+    mk(LL("Все", "Everyone"), S.aud === null, () => (S.aud = null));
+    fam.forEach(([id, u]) => mk(`${u.avatar || ""} ${u.name || id}`.trim(), Array.isArray(S.aud) && S.aud.includes(id), () => {
+      const cur = Array.isArray(S.aud) ? S.aud.slice() : [];
+      const i = cur.indexOf(id); i >= 0 ? cur.splice(i, 1) : cur.push(id);
+      S.aud = cur.length ? cur : null;
+    }));
+    mk("🔒 " + LL("Только по ссылке", "Link only"), Array.isArray(S.aud) && !S.aud.length, () => (S.aud = []));
+    box.append(chips);
+  };
+  draw(false);
+  if (S.aud !== null) apply();
 }
 async function shareText(t) {
   if (navigator.share) { try { await navigator.share({ text: t }); return; } catch (e) { if (e.name === "AbortError") return; } }
@@ -2999,7 +3032,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=79");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=80");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
