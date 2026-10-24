@@ -2252,17 +2252,73 @@ const TIPS = () => [
   LL("Не поняли ответ? Напишите «объясни проще», и я перескажу понятнее.", "Didn't get an answer? Say \"explain simpler\" and I'll rephrase."),
   LL("Перед покупкой спросите: «стоит ли брать?» и пришлите фото товара.", "Before buying, ask \"is it worth it?\" and send a photo of the item."),
   LL("Пришло подозрительное сообщение? Перешлите его мне, проверю, не мошенники ли.", "Got a suspicious message? Send it to me and I'll check if it's a scam."),
-  LL("Можно попросить сделать ролик в другом стиле: веселее, короче или с другой музыкой.", "You can ask for a video in another style: funnier, shorter or with other music."),
   LL("Все ваши ролики собраны в разделе <b>Ролики</b> на главном экране.", "All your videos are in <b>Videos</b> on the home screen."),
   LL("Задайте вопрос на любом языке, отвечу на нём же.", "Ask in any language and I'll answer in it."),
-  LL("Хотите просто поболтать? Помощник <b>☕ Просто поговорить</b> для этого.", "Just want to chat? The <b>☕ Just talk</b> helper is for that."),
+  LL("Хотите просто поболтать? Так и напишите: «давай поговорим».", "Just want to chat? Say so: \"let's talk\"."),
+];
+// расширенные советы: что ещё можно попросить у Claude (показываются после основных)
+const TIPS_MORE = () => [
+  LL("Сфотографируйте, что лежит в холодильнике, и спросите, что из этого приготовить.", "Take a photo of your fridge and ask what you can cook from it."),
+  LL("Пришлите фото растения, и я подскажу, что это и как за ним ухаживать.", "Send a photo of a plant and I'll tell you what it is and how to care for it."),
+  LL("Пришлите длинный текст или статью и попросите: «перескажи в трёх предложениях».", "Paste a long text and ask: \"summarise it in three sentences\"."),
+  LL("Попросите ответ таблицей: так удобно сравнивать цены, тарифы или товары.", "Ask for the answer as a table: handy for comparing prices or products."),
+  LL("Скажите «по шагам», и я распишу инструкцию пункт за пунктом.", "Say \"step by step\" and I'll write the instructions point by point."),
+  LL("Ответ слишком длинный? Напишите «короче». Мало подробностей? Напишите «подробнее».", "Too long? Say \"shorter\". Not enough detail? Say \"more detail\"."),
+  LL("Перед походом к врачу попросите составить список вопросов, чтобы ничего не забыть.", "Before a doctor's visit, ask me to list questions so you don't forget anything."),
+  LL("Напишу жалобу, заявление или письмо в любую организацию, вежливо и по делу.", "I can write a complaint or a letter to any organisation, polite and to the point."),
+  LL("Сфотографируйте договор и спросите, на что в нём обратить внимание.", "Take a photo of a contract and ask what to watch out for."),
+  LL("Придумаю тост или поздравление в стихах для любого праздника.", "I can write a toast or a rhyming greeting for any occasion."),
+  LL("Сочиню сказку для внуков, где главный герой носит их имя.", "I can make up a bedtime story starring your grandchild by name."),
+  LL("Попросите загадку, викторину или кроссворд, чтобы размять голову.", "Ask for a riddle, a quiz or a crossword to keep your mind sharp."),
+  LL("Помогу с домашним заданием ребёнка: объясню тему так, чтобы потом объяснили вы.", "I can help with a child's homework and explain the topic so you can explain it."),
+  LL("Хотите выучить язык? Напишите «давай поговорим по-английски», буду поправлять ошибки.", "Learning a language? Say \"let's talk in Spanish\" and I'll correct your mistakes."),
+  LL("Подготовлю вас к трудному разговору: сыграю собеседника, а вы потренируетесь.", "I can help you rehearse a hard conversation by playing the other person."),
+  LL("Перед собеседованием попросите меня провести пробное интервью.", "Before a job interview, ask me to run a practice interview."),
+  LL("Спросите, как настроить что-то в телефоне: шрифт крупнее, звонок громче, Wi-Fi.", "Ask how to set something up on your phone: bigger text, louder ringtone, Wi-Fi."),
+  LL("Пришлите скриншот ошибки на телефоне или компьютере, и я подскажу, что делать.", "Send a screenshot of an error and I'll tell you what to do."),
+  LL("Составлю меню на неделю и список покупок к нему.", "I can plan a week of meals and a shopping list for it."),
+  LL("Рецепт на 4 порции, а вас двое? Попросите пересчитать.", "Recipe for 4 but there are 2 of you? Ask me to scale it."),
+  LL("Спросите, чем заменить продукт, которого нет дома.", "Ask what to use instead of an ingredient you don't have."),
+  LL("Помогу посчитать: проценты по вкладу, скидку, сколько платить за месяц.", "I can do the maths: interest, discounts, monthly payments."),
+  LL("Сравню два товара по фото ценников: что выгоднее за килограмм.", "Send photos of two price tags and I'll tell you which is cheaper per kilo."),
+  LL("Помогу спланировать бюджет на месяц и найти, где можно сэкономить.", "I can help plan a monthly budget and find where to save."),
+  LL("Составлю маршрут поездки по дням: что посмотреть и где поесть.", "I can plan a trip day by day: what to see and where to eat."),
+  LL("Перед поездкой спросите, какие фразы пригодятся на местном языке.", "Before a trip, ask for useful phrases in the local language."),
+  LL("Подскажу, что взять с собой в дорогу, санаторий или на дачу.", "I can make a packing list for a trip or a weekend away."),
+  LL("Спросите, когда что сажать на огороде и как бороться с вредителями.", "Ask when to plant what in the garden and how to deal with pests."),
+  LL("Порекомендую фильм или книгу под настроение: скажите, что вам понравилось раньше.", "I'll suggest a film or a book: tell me what you liked before."),
+  LL("Расскажу простыми словами про любую новость или непонятное слово.", "I can explain any news story or unfamiliar word in plain language."),
+  LL("Можно спорить: если кажется, что я ошибся, так и напишите, разберёмся.", "Feel free to disagree: if you think I'm wrong, say so and we'll check."),
+  LL("Помогу записать воспоминания: задам вопросы, а из ответов получится рассказ.", "I can help write down your memories: I ask questions and turn answers into a story."),
+  LL("Придумаю подарок по интересам человека и бюджету.", "I can suggest a gift based on someone's interests and your budget."),
+  LL("Напишу отзыв о товаре, враче или магазине по вашим словам.", "I can write a review of a product or a shop from your notes."),
+  LL("Проверю текст на ошибки и сделаю его красивее, сохранив ваш смысл.", "I can check a text for mistakes and polish it while keeping your meaning."),
+  LL("Подберу упражнения для спины или суставов, которые можно делать дома.", "I can suggest gentle exercises for your back or joints at home."),
+  LL("Плохо спится? Спросите, что можно поменять вечером, чтобы засыпать легче.", "Can't sleep? Ask what to change in the evening to fall asleep easier."),
+  LL("Спросите про лекарство: как принимать и с чем нельзя совмещать. Решение всё равно за врачом.", "Ask about a medicine: how to take it and what not to mix it with. Your doctor has the final say."),
+  LL("Сфотографируйте инструкцию к технике, и я объясню, как ей пользоваться.", "Take a photo of an appliance manual and I'll explain how to use it."),
+  LL("Не знаете, как ответить на сообщение? Перешлите его, предложу варианты.", "Not sure how to reply to a message? Send it to me and I'll suggest replies."),
+  LL("Помогу с правилами настольной или карточной игры и разберу спорный момент.", "I can explain the rules of a board or card game and settle a dispute."),
+  LL("Спросите про историю города, улицы или старой вещи на фото.", "Ask about the history of a town, a street or an old object in a photo."),
+  LL("Сделаю план уборки или ремонта по шагам, с материалами и инструментами.", "I can plan a clean-up or a repair step by step, with materials and tools."),
+  LL("Помогу разобраться со скидками, кэшбэком и подписками, которые незаметно списывают деньги.", "I can help sort out discounts and subscriptions that quietly take your money."),
+  LL("Спросите, как вежливо отказать или попросить о чём-то, подберу слова.", "Ask how to say no politely or ask for a favour, and I'll find the words."),
+  LL("Сменилась тема? Начните новый разговор с главного экрана: так я отвечаю точнее.", "Changing topic? Start a new chat from the home screen: my answers are more accurate that way."),
+  LL("Прошлые разговоры собраны на главном экране: их можно открыть и продолжить.", "Past chats are on the home screen: open one to continue it."),
+  LL("Попросите сделать ролик-поздравление с фотографиями из разговора.", "Ask for a greeting video using the photos from your chat."),
+  LL("Сделайте ролик-инструкцию для родных: например, как оплатить квартиру через телефон.", "Make a how-to video for your family, for example how to pay bills on a phone."),
+  LL("Просто расскажите, как прошёл день. Я выслушаю и поддержу.", "Just tell me how your day went. I'll listen."),
 ];
 function mascotTip() {
-  const tips = TIPS(), seen = store.get("tipsSeen") || [];
-  let pool = tips.map((_, i) => i).filter((i) => !seen.includes(i));
-  if (!pool.length) { pool = tips.map((_, i) => i); seen.length = 0; }
-  const i = pool[Math.floor(Math.random() * pool.length)];
-  seen.push(i); store.set("tipsSeen", seen);
+  // сначала основные советы про приложение, потом расширенные про то, что ещё можно попросить
+  const base = TIPS(), more = TIPS_MORE();
+  let seen = (store.get("tipsSeen") || []).map((x) => (typeof x === "number" ? "b" + x : x));
+  let pool = base.map((_, i) => "b" + i).filter((k) => !seen.includes(k));
+  if (!pool.length) pool = more.map((_, i) => "x" + i).filter((k) => !seen.includes(k));
+  if (!pool.length) { seen = seen.filter((k) => k[0] === "b"); pool = more.map((_, i) => "x" + i); }
+  const key = pool[Math.floor(Math.random() * pool.length)];
+  seen.push(key); store.set("tipsSeen", seen);
+  const tips = key[0] === "b" ? base : more, i = +key.slice(1);
   store.set("tipsClicks", (store.get("tipsClicks") || 0) + 1);
   const box = $("#mascot-tip");
   box.innerHTML = tips[i] + `<span class="m-next">${LL("Нажмите на значок ещё раз для следующего совета", "Tap the logo again for another tip")}</span>`;
@@ -3224,7 +3280,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=92");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=93");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
