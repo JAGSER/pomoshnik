@@ -320,7 +320,7 @@ let PLANTAB = "personal", LEAD = null;
 function planLine() {
   if (!PLAN) return "";
   if (PLAN.plan === "owner") return LL("Семейный доступ без ограничений", "Family access, no limits");
-  const u = PLAN.usage || {}, days = Math.max(0, Math.ceil((PLAN.trialEnds - Date.now()) / 86400000));
+  const u = PLAN.usage || {}, days = Math.max(1, Math.round((PLAN.trialEnds - Date.now()) / 86400000));
   if (PLAN.plan === "trial") return LL(`Пробный период: осталось ${days} дн., творческих роликов ${u.creativeLeft} из ${u.creativeLimit}`, `Trial: ${days} days left, ${u.creativeLeft} of ${u.creativeLimit} creative videos`);
   if (PLAN.plan === "free") return LL(`Бесплатный: сегодня ${u.chatToday} из ${u.chatDay} вопросов, творческих роликов в этом месяце ${u.creativeLeft} из ${u.creativeLimit}`, `Free: ${u.chatToday} of ${u.chatDay} questions today, ${u.creativeLeft} of ${u.creativeLimit} creative videos this month`);
   return LL(`Тариф «${PLAN.title}»: творческих роликов осталось ${u.creativeLeft} из ${u.creativeLimit}`, `${PLAN.title} plan: ${u.creativeLeft} of ${u.creativeLimit} creative videos left`);
@@ -2919,7 +2919,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=75");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=76");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
