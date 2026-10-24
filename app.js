@@ -276,9 +276,20 @@ function devInfo() {
 }
 let PLAN = null;
 const LL = (ru, en) => (LANG === "en" ? en : ru);
+// режим инкогнито: в Chrome сайту дают мало места, в Safari и Firefox закрыто хранилище файлов
+async function isPrivate() {
+  try {
+    if (navigator.storage && navigator.storage.getDirectory) { try { await navigator.storage.getDirectory(); } catch (e) { if (/security|transient|unknown/i.test(String(e && (e.message || e.name)))) return true; } }
+    if (navigator.storage && navigator.storage.estimate && /Chrome|CriOS|Edg/.test(navigator.userAgent)) {
+      const { quota } = await navigator.storage.estimate(), heap = (performance.memory && performance.memory.jsHeapSizeLimit) || 1073741824;
+      if (quota && quota < heap * 2) return true;
+    }
+  } catch (_) {}
+  return false;
+}
 async function newGuest() {
   const ref = (location.search.match(/[?&]ref=([\w-]{1,20})/) || [])[1] || "";
-  const r = await fetch(CFG.proxy + "/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang: LANG, ref, ...devInfo() }) });
+  const r = await fetch(CFG.proxy + "/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang: LANG, ref, priv: await isPrivate(), ...devInfo() }) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || LL("Нет связи. Проверьте интернет и обновите страницу.", "No connection. Check the internet and reload."));
   SESSION = { user: d.user, password: d.password };
@@ -326,6 +337,7 @@ function planLine() {
   if (!PLAN) return "";
   if (PLAN.plan === "owner") return LL("Семейный доступ без ограничений", "Family access, no limits");
   const u = PLAN.usage || {}, days = Math.max(1, Math.round((PLAN.trialEnds - Date.now()) / 86400000));
+  if (PLAN.plan === "trial" && u.needReg) return LL(`Пробный период: осталось ${days} дн. Сохраните аккаунт, и откроются ${u.creativeLimit} творческих ролика`, `Trial: ${days} days left. Save your account to unlock ${u.creativeLimit} creative videos`);
   if (PLAN.plan === "trial") return LL(`Пробный период: осталось ${days} дн., творческих роликов ${u.creativeLeft} из ${u.creativeLimit}`, `Trial: ${days} days left, ${u.creativeLeft} of ${u.creativeLimit} creative videos`);
   if (PLAN.plan === "free") return LL(`Бесплатный: сегодня ${u.chatToday} из ${u.chatDay} вопросов, творческих роликов в этом месяце ${u.creativeLeft} из ${u.creativeLimit}`, `Free: ${u.chatToday} of ${u.chatDay} questions today, ${u.creativeLeft} of ${u.creativeLimit} creative videos this month`);
   return LL(`Тариф «${PLAN.title}»: творческих роликов осталось ${u.creativeLeft} из ${u.creativeLimit}`, `${PLAN.title} plan: ${u.creativeLeft} of ${u.creativeLimit} creative videos left`);
@@ -1058,8 +1070,8 @@ function showStarters(chat) {
 function allowedHelpers(uid) {
   uid = uid || SESSION.user;
   const known = !!CFG.users[uid];
-  // у гостей и зарегистрированных — общие помощники (без школьных и семейных настроек)
-  return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || (known ? h.for.includes(uid) : h.group !== "school" && ["mama", "papa", "sister", "vie"].some((x) => h.for.includes(x))));
+  // у гостей и зарегистрированных — общие помощники (без школьных и семейных настроек); в английской версии только переведённые
+  return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || (known ? h.for.includes(uid) : h.group !== "school" && ["mama", "papa", "sister", "vie"].some((x) => h.for.includes(x)) && (LANG !== "en" || !!h.examples_en)));
 }
 // человек сам прячет ненужных помощников в настройках (хранится на устройстве)
 function hiddenHelpers() { return (SESSION && store.get("helpersHidden:" + SESSION.user)) || []; }
@@ -2388,12 +2400,14 @@ async function videoButton(btn, text, msg, opt = {}) {
     try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat); } catch (e) { console.warn("Музыка:", e); }
     let scene = null;
     const creativeLeft = !PLAN || !PLAN.usage || PLAN.usage.creativeLeft > 0;
-    if (creativeOn() && !creativeLeft) vidNote(btn, LL("ℹ️ Творческие ролики на этот период закончились, сделан обычный. Больше роликов на тарифе «Семья».", "ℹ️ No creative videos left for now, so this is a simple one. More on the Family plan."));
+    if (creativeOn() && !creativeLeft && PLAN.usage.needReg) vidNote(btn, LL("ℹ️ Творческие ролики с анимацией откроются, когда вы сохраните аккаунт: ⚙️ → придумайте имя и пароль. Сейчас сделан обычный ролик.", "ℹ️ Creative videos with animation unlock once you save your account: ⚙️ → choose a name and password. This one is a simple video."));
+    else if (creativeOn() && !creativeLeft) vidNote(btn, LL("ℹ️ Творческие ролики на этот период закончились, сделан обычный. Больше роликов на тарифе «Семья».", "ℹ️ No creative videos left for now, so this is a simple one. More on the Family plan."));
     if (creativeOn() && creativeLeft) {
       try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
       catch (e) {
         console.warn("Творческий режим:", e);
-        vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
+        if (/аккаунт|account/i.test(e.message || "")) { vidNote(btn, "ℹ️ " + e.message); loadPlan(); }
+        else vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
       }
     } else if (creativeAllowed() && creativePref()) {
       const why = !creativePref() ? "творческий режим выключен в настройках"
@@ -3040,7 +3054,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=81");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=82");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

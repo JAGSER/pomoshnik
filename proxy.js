@@ -159,7 +159,9 @@ async function usageOf(user, plan) {
   const kv = await kvOpen(), P = PLANS[plan], id = user.id;
   const creativeUsed = P.creativeTotal ? await kvNum(kv, ["cvt", id]) : await kvNum(kv, ["cvm", id, MONTH()]);
   const creativeLimit = P.creativeTotal || P.creativeMonth || 0;
-  return { chatToday: await kvNum(kv, ["q", id, DAY()]), chatDay: P.chatDay, creativeUsed, creativeLimit, creativeLeft: Math.max(0, creativeLimit - creativeUsed) };
+  // инкогнито без регистрации: творческие ролики только после сохранения аккаунта
+  const needReg = !!(user.acct && user.acct.priv && !user.acct.pw);
+  return { chatToday: await kvNum(kv, ["q", id, DAY()]), chatDay: P.chatDay, creativeUsed, creativeLimit, creativeLeft: needReg ? 0 : Math.max(0, creativeLimit - creativeUsed), needReg };
 }
 const ADMINS = () => env("ADMIN_USERS", "yuri").split(",").map((x) => x.trim().toLowerCase());
 
@@ -500,7 +502,7 @@ export async function handler(req, info) {
     await kvInc(kv, ipKey, 1, 1);
     const id = "g_" + rnd(12), secret = rnd(28), now = Date.now();
     const ref = String(body.ref || "").slice(0, 20);
-    await acctPut({ id, kind: "guest", plan: "trial", created: now, trialEnds: now + TRIAL_DAYS * 86400_000, secret: await sha(secret), lang: body.lang === "en" ? "en" : "ru", ref,
+    await acctPut({ id, kind: "guest", plan: "trial", created: now, trialEnds: now + TRIAL_DAYS * 86400_000, secret: await sha(secret), lang: body.lang === "en" ? "en" : "ru", ref, priv: !!body.priv,
       tz: String(body.tz || "").slice(0, 40), plang: String(body.plang || "").slice(0, 12), os: String(body.os || "").slice(0, 12) });
     // пришёл по ссылке на ролик — засчитываем ролику и его автору нового пользователя
     if (/^[A-Za-z0-9]{8}$/.test(ref)) { const meta = (await kv.get(["vid", ref, "meta"])).value; if (meta) await kv.atomic().sum(["vidc", ref, "joins"], 1n).sum(["mk", meta.user, "joins"], 1n).commit(); }
@@ -816,6 +818,11 @@ export async function handler(req, info) {
       const callsKey = ["cvid", user.id, vid], calls = await kvNum(kv, callsKey);
       if (!calls) {
         const u = await usageOf(user, plan);
+        if (u.needReg) return json({ error: user.acct.lang === "en" ? "Creative videos unlock once you save your account: ⚙️ → choose a name and password. This one is a simple video." : "Творческие ролики откроются после сохранения аккаунта: ⚙️ → придумайте имя и пароль. Сейчас сделан обычный ролик.", code: "creative_reg" }, 402, h);
+        // незарегистрированные гости: с одного адреса не больше 3 пробных творческих роликов в неделю
+        const guestIpKey = !user.acct.pw ? ["cvip", await sha(ip), Math.floor(Date.now() / 604800000)] : null;
+        if (guestIpKey && (await kvNum(kv, guestIpKey)) >= Number(env("CREATIVE_PER_IP_WEEK", "3"))) return json({ error: user.acct.lang === "en" ? "Trial creative videos from this internet connection are used up this week. Save your account (⚙️ → name and password) to unlock them. This one is a simple video." : "С этого интернета пробные творческие ролики на этой неделе уже взяли. Сохраните аккаунт (⚙️ → имя и пароль), и они откроются. Сейчас сделан обычный ролик.", code: "creative_reg" }, 402, h);
+        if (guestIpKey && u.creativeLeft > 0) await kvInc(kv, guestIpKey, 1, 8);
         if (u.creativeLeft <= 0) return json({ error: plan === "free" ? "Творческий ролик на бесплатном тарифе: 1 в месяц. Сделаю обычный ролик." : "Творческие ролики на этот месяц закончились. Сделаю обычный ролик.", code: "creative_limit" }, 402, h);
         await kvInc(kv, ["cvt", user.id], 1, 0); await kvInc(kv, ["cvm", user.id, MONTH()], 1, 40);
       } else if (calls >= 6) return json({ error: "Слишком много правок одного ролика", code: "creative_calls" }, 429, h);
