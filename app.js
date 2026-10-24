@@ -2381,7 +2381,13 @@ const rise = (h = 34, x = 0) => [{ opacity: 0, transform: "scale(.4)" }, { opaci
 const ORB = "50% 100%";
 
 // приветствие по буквам для «волны»; через 3 секунды текст возвращается как был
-function splitName(c) { const t = c.n.textContent; c.n.innerHTML = [...t].map((ch) => `<span style="display:inline-block;white-space:pre">${esc(ch)}</span>`).join(""); setTimeout(() => { if (c.n.querySelector("span")) c.n.textContent = t; }, 3000); return [...c.n.querySelectorAll("span")]; }
+function splitName(c) {
+  // буквы оборачиваем внутри неразрывных слов, чтобы перенос строк остался прежним
+  const html = c.n.innerHTML, t = c.n.textContent;
+  c.n.innerHTML = t.split(/(\s+)/).map((w) => /^\s+$/.test(w) || !w ? w : `<span style="white-space:nowrap">${[...w].map((ch) => `<span style="display:inline-block">${esc(ch)}</span>`).join("")}</span>`).join("");
+  setTimeout(() => { if (c.n.querySelector("span[style]")) c.n.innerHTML = html; }, 3000);
+  return [...c.n.querySelectorAll("span[style*=inline-block]")];
+}
 function smile(c, ms) { A(c.S, [{ transform: "none" }, { transform: "scale(1.15,1.3)", offset: 0.25 }, { transform: "scale(1.15,1.3)", offset: 0.75 }, { transform: "none" }], ms); A(c.B, [{ transform: "none" }, { transform: "scaleY(.45)", offset: 0.25 }, { transform: "scaleY(.45)", offset: 0.75 }, { transform: "none" }], ms); }
 function trampoline(c, k) {
   const d = Math.max(4, geo(c).toLine); look(c, 0, 1, 2000);
@@ -3280,7 +3286,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=94");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=95");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
