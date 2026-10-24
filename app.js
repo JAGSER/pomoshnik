@@ -1883,6 +1883,22 @@ function openSettings() {
   pBox.checked = personalOn();
   pBox.onchange = () => store.set("personal:" + SESSION.user, pBox.checked);
   $("#btn-profile").onclick = openProfile;
+  const sfxBox = $("#set-sfx"); sfxBox.checked = sfxOn(); sfxBox.onchange = () => store.set("sfx:" + SESSION.user, sfxBox.checked);
+  musicList().then((list) => {
+    const sel = $("#set-music"); sel.innerHTML = "";
+    [["auto", T("Подбирать само")], ["off", T("Без музыки")], ...list.map((t) => [t.id, `${t.icon || "🎵"} ${LANG === "en" && t.title_en ? t.title_en : t.title}`])].forEach(([v, l]) => { const o = el("option"); o.value = v; o.textContent = l; sel.append(o); });
+    sel.value = musicPref(); if (sel.value !== musicPref()) sel.value = "auto";
+    sel.onchange = () => { store.set("music:" + SESSION.user, sel.value); stopPreview(); $("#music-play").textContent = "▶"; };
+    $(".music-row").hidden = !list.length;
+    const pb = $("#music-play");
+    pb.onclick = () => {
+      const was = pb.textContent; stopPreview(); if (was !== "▶") { pb.textContent = "▶"; return; }
+      const t = list.find((x) => x.id === sel.value) || list[0]; if (!t) return;
+      PREVIEW = audioFor("music/" + t.file); PREVIEW.playbackRate = 1; pb.textContent = "⏹";
+      PREVIEW.onended = () => { pb.textContent = "▶"; PREVIEW = null; };
+      PREVIEW.play().catch(() => (pb.textContent = "▶"));
+    };
+  });
   const outroBox = $("#set-outro");
   outroBox.checked = videoOutroOn();
   outroBox.onchange = () => store.set("outro:" + SESSION.user, outroBox.checked);
@@ -2062,6 +2078,9 @@ async function videoButton(btn, text, msg) {
     });
     // 2) сборка видео (если в разговоре есть фото — получится слайдшоу из них)
     const photos = await chatPhotos(msg);
+    // звуки и музыка под голос
+    try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat); } catch (e) { console.warn("Музыка:", e); }
+    if (sfxOn()) addSfx(pcm, subs, speech, outro, photos.length);
     let scene = null;
     if (creativeOn()) {
       try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
@@ -2411,7 +2430,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=62");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=63");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2570,6 +2589,111 @@ async function addAudioRealtime(videoBlob, pcm, progress) {
 }
 async function aacSupported() {
   try { return !!(await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate: VRATE, numberOfChannels: 1, bitrate: 128000 })).supported; } catch (_) { return false; }
+}
+
+/* ===== Звуковые эффекты: синтезируются кодом, бесплатно ===== */
+function sfxOn() { return !SESSION || store.get("sfx:" + SESSION.user) !== false; }
+function sfxRand(seed) { let x = seed || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647) * 2 - 1; }
+const SFX = {
+  // «вжух»: шум с плавающим фильтром
+  whoosh(len = 0.55, up = true) {
+    const n = Math.round(VRATE * len), out = new Float32Array(n), r = sfxRand(7); let lp = 0;
+    for (let i = 0; i < n; i++) {
+      const p = i / n, cut = 0.02 + 0.25 * (up ? p : 1 - p), env = Math.sin(Math.PI * p) ** 2;
+      lp += cut * (r() - lp); out[i] = lp * env * 2.2;
+    }
+    return out;
+  },
+  // мягкий «поп»
+  pop(f0 = 680) {
+    const n = Math.round(VRATE * 0.12), out = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const p = i / n, f = f0 * (1 - 0.45 * p); ph += 2 * Math.PI * f / VRATE; out[i] = Math.sin(ph) * Math.exp(-p * 7); }
+    return out;
+  },
+  // колокольчик для концовки
+  chime() {
+    const n = Math.round(VRATE * 1.6), out = new Float32Array(n), fs = [1046.5, 1568, 2093, 2637], am = [1, 0.6, 0.35, 0.2];
+    for (let i = 0; i < n; i++) { const t = i / VRATE; let v = 0; fs.forEach((f, k) => (v += am[k] * Math.sin(2 * Math.PI * f * t) * Math.exp(-t * (2.2 + k)))); out[i] = v * 0.45 * Math.min(1, i / 200); }
+    return out;
+  },
+  // лёгкий щелчок
+  tick() {
+    const n = Math.round(VRATE * 0.04), out = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const p = i / n; out[i] = Math.sin(2 * Math.PI * 2200 * i / VRATE) * Math.exp(-p * 9) * 0.6; }
+    return out;
+  },
+};
+function sfxMix(pcm, snd, at, gain) {
+  const o = Math.round(at * VRATE);
+  for (let i = 0; i < snd.length && o + i < pcm.length; i++) if (o + i >= 0) pcm[o + i] += snd[i] * gain;
+}
+function addSfx(pcm, subs, speech, outro, nPhotos) {
+  sfxMix(pcm, SFX.whoosh(0.6, true), 0, 0.16);
+  sfxMix(pcm, SFX.pop(760), 0.45, 0.12);
+  // смена фраз — тихий щелчок, переходы фото — «вжух»
+  subs.forEach((s, i) => { if (i > 0 && s.t0 > 1) sfxMix(pcm, SFX.tick(), s.t0 - 0.02, 0.07); });
+  if (nPhotos > 1) { const per = speech / nPhotos; for (let i = 1; i < nPhotos; i++) sfxMix(pcm, SFX.whoosh(0.5, i % 2 === 0), i * per - 0.3, 0.12); }
+  if (outro) { sfxMix(pcm, SFX.whoosh(0.5, false), speech - 0.1, 0.14); sfxMix(pcm, SFX.chime(), speech + 0.35, 0.22); }
+}
+
+/* ===== Музыка: библиотека треков из music.json, подставляется сама или выбранная ===== */
+let MUSIC = null;
+async function musicList() {
+  if (MUSIC) return MUSIC;
+  try { MUSIC = (await (await fetch("music/music.json?t=" + Date.now(), { cache: "no-store" })).json()).tracks || []; } catch (_) { MUSIC = []; }
+  return MUSIC;
+}
+function musicPref() { return (SESSION && store.get("music:" + SESSION.user)) || "auto"; }
+// подбор по смыслу разговора: ключевые слова → настроение трека
+const MOODS = [
+  ["celebrate", /рожден|поздрав|праздник|юбиле|свадьб|new year|birthday|greet|celebrat|card|открытк/i],
+  ["kids", /дет|внук|сказк|kids|child|story|class|школ|урок|lesson|english/i],
+  ["calm", /сон|спать|сплю|успоко|поддерж|тревог|грус|sleep|calm|support|медит/i],
+  ["emotional", /воспомин|памят|любов|семь|memory|family|love|благодар/i],
+  ["food", /рецепт|готов|еда|блюд|cook|food|recipe|кухн/i],
+  ["travel", /путешеств|поездк|бали|море|travel|trip|отпуск/i],
+  ["tech", /телефон|компьют|интернет|приложен|техник|phone|tech|ai\b|нейро/i],
+];
+async function pickTrack(ctxText, chat) {
+  const list = await musicList(); if (!list.length) return null;
+  const pref = musicPref();
+  if (pref === "off") return null;
+  if (pref !== "auto") return list.find((t) => t.id === pref) || null;
+  const hp = chat && chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
+  const hay = `${ctxText} ${hp ? hp.title + " " + (hp.title_en || "") : ""}`;
+  const mood = (MOODS.find(([, re]) => re.test(hay)) || ["upbeat"])[0];
+  const fit = list.filter((t) => (t.moods || []).includes(mood));
+  const pool = fit.length ? fit : list.filter((t) => (t.moods || []).includes("upbeat"));
+  const arr = pool.length ? pool : list;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+async function addMusic(pcm, speech, outro, ctxText, chat) {
+  const tr = await pickTrack(ctxText, chat); if (!tr) return;
+  const buf = await (await fetch("music/" + tr.file)).arrayBuffer();
+  const ac = new OfflineAudioContext(1, 1, VRATE);
+  const au = await ac.decodeAudioData(buf);
+  // пересэмплируем в моно 48 кГц
+  const off = new OfflineAudioContext(1, Math.ceil(au.duration * VRATE), VRATE);
+  const src = off.createBufferSource(); src.buffer = au; src.connect(off.destination); src.start();
+  const m = (await off.startRendering()).getChannelData(0);
+  // огибающая голоса — музыка тише, когда говорят
+  const win = Math.round(VRATE * 0.05), env = new Float32Array(Math.ceil(pcm.length / win));
+  for (let k = 0; k < env.length; k++) { let a = 0; for (let i = k * win; i < Math.min(pcm.length, (k + 1) * win); i += 8) a = Math.max(a, Math.abs(pcm[i])); env[k] = a; }
+  const start = Math.round((tr.skip || 0) * VRATE), fadeIn = VRATE * 0.6, fadeOut = VRATE * 1.2;
+  let duck = 0.2;
+  for (let i = 0; i < pcm.length; i++) {
+    const t = i / VRATE;
+    const target = t > speech ? 0.42 : env[Math.floor(i / win)] > 0.04 ? 0.11 : 0.2;
+    duck += (target - duck) * 0.0004;
+    let g = duck * (tr.gain || 1);
+    if (i < fadeIn) g *= i / fadeIn;
+    if (i > pcm.length - fadeOut) g *= (pcm.length - i) / fadeOut;
+    const j = (start + i) % m.length;
+    pcm[i] += m[j] * g;
+  }
+  // защита от перегруза
+  let peak = 0; for (let i = 0; i < pcm.length; i += 4) peak = Math.max(peak, Math.abs(pcm[i]));
+  if (peak > 0.98) { const k = 0.98 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= k; }
 }
 
 /* ===== Финальная заставка и настройки видео ===== */

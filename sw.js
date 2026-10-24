@@ -1,6 +1,6 @@
 // Кэш оболочки приложения: открывается даже при плохом интернете.
 // Всегда сначала берём свежую версию из сети (минуя кэш браузера), при её отсутствии — из кэша.
-const CACHE = "pomoshnik-v62";
+const CACHE = "pomoshnik-v63";
 const SHELL = ["./", "index.html", "style.css", "app.js", "i18n.js", "config.json", "icon.svg", "manifest.webmanifest"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
@@ -9,6 +9,8 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  // музыку отдаёт сам браузер (iPhone просит её кусками, через кэш это ломается)
+  if (/\/music\/.+\.mp3/.test(req.url)) return;
   const key = req.url.split("?")[0];
   e.respondWith(
     fetch(req, { cache: "no-cache" }).then((res) => {

@@ -346,3 +346,8 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .helper-tile.off { opacity: .4; }
 .ht-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--accent); display: grid; place-items: center; font-weight: 800; color: #fff; background: var(--accent); }
 .helper-tile.off .ht-check { background: transparent; }
+
+.music-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin: 6px 0; }
+.music-row[hidden] { display: none; }
+.music-lbl { font-weight: 600; flex: 0 0 100%; }
+#set-music { flex: 1; min-width: 0; font: inherit; font-size: 18px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }

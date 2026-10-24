@@ -178,6 +178,7 @@ const EN = {
   "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
   "проверка: быстрый кодировщик дал тишину → звук записью iPhone": "check: the fast encoder produced silence → sound recorded by iPhone",
   // помощники
+  "Звуки в видео": "Sound effects in videos", "Мягкие «вжух», щелчки и колокольчик в концовке": "Soft whooshes, clicks and a chime at the end", "🎵 Музыка в видео": "🎵 Music in videos", "Подбирать само": "Pick automatically", "Без музыки": "No music", "Послушать музыку": "Listen to the music",
   "✏️ Настроить": "✏️ Customize", "✓ Готово": "✓ Done", "Нажмите на помощника, чтобы спрятать его или вернуть. Спрятанные бледные.": "Tap a helper to hide it or bring it back. Hidden ones are faded.",
   "Снимите галочку, чтобы спрятать помощника из списка.": "Untick a helper to hide it from the list.",
   "🍎 Для школы": "🍎 For school", "🏠 На каждый день": "🏠 Everyday",
