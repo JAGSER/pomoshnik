@@ -201,6 +201,25 @@ async function samplePut(voice, bytes) {
   } catch (e) { console.log("KV запись не удалась", String(e)); }
 }
 
+// Музыка для видео (сгенерирована в Runway) — хранится в KV частями по 60 КБ
+async function musicGet(id) {
+  const kv = await kvOpen(); if (!kv) return null;
+  const n = (await kv.get(["music", id, "n"])).value; if (!n) return null;
+  const keys = []; for (let i = 0; i < n; i++) keys.push(["music", id, i]);
+  const parts = [];
+  for (let i = 0; i < keys.length; i += 10) { const got = await kv.getMany(keys.slice(i, i + 10)); for (const g of got) { if (!g.value) return null; parts.push(g.value); } }
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+async function musicPut(id, bytes) {
+  const kv = await kvOpen(); if (!kv) throw new Error("хранилище недоступно");
+  const size = 60000, n = Math.ceil(bytes.length / size);
+  for (let i = 0; i < n; i++) await kv.set(["music", id, i], bytes.slice(i * size, (i + 1) * size));
+  await kv.set(["music", id, "n"], n);
+}
+const MUSIC_MEM = new Map();
+
 // Ищем в ответе Gemini звук в base64 (поле data рядом с mime_type/audio)
 function findAudio(o, depth = 0) {
   if (!o || typeof o !== "object" || depth > 8) return null;
@@ -240,6 +259,23 @@ export async function handler(req, info) {
     const bytes = /^[A-Za-z]{3,20}$/.test(voice) ? await sampleGet(en ? voice + "@en" : voice) : null;
     if (!bytes) return json({ error: "Образца пока нет" }, 404, h);
     return new Response(bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000" } });
+  }
+  // музыка для видео — без пароля, с поддержкой Range (iPhone просит звук кусками)
+  const mm = url.pathname.match(/^\/music\/([a-z0-9]{2,24})\.mp3$/);
+  if (req.method === "GET" && mm) {
+    let bytes = MUSIC_MEM.get(mm[1]);
+    if (!bytes) { bytes = await musicGet(mm[1]); if (bytes && MUSIC_MEM.size < 30) MUSIC_MEM.set(mm[1], bytes); }
+    if (!bytes) return json({ error: "Трека нет" }, 404, h);
+    const base = { ...h, "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=31536000, immutable", "Accept-Ranges": "bytes", "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges" };
+    const rg = (req.headers.get("Range") || "").match(/bytes=(\d*)-(\d*)/);
+    if (rg) {
+      let a = rg[1] === "" ? Math.max(0, bytes.length - Number(rg[2])) : Number(rg[1]);
+      let b = rg[1] !== "" && rg[2] !== "" ? Number(rg[2]) : bytes.length - 1;
+      b = Math.min(b, bytes.length - 1);
+      if (a > b) return new Response(null, { status: 416, headers: { ...base, "Content-Range": `bytes */${bytes.length}` } });
+      return new Response(bytes.slice(a, b + 1), { status: 206, headers: { ...base, "Content-Range": `bytes ${a}-${b}/${bytes.length}`, "Content-Length": String(b - a + 1) } });
+    }
+    return new Response(bytes, { status: 200, headers: { ...base, "Content-Length": String(bytes.length) } });
   }
   if (url.pathname === "/samples") {
     const have = [];
@@ -283,6 +319,25 @@ export async function handler(req, info) {
     for (let i = 0; i < parts; i++) await kv.set(["mig", code, i], data.slice(i * 30000, (i + 1) * 30000), ttl);
     await kv.set(["mig", code, "n"], parts, ttl);
     return json({ ok: true, code }, 200, h);
+  }
+
+  // забрать треки из Runway (только с его CDN) и положить в хранилище; уже лежащие не трогаем
+  if (url.pathname === "/music-import") {
+    const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const out = [];
+    for (const it of items) {
+      const id = String(it.id || ""), src = String(it.url || "");
+      if (!/^[a-z0-9]{2,24}$/.test(id) || !/^https:\/\/dnznrvs05pmza\.cloudfront\.net\/lyria3-pro\//.test(src)) { out.push({ id, error: "неверные данные" }); continue; }
+      if ((await kv.get(["music", id, "n"])).value) { out.push({ id, ok: true, existed: true }); continue; }
+      try {
+        const r = await fetch(src); if (!r.ok) throw new Error("CDN " + r.status);
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        if (bytes.length > 9_000_000 || bytes.length < 50_000) throw new Error("размер " + bytes.length);
+        await musicPut(id, bytes); out.push({ id, ok: true, size: bytes.length });
+      } catch (e) { out.push({ id, error: String(e.message || e) }); }
+    }
+    return json({ ok: true, items: out }, 200, h);
   }
 
   const key = user.key || env("ANTHROPIC_KEY");
