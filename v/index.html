@@ -97,8 +97,34 @@ async function post(path, body) {
   const v = $("video");
   v.src = `${PROXY}/video/${ID}.${META.type === "video/webm" ? "webm" : "mp4"}`;
   if (META.poster) v.poster = `${PROXY}/video/${ID}.jpg`;
-  let counted = false;
-  v.addEventListener("play", () => { if (counted) return; counted = true; post("/video-view", { id: ID }).then(counts).catch(() => {}); });
+  // что сообщает сам телефон: часовой пояс, язык, устройство, приложение, имя (если человек его оставлял)
+  const ua = navigator.userAgent;
+  const info = () => {
+    let viewer = "", name = "";
+    try { name = localStorage.getItem("replyName") || ""; const ss = JSON.parse(localStorage.getItem("session") || "null"); if (ss && ss.user) { viewer = ss.user; const pf = JSON.parse(localStorage.getItem("profile:" + ss.user) || "null"); if (!name && pf && pf.name) name = pf.name; } } catch (_) {}
+    return {
+      tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""), lang: navigator.language || "",
+      os: /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "Mac" : "",
+      app: /WhatsApp/i.test(ua) ? "WhatsApp" : /Telegram/i.test(ua) ? "Telegram" : /Instagram/i.test(ua) ? "Instagram" : /FBAN|FBAV/.test(ua) ? "Facebook" : /vkclient|VKAndroidApp/i.test(ua) ? "VK" : /Line\//.test(ua) ? "Line" : "",
+      name, viewer,
+    };
+  };
+  let counted = false, viewKey = null, maxPct = 0, sentPct = -1;
+  const sendPct = () => {
+    if (!viewKey || maxPct === sentPct) return; sentPct = maxPct;
+    const body = JSON.stringify({ id: ID, key: viewKey, pct: maxPct });
+    try { if (navigator.sendBeacon && navigator.sendBeacon(PROXY + "/video-watch", new Blob([body], { type: "text/plain" }))) return; } catch (_) {}
+    fetch(PROXY + "/video-watch", { method: "POST", body, keepalive: true }).catch(() => {});
+  };
+  v.addEventListener("play", () => {
+    if (counted) return; counted = true;
+    post("/video-view", { id: ID, ...info() }).then((c) => { viewKey = c.key; counts(c); }).catch(() => {});
+  });
+  v.addEventListener("timeupdate", () => { if (v.duration) maxPct = Math.max(maxPct, Math.round((v.currentTime / v.duration) * 100)); if (maxPct - sentPct >= 25) sendPct(); });
+  v.addEventListener("ended", () => { maxPct = 100; sendPct(); });
+  v.addEventListener("pause", sendPct);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) sendPct(); });
+  addEventListener("pagehide", sendPct);
   $("heart-label").textContent = L("Понравилось", "Like");
   $("reply-title").textContent = L("✍️ Ответить", "✍️ Reply");
   if (META.name) $("reply").placeholder = L(`Напишите пару слов. Ваш ответ увидит: ${META.name}`, `Write a few words. ${META.name} will see your reply`);
