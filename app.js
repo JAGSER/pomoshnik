@@ -1904,7 +1904,7 @@ function openSettings() {
     pb.onclick = () => {
       const was = pb.textContent; stopPreview(); if (was !== "▶") { pb.textContent = "▶"; return; }
       const t = list.find((x) => x.id === sel.value) || list[0]; if (!t) return;
-      PREVIEW = audioFor("music/" + t.file); PREVIEW.playbackRate = 1; pb.textContent = "⏹";
+      PREVIEW = audioFor(musicSrc(t)); PREVIEW.playbackRate = 1; pb.textContent = "⏹";
       PREVIEW.onended = () => { pb.textContent = "▶"; PREVIEW = null; };
       PREVIEW.play().catch(() => (pb.textContent = "▶"));
     };
@@ -2446,7 +2446,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=67");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=68");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2706,6 +2706,8 @@ async function musicList() {
   try { MUSIC = (await (await fetch("music/music.json?t=" + Date.now(), { cache: "no-store" })).json()).tracks || []; } catch (_) { MUSIC = []; }
   return MUSIC;
 }
+// трек лежит на сервере приложения (или в папке music/, если указан file)
+function musicSrc(t) { return t.file ? "music/" + t.file : CFG.proxy + "/music/" + t.id + ".mp3"; }
 function musicPref() { return (SESSION && store.get("music:" + SESSION.user)) || "auto"; }
 // подбор по смыслу разговора: ключевые слова → настроение трека
 const MOODS = [
@@ -2732,7 +2734,7 @@ async function pickTrack(ctxText, chat) {
 }
 async function addMusic(pcm, speech, outro, ctxText, chat) {
   const tr = await pickTrack(ctxText, chat); if (!tr) return;
-  const buf = await (await fetch("music/" + tr.file)).arrayBuffer();
+  const buf = await (await fetch(musicSrc(tr))).arrayBuffer();
   const ac = new OfflineAudioContext(1, 1, VRATE);
   const au = await ac.decodeAudioData(buf);
   // пересэмплируем в моно 48 кГц
