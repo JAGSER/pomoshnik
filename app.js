@@ -2275,7 +2275,14 @@ function mascotTip() {
   mascotTip.k = setTimeout(() => { m.classList.remove("talk"); mascotLook(0, 0); }, 600 + tips[i].length * 22);
 }
 // куда смотрит глаз: dx, dy от -1 до 1
-function mascotLook(dx, dy) { const p = document.querySelector("#mascot .m-eye"); if (p) p.style.transform = `translate(${Math.round(dx * 44)}px, ${Math.round(dy * 30)}px)`; }
+// глаз сдвигается сильнее, рот следом, но меньше; через паузу всё возвращается на место
+function mascotLook(dx, dy, back) {
+  const e = document.querySelector("#mascot .m-eye"), m = document.querySelector("#mascot .m-mouth");
+  if (e) e.style.transform = `translate(${Math.round(dx * 44)}px, ${Math.round(dy * 36)}px)`;
+  if (m) m.style.transform = `translate(${Math.round(dx * 16)}px, ${Math.round(dy * 12)}px)`;
+  clearTimeout(mascotLook.t);
+  if (back && (dx || dy)) mascotLook.t = setTimeout(() => mascotLook(0, 0), back);
+}
 function mascotVisible() { const m = $("#mascot"); return !!m && !m.hidden && !document.hidden && curScreen() === "screen-home"; }
 function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); void m.offsetWidth; m.classList.add(cls); setTimeout(() => m.classList.remove(cls), ms); }
 // осматривается и моргает
@@ -2284,7 +2291,7 @@ function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); 
     if (mascotVisible() && !$("#mascot").classList.contains("talk")) {
       const r = Math.random();
       if (r < 0.25) mascotPlay("blink", 140);
-      else if (r < 0.85) { const pts = [[-1, 0], [1, 0], [-0.7, -0.7], [0.7, -0.7], [0, 0], [0, 0.8], [-1, 0.4], [1, 0.4]]; const [x, y] = pts[Math.floor(Math.random() * pts.length)]; mascotLook(x, y); }
+      else if (r < 0.85) { const pts = [[-1, 0], [1, 0], [-0.7, -0.6], [0.7, -0.6], [0, 1], [-0.7, 0.8], [0.7, 0.8], [0, 1]]; const [x, y] = pts[Math.floor(Math.random() * pts.length)]; mascotLook(x, y, 900 + Math.random() * 900); }
       else { mascotLook(-1, 0); setTimeout(() => mascotLook(1, 0), 450); setTimeout(() => mascotLook(0, 0), 900); }
     }
     mascotIdle();
@@ -2297,7 +2304,7 @@ function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); 
     const tip = $("#mascot-tip");
     if (mascotVisible() && tip && tip.hidden) {
       const m = $("#mascot");
-      mascotLook(0, 0.6); mascotPlay(Math.random() < 0.5 ? "hop" : "wiggle", 1000); setTimeout(() => mascotPlay("happy", 1000), 300);
+      mascotLook(0, 0.7, 1500); mascotPlay(Math.random() < 0.5 ? "hop" : "wiggle", 1000); setTimeout(() => mascotPlay("happy", 1000), 300);
       m.classList.add("hinting"); setTimeout(() => m.classList.remove("hinting"), 5000);
     }
     mascotHint();
@@ -2307,7 +2314,7 @@ function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); 
 document.addEventListener("pointerdown", (e) => {
   const m = $("#mascot"); if (!mascotVisible() || m.classList.contains("talk") || e.target.closest("#mascot")) return;
   const r = m.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1;
-  mascotLook(dx / d, dy / d);
+  mascotLook(dx / d, dy / d, 1200);
 });
 document.addEventListener("click", (e) => {
   if (e.target.closest("#mascot")) mascotTip();
@@ -3128,7 +3135,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=85");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=86");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
