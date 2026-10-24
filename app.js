@@ -2321,41 +2321,55 @@ document.addEventListener("click", (e) => {
   else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
 });
 // редкие трюки: толкает имя, крутит шестерёнку, пружинит на линии, кувырок, кружится глаз
+// ключевые кадры с плавностью внутри каждого отрезка (общая плавность сдвигает тайминги)
+function mAnim(node, frames, opt) { return node.animate(frames.map((f) => ({ easing: opt.easing || "ease-in-out", ...f })), { duration: opt.duration, delay: opt.delay || 0 }); }
 const MASCOT_TRICKS = {
   push() {
     // подъезжает вплотную к концу текста и толкает его
     const m = $("#mascot"), n = $("#hello"), rg = document.createRange(); rg.selectNodeContents(n);
     const gap = Math.max(0, m.getBoundingClientRect().left - rg.getBoundingClientRect().right - 2), P = 18;
     mascotLook(-1, 0.4, 2600);
-    m.animate([{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(-4deg)`, offset: 0.3 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.5 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.65 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
-    n.animate([{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: `translateX(${-P}px)`, offset: 0.5 }, { transform: `translateX(${-P}px)`, offset: 0.7 }, { transform: "none", offset: 0.85 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
+    mAnim(m, [{ transform: "none" }, { transform: `translateX(${-gap}px) rotate(-4deg)`, offset: 0.3 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.5 }, { transform: `translateX(${-gap - P}px) rotate(-8deg)`, offset: 0.65 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
+    mAnim(n, [{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: `translateX(${-P}px)`, offset: 0.5 }, { transform: `translateX(${-P}px)`, offset: 0.7 }, { transform: "none", offset: 0.85 }, { transform: "none" }], { duration: 2600, easing: "ease-in-out" });
   },
   gear() {
     // подъезжает вплотную к шестерёнке и раскручивает её
     const m = $("#mascot"), g = $("#btn-settings"), gi = g.getBoundingClientRect(), mr = m.getBoundingClientRect();
     const gap = Math.max(0, gi.left + gi.width * 0.2 - mr.right);
-    mascotLook(1, 0.5, 2400);
-    m.animate([{ transform: "none" }, { transform: `translateX(${gap}px) rotate(6deg)`, offset: 0.25 }, { transform: `translateX(${gap}px) rotate(10deg) translateY(4px)`, offset: 0.4 }, { transform: `translateX(${gap}px) rotate(6deg)`, offset: 0.75 }, { transform: "none" }], { duration: 2400, easing: "ease-in-out" });
-    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(0)", offset: 0.3 }, { transform: "rotate(540deg)" }], { duration: 2400, easing: "cubic-bezier(.2,.8,.3,1)" });
+    mascotLook(1, 0.5, 2800);
+    // подходит, задерживается, толкает лапкой-краем — и только тогда шестерёнка раскручивается
+    mAnim(m, [{ transform: "none" }, { transform: `translateX(${gap}px) rotate(2deg)`, offset: 0.28 }, { transform: `translateX(${gap - 3}px) rotate(-4deg)`, offset: 0.36 },
+      { transform: `translateX(${gap}px) rotate(14deg) translateY(3px)`, offset: 0.42 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.55 }, { transform: `translateX(${gap}px) rotate(4deg)`, offset: 0.78 }, { transform: "none" }], { duration: 2800, easing: "ease-in-out" });
+    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(540deg)" }], { duration: 1500, delay: 2800 * 0.41, easing: "cubic-bezier(.15,.9,.3,1)" });
   },
   bounce() {
+    // спрыгивает на линию под шапкой и пружинит, касаясь её низом
     const m = $("#mascot"), bar = m.closest(".topbar");
-    const d = Math.max(6, bar.getBoundingClientRect().bottom - m.getBoundingClientRect().bottom - 2);
-    mascotLook(0, 1, 1800);
-    m.animate([
-      { transform: "none" }, { transform: `translateY(${d}px) scale(1.15,.8)`, offset: 0.2 }, { transform: "translateY(-16px) scale(.92,1.1)", offset: 0.4 },
-      { transform: `translateY(${d}px) scale(1.1,.85)`, offset: 0.58 }, { transform: "translateY(-6px)", offset: 0.75 }, { transform: `translateY(${d * 0.4}px) scale(1.04,.96)`, offset: 0.88 }, { transform: "none" },
-    ], { duration: 1800, easing: "ease-in-out" });
+    const d = Math.max(4, bar.getBoundingClientRect().bottom - 1 - m.getBoundingClientRect().bottom);
+    mascotLook(0, 1, 2000);
+    const o = "50% 100%";
+    mAnim(m, [
+      { transform: "none", transformOrigin: o }, { transform: `translateY(-8px)`, transformOrigin: o, offset: 0.12, easing: "ease-in" },
+      { transform: `translateY(${d}px)`, transformOrigin: o, offset: 0.24 }, { transform: `translateY(${d + 6}px) scale(1.18,.78)`, transformOrigin: o, offset: 0.3, easing: "ease-out" },
+      { transform: "translateY(-18px) scale(.94,1.08)", transformOrigin: o, offset: 0.46, easing: "ease-in" },
+      { transform: `translateY(${d}px)`, transformOrigin: o, offset: 0.6 }, { transform: `translateY(${d + 4}px) scale(1.1,.86)`, transformOrigin: o, offset: 0.65, easing: "ease-out" },
+      { transform: "translateY(-6px)", transformOrigin: o, offset: 0.77, easing: "ease-in" },
+      { transform: `translateY(${d}px) scale(1.04,.95)`, transformOrigin: o, offset: 0.86, easing: "ease-out" }, { transform: "none", transformOrigin: o },
+    ], { duration: 2000, easing: "ease-in-out" });
+    // линия прогибается под ним
+    const ln = el("div", "m-line"), mr = m.getBoundingClientRect(), br = bar.getBoundingClientRect();
+    ln.style.left = mr.left - br.left - 10 + "px"; ln.style.width = mr.width + 20 + "px"; bar.append(ln);
+    mAnim(ln, [{ transform: "scaleY(0)" }, { transform: "scaleY(0)", offset: 0.24 }, { transform: "scaleY(1)", offset: 0.3 }, { transform: "scaleY(0)", offset: 0.4 }, { transform: "scaleY(0)", offset: 0.6 }, { transform: "scaleY(.6)", offset: 0.65 }, { transform: "scaleY(0)", offset: 0.75 }, { transform: "scaleY(0)", offset: 0.86 }, { transform: "scaleY(.25)", offset: 0.9 }, { transform: "scaleY(0)" }], { duration: 2000 }).onfinish = () => ln.remove();
   },
   flip() {
     const m = $("#mascot");
-    m.animate([{ transform: "none" }, { transform: "translateY(4px) scale(1.1,.85)", offset: 0.2 }, { transform: "translateY(-22px) rotate(180deg)", offset: 0.55 }, { transform: "translateY(0) rotate(360deg) scale(1.1,.88)", offset: 0.85 }, { transform: "rotate(360deg)" }], { duration: 1300, easing: "ease-in-out" });
+    mAnim(m, [{ transform: "none" }, { transform: "translateY(4px) scale(1.1,.85)", offset: 0.2 }, { transform: "translateY(-22px) rotate(180deg)", offset: 0.55 }, { transform: "translateY(0) rotate(360deg) scale(1.1,.88)", offset: 0.85 }, { transform: "rotate(360deg)" }], { duration: 1300, easing: "ease-in-out" });
     setTimeout(() => mascotPlay("happy", 1000), 1100);
   },
   dizzy() {
     // глаз крутится по кругу, лицо покачивается
     let a = 0; const t = setInterval(() => { a += 0.5; mascotLook(Math.cos(a), Math.sin(a)); if (a > 12) { clearInterval(t); mascotLook(0, 0); } }, 70);
-    $("#mascot").animate([{ transform: "none" }, { transform: "rotate(-10deg)" }, { transform: "rotate(10deg)" }, { transform: "rotate(-6deg)" }, { transform: "none" }], { duration: 1700, easing: "ease-in-out" });
+    mAnim($("#mascot"), [{ transform: "none" }, { transform: "rotate(-10deg)" }, { transform: "rotate(10deg)" }, { transform: "rotate(-6deg)" }, { transform: "none" }], { duration: 1700, easing: "ease-in-out" });
   },
 };
 let MASCOT_LAST = "";
@@ -3191,7 +3205,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=89");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=90");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

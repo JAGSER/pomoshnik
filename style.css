@@ -425,8 +425,7 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .aud-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 
 /* логотип-помощник: глаз смотрит по сторонам, рот говорит, иногда зовёт нажать */
-.topbar { position: relative; }
-.mascot { position: relative; width: 48px; height: 48px; min-width: 48px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 14px; }
+.mascot { position: relative; z-index: 2; width: 48px; height: 48px; min-width: 48px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 14px; }
 .mascot svg { width: 100%; height: 100%; display: block; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.15); overflow: visible; }
 .mascot .m-smile, .mascot .m-ball { transform-box: fill-box; transform-origin: center; }
 .mascot .m-eye, .mascot .m-mouth { transition: transform .45s cubic-bezier(.3,1.3,.5,1); }
@@ -449,3 +448,4 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .mascot-tip .m-next { display: block; margin-top: 6px; font-size: .85em; opacity: .7; }
 @keyframes m-pop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mascot, .mascot *, .mascot-tip { animation: none !important; transition: none !important; } }
+.m-line { position: absolute; z-index: 1; bottom: -7px; height: 8px; border-bottom: 1px solid var(--line, #E4DACB); border-radius: 0 0 50% 50% / 0 0 100% 100%; transform-origin: top; transform: scaleY(0); pointer-events: none; background: var(--bg); }
