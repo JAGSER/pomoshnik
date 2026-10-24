@@ -178,7 +178,7 @@ const EN = {
   "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
   "проверка: быстрый кодировщик дал тишину → звук записью iPhone": "check: the fast encoder produced silence → sound recorded by iPhone",
   // помощники
-  "📤 Отправить ролик": "📤 Send video", "Подпись к ролику": "Message to send with it", "🔗 Отправить ссылку": "🔗 Send a link", "📎 Файлом": "📎 As a file", "💾 Сохранить": "💾 Save",
+  "📤 Отправить ролик": "📤 Send video", "Подпись к ролику": "Message to send with it", "🔗 Отправить ссылку": "🔗 Send a link", "📥 Сохранить на телефон": "📥 Save to phone",
   "Придумываю подпись…": "Writing a message…", "Напишите пару слов к ролику": "Write a few words", "⏳ Готовлю ссылку…": "⏳ Preparing the link…", "🔁 Повторить": "🔁 Try again",
   "По ссылке видно, сколько раз посмотрели, и вам могут ответить": "With a link you'll see how many people watched, and they can reply to you", "Ссылка не получилась: ": "Couldn't make a link: ",
   "Ссылка скопирована: вставьте её в WhatsApp или Telegram": "Link copied: paste it into WhatsApp or Telegram", "Скопируйте ссылку:": "Copy the link:",

@@ -2747,15 +2747,10 @@ function openShare(file, ctx = {}) {
     track("Видео: ссылка");
     await shareText((text ? text + "\n" : "") + vidLink(S.id));
   };
-  $("#share-file").onclick = async () => {
-    track("Видео: файл");
-    const text = cap.value.trim();
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], text: text || undefined }); return; } catch (e) { if (e.name === "AbortError") return; }
-    }
-    saveVideo(file);
-  };
-  $("#share-save").onclick = () => { track("Видео сохранено"); saveVideo(file); };
+  // одна кнопка: на телефоне открывает меню, где можно сохранить в галерею или отправить файлом; на компьютере скачивает
+  const sv = $("#share-save"), mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
+  sv.textContent = mobile ? LL("📥 Сохранить на телефон", "📥 Save to phone") : LL("📥 Скачать файл", "📥 Download file");
+  sv.onclick = () => { track("Видео сохранено"); saveVideo(file); };
   renderAud(S, msg);
   openVSheet("share-sheet");
 }
@@ -3273,7 +3268,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=96");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=97");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
