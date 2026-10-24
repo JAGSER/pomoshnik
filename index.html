@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Помощник AI">
-<link rel="stylesheet" href="style.css?v=104">
+<link rel="stylesheet" href="style.css?v=105">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="cb0ec999-076a-4bd0-ad61-49313a08c950" data-domains="pomoshnik.ai"></script>
 </head>
 <body>
@@ -96,11 +96,11 @@
     <label class="set-row"><input type="checkbox" id="set-outro"><span>Заставка в конце видео<small>Талисман и «Спросите о своём в «Помощник AI»», 3 секунды</small></span></label>
     <div id="creative-block" hidden>
       <label class="set-row"><input type="checkbox" id="set-creative"><span>Творческие видео<small>Claude сам придумывает и рисует анимацию под каждый ответ. Дольше — 1–3 минуты</small></span></label>
-      <div class="seg" id="creative-model">
+      <div class="seg" id="creative-model"><span class="seg-cap">Модель:</span>
         <button type="button" data-model="claude-sonnet-5-5">Sonnet</button>
         <button type="button" data-model="claude-opus-5-5">Opus</button>
       </div>
-      <div class="seg" id="creative-style" hidden>
+      <div class="seg" id="creative-style" hidden><span class="seg-cap">Стиль:</span>
         <button type="button" data-style="std">Обычный</button>
         <button type="button" data-style="riso">Риограф (тест)</button>
       </div>
@@ -229,7 +229,7 @@
   </div>
 </div>
 
-<script src="i18n.js?v=104"></script>
-<script src="app.js?v=104"></script>
+<script src="i18n.js?v=105"></script>
+<script src="app.js?v=105"></script>
 </body>
 </html>
