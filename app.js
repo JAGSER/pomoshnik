@@ -2674,6 +2674,13 @@ async function videoButton(btn, text, msg, opt = {}) {
   } finally { VIDEO_BUSY = false; waitNote(btn, false); wakeOff(); }
 }
 
+function downloadFile(file) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
 async function saveVideo(file, btn) {
   // на телефоне — меню «Поделиться» (сохранить в галерею, отправить в мессенджер); иначе — скачивание
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2747,10 +2754,27 @@ function openShare(file, ctx = {}) {
     track("Видео: ссылка");
     await shareText((text ? text + "\n" : "") + vidLink(S.id));
   };
-  // одна кнопка: на телефоне открывает меню, где можно сохранить в галерею или отправить файлом; на компьютере скачивает
-  const sv = $("#share-save"), mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
+  // «Отправить файлом» — меню телефона (мессенджеры); «Сохранить» — сразу файлом в телефон
+  $("#share-file").onclick = async () => {
+    track("Видео: файл");
+    const text = cap.value.trim();
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text: text || undefined }); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    downloadFile(file);
+  };
+  const sv = $("#share-save"), ios = /iPhone|iPad|iPod/.test(navigator.userAgent), mobile = ios || /Android/.test(navigator.userAgent);
   sv.textContent = mobile ? LL("📥 Сохранить на телефон", "📥 Save to phone") : LL("📥 Скачать файл", "📥 Download file");
-  sv.onclick = () => { track("Видео сохранено"); saveVideo(file); };
+  sv.onclick = async () => {
+    track("Видео сохранено");
+    // на iPhone сохранить в «Фото» можно только через меню «Поделиться» → «Сохранить видео»
+    if (ios && navigator.canShare && navigator.canShare({ files: [file] })) {
+      toast(LL("В меню выберите «Сохранить видео»", "Choose «Save Video» in the menu"));
+      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    downloadFile(file);
+    toast(mobile ? LL("Ролик сохраняется в «Загрузки», он появится и в галерее", "Saving to Downloads, it will also appear in your gallery") : LL("Ролик скачивается", "Downloading the video"));
+  };
   renderAud(S, msg);
   openVSheet("share-sheet");
 }
@@ -3268,7 +3292,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=99");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=100");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
