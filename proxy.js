@@ -28,6 +28,7 @@ function cors(origin) {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Expose-Headers": "X-TTS-Model",
     "Vary": "Origin",
   };
 }
@@ -128,8 +129,10 @@ async function geminiTTS(text, voiceIn, modelIn) {
   const voice = /^[A-Za-z]{3,20}$/.test(voiceIn || "") ? voiceIn : env("GEMINI_VOICE", "Sulafat");
   const first = TTS_MODELS.includes(modelIn) ? modelIn : env("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts");
   const order = [first, ...TTS_MODELS.filter((m) => m !== first)];
-  let r = null, lastErr = "";
-  for (const model of order) {
+  let r = null, lastErr = "", usedModel = "";
+  const t0 = Date.now();
+  for (let i = 0; i < order.length; i++) {
+    const model = order[i];
     r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
       headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
@@ -141,9 +144,17 @@ async function geminiTTS(text, voiceIn, modelIn) {
         generation_config: { speech_config: [{ voice }] },
       }),
     });
-    if (r.ok) break;
+    if (r.ok) { usedModel = model; break; }
     lastErr = `${model}: ${r.status} ${(await r.text()).slice(0, 300)}`;
     console.log("TTS error", lastErr);
+    // основной голос упёрся в лимит в минуту: лучше подождать несколько секунд, чем переключаться на голос похуже
+    const wait = Number((lastErr.match(/retry in ([\d.]+)s/) || [])[1]) || 0;
+    const daily = /per.?day|PerDay|daily/i.test(lastErr);
+    if (r.status === 429 && i === 0 && !daily && Date.now() - t0 < 30000) {
+      await new Promise((res) => setTimeout(res, Math.min(Math.max(wait, 3), 20) * 1000));
+      i--; if (Date.now() - t0 > 28000) i++;
+      continue;
+    }
   }
   if (!r.ok) {
     const wait = Number((lastErr.match(/retry in (\d+)s/) || [])[1]) || 0;
@@ -155,7 +166,7 @@ async function geminiTTS(text, voiceIn, modelIn) {
   if (!audio) return { error: "Gemini вернул ответ без звука", status: 502 };
   let bytes = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
   if (!/wav/i.test(audio.mime || "") && !(bytes[0] === 0x52 && bytes[1] === 0x49)) bytes = pcmToWav(bytes, 24000);
-  return { bytes };
+  return { bytes, model: usedModel, backup: usedModel !== first };
 }
 
 // Хранилище образцов голосов (Deno KV). Значение в KV — до 64 КБ, поэтому режем на части
@@ -326,7 +337,7 @@ export async function handler(req, info) {
     if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
     const res = await geminiTTS(text, body.voice, body.model);
     if (res.error) return json(res, res.status, h);
-    return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
+    return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": (res.backup ? "backup:" : "") + (res.model || "") } });
   }
 
   // Образец голоса: генерируется один раз и хранится на сервере для всех

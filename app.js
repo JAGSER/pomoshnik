@@ -1453,8 +1453,8 @@ async function ttsBlob(chunk, voice) {
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
   blob = await ttsLoad(chunk, voice);
-  TTS_MEM.set(key, blob);
-  ADB.put(key, blob);
+  // запасной голос (когда основной упёрся в лимит) не запоминаем — в следующий раз запишется основным
+  if (!blob._backup) { TTS_MEM.set(key, blob); ADB.put(key, blob); }
   return blob;
 }
 async function ttsFetch(chunk, voice) { return URL.createObjectURL(await ttsBlob(chunk, voice)); }
@@ -1493,7 +1493,10 @@ async function ttsLoadOnce(chunk, voice) {
     if (r.status === 429) e.retryAfter = Math.max(3, Number(d.retryAfter) || 20);
     throw e;
   }
-  return await r.blob();
+  const b = await r.blob();
+  const used = r.headers.get("X-TTS-Model") || "";
+  if (used.startsWith("backup:")) b._backup = used;
+  return b;
 }
 
 // Первый кусок ответа — по тем же правилам, что и при чтении (50–260 символов, до конца предложения)
@@ -2430,7 +2433,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=63");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=64");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
