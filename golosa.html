@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сравнение голосов · Помощник AI</title>
+<meta name="robots" content="noindex">
+<style>
+:root { --bg: #F6F1E9; --surface: #FFFDF9; --ink: #1F1B16; --muted: #6E655A; --line: #E4DACB; --accent: #B5532E; --accent-ink: #fff; --accent-soft: #F3E1D6; --ok: #2F7D4F; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1B1814; --surface: #25211C; --ink: #F2ECE3; --muted: #A99F92; --line: #3A342C; --accent: #E07A50; --accent-ink: #1B1814; --accent-soft: #3B2A21; --ok: #5CB883; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 18px 16px 40px; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 14px; }
+textarea { width: 100%; min-height: 90px; font: inherit; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; }
+h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+.row { display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-bottom: 8px; }
+.play { flex: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 20px; cursor: pointer; }
+.play:disabled { opacity: .5; }
+.txt { min-width: 0; flex: 1; }
+.txt b { display: block; }
+.txt small { color: var(--muted); display: block; line-height: 1.35; }
+.price { font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+.free { background: #DDF0E3; color: var(--ok); }
+.cheap { background: var(--accent-soft); color: var(--accent); }
+.paid { background: #EEE6DA; color: var(--muted); }
+.st { font-size: 13px; color: var(--muted); }
+button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔊 Сравнение голосов</h1>
+  <p class="lead">Нажмите ▶ у каждого голоса. Текст можно поменять. Бесплатные голоса Piper в первый раз скачиваются около 60 МБ каждый, это занимает 10-30 секунд, дальше работают мгновенно.</p>
+  <textarea id="text">Здравствуйте! Сегодня расскажу, как правильно ухаживать за орхидеей. Поливайте её раз в неделю, ставьте на светлое место, но без прямого солнца, и она будет цвести всю зиму.</textarea>
+
+  <h2>Сейчас в приложении</h2>
+  <div id="g1"></div>
+  <h2>Дешевле, тоже Gemini</h2>
+  <div id="g2"></div>
+  <h2>Бесплатные: Piper, работает прямо в телефоне</h2>
+  <div id="g3"></div>
+  <h2>Бесплатный: встроенный голос телефона</h2>
+  <div id="g4"></div>
+  <p class="st" id="note"></p>
+</div>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const text = () => $("text").value.trim();
+let PROXY = "https://pomoshnik.jagser.deno.net", S = null;
+try { S = JSON.parse(localStorage.getItem("session")); } catch (_) {}
+try { const c = await (await fetch("config.json", { cache: "no-store" })).json(); if (c.proxy) PROXY = c.proxy; } catch (_) {}
+let cur = null;
+function stop() { if (cur) { try { cur.pause(); } catch (_) {} cur = null; } speechSynthesis && speechSynthesis.cancel(); }
+function row(box, title, sub, price, cls, gen) {
+  const r = document.createElement("div"); r.className = "row";
+  r.innerHTML = `<button class="play" type="button" aria-label="Послушать">▶</button><div class="txt"><b></b><small></small><span class="st"></span></div><span class="price ${cls}"></span>`;
+  r.querySelector("b").textContent = title; r.querySelector("small").textContent = sub; r.querySelector(".price").textContent = price;
+  const btn = r.querySelector(".play"), st = r.querySelector(".st");
+  let cache = { t: "", url: null };
+  btn.onclick = async () => {
+    stop();
+    if (gen.live) { gen.live(text()); return; }
+    try {
+      btn.disabled = true;
+      if (cache.t !== text() || !cache.url) { st.textContent = "Готовлю…"; const t0 = Date.now(); cache = { t: text(), url: URL.createObjectURL(await gen(text(), (m) => (st.textContent = m))) }; st.textContent = `готово за ${((Date.now() - t0) / 1000).toFixed(1)} с`; }
+      cur = new Audio(cache.url); await cur.play();
+    } catch (e) { st.textContent = "Не получилось: " + (e.message || e); }
+    btn.disabled = false;
+  };
+  box.append(r);
+}
+async function gemini(t, model, voice) {
+  if (!S) throw new Error("войдите в приложение на этом устройстве");
+  const r = await fetch(PROXY + "/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: S.user, password: S.password, text: t, voice, model }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "ошибка " + r.status);
+  return r.blob();
+}
+const myVoice = (S && JSON.parse(localStorage.getItem("voice:" + S.user) || "null")) || "Algieba";
+row($("g1"), "Gemini, основная модель", `Ваш голос: ${myVoice}. Самый живой, с интонацией`, "платно", "paid", (t) => gemini(t, "gemini-3.8-flash-tts", myVoice));
+row($("g2"), "Gemini облегчённый (lite)", `Тот же голос ${myVoice}, модель попроще`, "дешевле", "cheap", (t) => gemini(t, "gemini-3.8-flash-lite-tts", myVoice));
+let piper = null;
+async function piperGen(t, voiceId, prog) {
+  piper = piper || await import("https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm");
+  return piper.predict({ text: t, voiceId }, (p) => { if (p.total) prog(`скачиваю голос ${Math.round(p.loaded * 100 / p.total)}%`); });
+}
+[["ru_RU-irina-medium", "Ирина", "женский"], ["ru_RU-denis-medium", "Денис", "мужской"], ["ru_RU-dmitri-medium", "Дмитрий", "мужской"], ["ru_RU-ruslan-medium", "Руслан", "мужской"]]
+  .forEach(([id, name, kind]) => row($("g3"), `Piper: ${name}`, `${kind}, открытая модель, делается прямо на телефоне, можно записать в видео`, "бесплатно", "free", (t, p) => piperGen(t, id, p)));
+const phone = { live(t) {
+  const vs = speechSynthesis.getVoices(), v = vs.find((x) => x.lang === "ru-RU" && /google|natural|online/i.test(x.name)) || vs.find((x) => x.lang && x.lang.startsWith("ru"));
+  const u = new SpeechSynthesisUtterance(t); u.lang = "ru-RU"; if (v) u.voice = v; speechSynthesis.speak(u);
+} };
+row($("g4"), "Голос телефона", "Звучит по-разному на каждом телефоне. В видео записать нельзя", "бесплатно", "free", phone);
+if (!S) $("note").textContent = "Голоса Gemini заработают, если открыть эту страницу на устройстве, где вы вошли в приложение.";
+</script>
+</body>
+</html>
