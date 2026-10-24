@@ -10,5 +10,6 @@
 {"id": "lofi1", "title": "Лоу-фай", "title_en": "Lo-fi", "icon": "☕", "moods": ["calm", "food", "upbeat"], "gain": 1, "skip": 5},
 {"id": "cinematic1", "title": "Кино", "title_en": "Cinematic", "icon": "🎬", "moods": ["emotional", "travel"], "gain": 1, "skip": 1},
 {"id": "jazz1", "title": "Джаз в кафе", "title_en": "Café jazz", "icon": "🎷", "moods": ["food", "calm"], "gain": 1, "skip": 0},
-{"id": "tropical1", "title": "Тропики", "title_en": "Tropical", "icon": "🌴", "moods": ["travel", "upbeat"], "gain": 1, "skip": 0}
+{"id": "tropical1", "title": "Тропики", "title_en": "Tropical", "icon": "🌴", "moods": ["travel", "upbeat"], "gain": 1, "skip": 0},
+{"id": "pop1", "title": "Бодрая", "title_en": "Upbeat pop", "icon": "⚡", "moods": ["upbeat", "celebrate"], "gain": 1, "skip": 0}
 ]}
