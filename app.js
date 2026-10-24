@@ -2090,7 +2090,6 @@ async function videoButton(btn, text, msg) {
     const photos = await chatPhotos(msg);
     // звуки и музыка под голос
     try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat); } catch (e) { console.warn("Музыка:", e); }
-    if (sfxOn()) addSfx(pcm, subs, speech, outro, photos.length);
     let scene = null;
     if (creativeOn()) {
       try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
@@ -2102,6 +2101,13 @@ async function videoButton(btn, text, msg) {
       const why = !creativePref() ? "творческий режим выключен в настройках"
         : !window.VideoEncoder || !window.OffscreenCanvas || !window.Worker ? "этот браузер не умеет творческие видео (нет WebCodecs/OffscreenCanvas)" : "неизвестно";
       vidNote(btn, "ℹ️ Обычное видео: " + why + ".");
+    }
+    // звуки: в творческом ролике — те, что Claude придумал под анимацию; иначе — стандартный набор
+    if (sfxOn()) {
+      if (scene && scene.sfx) { for (let i = 0; i < scene.sfx.length && i < pcm.length; i++) pcm[i] += scene.sfx[i]; addSfxOutro(pcm, speech, outro); }
+      else addSfx(pcm, subs, speech, outro, photos.length);
+      let peak = 0; for (let i = 0; i < pcm.length; i += 2) peak = Math.max(peak, Math.abs(pcm[i]));
+      if (peak > 0.98) { const k = 0.98 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= k; }
     }
     label("⏳ 0%");
     if (!scene) scene = photos.length ? makePhotoScene(emoji, title, subs, pcm.length / VRATE, speech, outro, photos) : makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
@@ -2440,7 +2446,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=65");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=66");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -2637,6 +2643,9 @@ function sfxMix(pcm, snd, at, gain) {
   const o = Math.round(at * VRATE);
   for (let i = 0; i < snd.length && o + i < pcm.length; i++) if (o + i >= 0) pcm[o + i] += snd[i] * gain;
 }
+function addSfxOutro(pcm, speech, outro) {
+  if (outro) { sfxMix(pcm, SFX.whoosh(0.5, false), speech - 0.1, 0.14); sfxMix(pcm, SFX.chime(), speech + 0.35, 0.22); }
+}
 function addSfx(pcm, subs, speech, outro, nPhotos) {
   sfxMix(pcm, SFX.whoosh(0.6, true), 0, 0.16);
   sfxMix(pcm, SFX.pop(760), 0.45, 0.12);
@@ -2751,7 +2760,7 @@ function WORKER_MAIN() {
   const cv = new OffscreenCanvas(W, H), g = cv.getContext("2d");
   const small = new OffscreenCanvas(540, 960), sg = small.getContext("2d");
   const info = new Map(), seen = new Set();
-  let boxes = [], userDraw = null, brief = null, outro = false, speech = 1, level = 0, lastErr = null, curT = 0;
+  let boxes = [], userDraw = null, userSound = null, brief = null, outro = false, speech = 1, level = 0, lastErr = null, curT = 0;
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
   const ease = {
     out: (x) => 1 - Math.pow(1 - clamp(x), 3),
@@ -2863,6 +2872,39 @@ function WORKER_MAIN() {
     palette: { bg: "#F6F1E9", ink: "#1F1B16", accent: "#B5532E", soft: "#F3E1D6", white: "#FFFDF9", muted: "#6E655A" },
     get g() { return g; }, get amp() { return level; },
   };
+  function makeSound(fn, R, len, dur, subs) {
+    const out = new Float32Array(len); let count = 0, budget = R * 40; // не больше 40 с звуков суммарно
+    const rnd = (seed) => { let x = (seed | 0) || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647); };
+    const env = (p, a, d) => (p < a ? p / a : Math.exp(-(p - a) * d));
+    const s = {
+      rate: R, duration: dur, subs,
+      rand: rnd,
+      synth(sec, f) { const n = Math.max(1, Math.min(R * 8, Math.round(sec * R))); const b = new Float32Array(n); for (let i = 0; i < n; i++) { const v = +f(i / R, i / n); b[i] = isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0; } return b; },
+      tone(freq, sec = 0.3, o = {}) { const type = o.type || "sine", a = o.attack ?? 0.005, d = o.decay ?? 6, f1 = o.to ?? freq; let ph = 0;
+        return s.synth(sec, (t, p) => { const f = freq + (f1 - freq) * p; ph += f / R; const x = ph % 1;
+          const w = type === "square" ? (x < 0.5 ? 1 : -1) * 0.6 : type === "saw" ? (2 * x - 1) * 0.6 : type === "tri" ? (4 * Math.abs(x - 0.5) - 1) : Math.sin(2 * Math.PI * x);
+          return w * env(t, a, d) * (p > 0.97 ? (1 - p) / 0.03 : 1); }); },
+      noise(sec = 0.4, o = {}) { const r = rnd(o.seed || 7), lp0 = o.lp ?? 0.08, lp1 = o.lpTo ?? lp0; let y = 0;
+        return s.synth(sec, (t, p) => { const c = lp0 + (lp1 - lp0) * p; y += c * ((r() * 2 - 1) - y); return y * (o.shape ? o.shape(p) : Math.sin(Math.PI * p)) * (1.5 / Math.sqrt(c + 0.02)); }); },
+      whoosh(sec = 0.55, up = true) { return s.noise(sec, { lp: up ? 0.02 : 0.27, lpTo: up ? 0.27 : 0.02, shape: (p) => Math.sin(Math.PI * p) ** 2 }); },
+      pop(freq = 700) { return s.tone(freq, 0.12, { to: freq * 0.55, decay: 40 }); },
+      tick() { return s.tone(2200, 0.04, { decay: 120 }); },
+      thud() { return s.tone(90, 0.35, { to: 45, decay: 14 }); },
+      chime(base = 1046.5) { const p = [1, 1.5, 2, 2.52], a = [1, 0.6, 0.35, 0.2]; return s.synth(1.6, (t) => p.reduce((v, k, j) => v + a[j] * Math.sin(2 * Math.PI * base * k * t) * Math.exp(-t * (2.2 + j)), 0) * 0.45 * Math.min(1, t * 200)); },
+      rise(sec = 1) { return s.tone(300, sec, { to: 1200, attack: sec * 0.9, decay: 30, type: "tri" }); },
+      sparkle(sec = 0.6, seed = 3) { const r = rnd(seed), n = 7, at = [...Array(n)].map(() => r() * sec * 0.8), fr = [...Array(n)].map(() => 1800 + r() * 2600);
+        return s.synth(sec, (t) => at.reduce((v, a, j) => v + (t >= a ? Math.sin(2 * Math.PI * fr[j] * (t - a)) * Math.exp(-(t - a) * 25) : 0), 0) * 0.35); },
+      play(t, buf, gain = 0.25) {
+        if (!buf || !buf.length || !(t >= 0)) return; gain = Math.max(0, Math.min(0.6, +gain || 0));
+        const o = Math.round(t * R); if (o >= len || budget <= 0) return; count++; budget -= buf.length;
+        for (let i = 0; i < buf.length && o + i < len; i++) out[o + i] += buf[i] * gain;
+      },
+    };
+    fn(s);
+    for (let i = 0; i < len; i++) if (out[i] > 0.9) out[i] = 0.9; else if (out[i] < -0.9) out[i] = -0.9;
+    out.count = count;
+    return out;
+  }
   function footer(t) {
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
     g.fillStyle = "rgba(31,27,22,0.14)"; g.fillRect(140, H - 190, W - 280, 10);
@@ -2914,13 +2956,19 @@ function WORKER_MAIN() {
       } else if (m.cmd === "load") {
         brief = m.brief; outro = m.outro; speech = m.brief.speech; lastErr = null; level = 0;
         K.title = brief.title; K.emojiMain = brief.emojiMain; K.duration = speech; K.subs = brief.subs;
-        userDraw = new Function(m.code + "\n;return typeof draw === 'function' ? draw : null;")();
+        const fns = new Function(m.code + "\n;return { draw: typeof draw === 'function' ? draw : null, sound: typeof sound === 'function' ? sound : null };")();
+        userDraw = fns.draw; userSound = fns.sound;
         if (!userDraw) throw new Error("в коде нет функции draw(t, k)");
         const tests = [0, 0.5, speech * 0.25, speech * 0.5, speech * 0.75, speech - 0.05];
         const t0 = performance.now();
         tests.forEach((t) => render(t, 0.2));
         const ms = (performance.now() - t0) / tests.length;
         postMessage({ id: m.id, ok: !lastErr, error: lastErr, ms, paths: [...seen].filter((d) => !info.has(d)) });
+      } else if (m.cmd === "sound") {
+        // звуки ролика, которые Claude написал кодом: функция sound(s) раскладывает их по времени
+        if (!userSound) { postMessage({ id: m.id, ok: true, pcm: null }); return; }
+        const pcm = makeSound(userSound, m.rate, m.len, speech, K.subs);
+        postMessage({ id: m.id, ok: true, pcm, count: pcm.count }, [pcm.buffer]);
       } else if (m.cmd === "info") {
         m.list.forEach(([d, v]) => info.set(d, v));
         postMessage({ id: m.id, ok: true });
@@ -3036,7 +3084,11 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Первые 1–2 секунды — цепляющее появление темы.
 - Кадр рисуется быстро (<10 мс): не больше ~300 фигур, без тяжёлых циклов.
 - Код компактный (до ~350 строк): сцены описывай массивом данных и общими функциями, без копирования одинаковых кусков.
-- Если пришлют замечания или кадры — ответь исправленным кодом целиком.`;
+- Если пришлют замечания или кадры — ответь исправленным кодом целиком.
+
+ЗВУК: в том же блоке объяви function sound(s) — звуковые эффекты ролика, которые ты придумываешь под свою анимацию и пишешь кодом. Она вызывается один раз и раскладывает звуки по времени: s.play(t, звук, громкость 0.05…0.4). Готовые звуки (можно менять параметры): s.whoosh(сек, вверх?), s.pop(частота), s.tick(), s.thud(), s.chime(частота), s.rise(сек), s.sparkle(сек, seed), s.tone(частота, сек, {type:'sine'|'square'|'saw'|'tri', to: конечная частота, attack, decay}), s.noise(сек, {lp, lpTo, shape: p=>огибающая}). Свой звук: s.synth(сек, (t, p) => сэмпл -1…1). Ещё есть s.duration, s.subs, s.rand(seed).
+- Звуки подчёркивают события на экране: появление предмета — «поп», смена сцены — «вжух», набегающее число — тики, важный итог — колокольчик. Ставь их точно в те моменты, когда это происходит в draw.
+- Главное — голос, под ним ещё будет музыка: звуки короткие и тихие (0.08…0.25), в среднем не чаще одного в 1–1,5 с, без длинных гудящих тонов под речью. Финальную заставку озвучивает приложение.`;
 
 async function directorCall(messages, onChars, model) {
   const r = await fetch(CFG.proxy + "/chat", {
@@ -3175,7 +3227,14 @@ async function makeCreativeScene(v, label) {
       }
     }
     note("код готов, дальше сборка видео");
+    // звуки, которые Claude написал под свою анимацию
+    let sfx = null;
+    try {
+      const snd = await sb.call({ cmd: "sound", rate: VRATE, len: Math.round(v.speech * VRATE) }, 20000);
+      if (snd.ok && snd.pcm) { sfx = snd.pcm; note(`звуки: ${snd.count}`); } else note(snd.ok ? "звуков в коде нет" : "звуки не получились: " + snd.error);
+    } catch (e) { note("звуки не получились: " + (e.message || e)); }
     return {
+      sfx,
       log: (x) => note(x),
       duration: v.duration,
       frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 8000)).bmp,
