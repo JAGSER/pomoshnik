@@ -2238,7 +2238,48 @@ function isStandalone() { return matchMedia("(display-mode: standalone)").matche
 function updateInstall() {
   const can = !isStandalone() && (INSTALL_EVT || IS_IOS);
   document.querySelectorAll(".install-btn").forEach((b) => (b.hidden = !can));
+  const m = $("#mascot"); if (m) { m.hidden = !!can; if (can) $("#mascot-tip").hidden = true; }
 }
+/* ===== Логотип-помощник: советы по нажатию, иногда шевелится ===== */
+const TIPS = () => [
+  LL("Нажмите <b>🎬 Видео</b> под ответом, и я сделаю из него ролик с голосом и музыкой.", "Tap <b>🎬 Video</b> under an answer and I'll turn it into a clip with voice and music."),
+  LL("Можно не печатать: нажмите <b>🎤</b> и скажите вопрос голосом.", "No need to type: tap <b>🎤</b> and just say your question."),
+  LL("Сфотографируйте лекарство, квитанцию или письмо и спросите, что это значит.", "Take a photo of a medicine, a bill or a letter and ask what it means."),
+  LL("В <b>⭐ Помощниках</b> есть готовые режимы: что приготовить, подарок, переводчик и другие.", "<b>⭐ Helpers</b> have ready modes: what to cook, gift ideas, translator and more."),
+  LL("Ролик можно отправить по ссылке. Вы увидите, кто посмотрел и что ответил.", "You can send a video by link and see who watched it and what they replied."),
+  LL("Сделайте видеооткрытку ко дню рождения: помощник <b>Видео-открытка</b>.", "Make a birthday video card with the <b>Video card</b> helper."),
+  LL("Голос, который читает ответы, можно поменять в <b>⚙️ Настройках</b>.", "You can change the reading voice in <b>⚙️ Settings</b>."),
+  LL("Не поняли ответ? Напишите «объясни проще», и я перескажу понятнее.", "Didn't get an answer? Say \"explain simpler\" and I'll rephrase."),
+  LL("Перед покупкой спросите: «стоит ли брать?» и пришлите фото товара.", "Before buying, ask \"is it worth it?\" and send a photo of the item."),
+  LL("Пришло подозрительное сообщение? Перешлите его мне, проверю, не мошенники ли.", "Got a suspicious message? Send it to me and I'll check if it's a scam."),
+  LL("Можно попросить сделать ролик в другом стиле: веселее, короче или с другой музыкой.", "You can ask for a video in another style: funnier, shorter or with other music."),
+  LL("Все ваши ролики собраны в разделе <b>Ролики</b> на главном экране.", "All your videos are in <b>Videos</b> on the home screen."),
+  LL("Задайте вопрос на любом языке, отвечу на нём же.", "Ask in any language and I'll answer in it."),
+  LL("Хотите просто поболтать? Помощник <b>☕ Просто поговорить</b> для этого.", "Just want to chat? The <b>☕ Just talk</b> helper is for that."),
+];
+function mascotTip() {
+  const tips = TIPS(), seen = store.get("tipsSeen") || [];
+  let pool = tips.map((_, i) => i).filter((i) => !seen.includes(i));
+  if (!pool.length) { pool = tips.map((_, i) => i); seen.length = 0; }
+  const i = pool[Math.floor(Math.random() * pool.length)];
+  seen.push(i); store.set("tipsSeen", seen);
+  const box = $("#mascot-tip");
+  box.innerHTML = tips[i] + `<span class="m-next">${LL("Нажмите на значок ещё раз для следующего совета", "Tap the logo again for another tip")}</span>`;
+  box.hidden = false;
+  clearTimeout(mascotTip.t); mascotTip.t = setTimeout(() => (box.hidden = true), 9000);
+  mascotMove("nod");
+}
+function mascotMove(kind) {
+  const m = $("#mascot"); if (!m || m.hidden || document.hidden) return;
+  const k = kind || ["hop", "wiggle", "nod", "laugh"][Math.floor(Math.random() * 4)];
+  m.classList.remove("hop", "wiggle", "nod", "laugh"); void m.offsetWidth; m.classList.add(k);
+  setTimeout(() => m.classList.remove(k), 1100);
+}
+(function mascotLoop() { setTimeout(() => { mascotMove(); mascotLoop(); }, 40000 + Math.random() * 50000); })();
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#mascot")) mascotTip();
+  else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
+});
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL_EVT = e; updateInstall(); });
 window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstall(); });
 document.querySelectorAll(".install-btn").forEach((b) => (b.onclick = async () => {
@@ -3054,7 +3095,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=82");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=83");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
