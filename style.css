@@ -338,3 +338,11 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .hs-row input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .bday-banner { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .bday-row { text-align: left; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 16px; padding: 14px 16px; font: inherit; font-weight: 700; font-size: 1.05em; cursor: pointer; }
+
+.sheet-btns { display: flex; align-items: center; gap: 6px; }
+.helpers-edit { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 12px; font: inherit; font-size: .9em; font-weight: 600; cursor: pointer; }
+.helper-tile { position: relative; }
+.helper-tile.editing { border-style: dashed; }
+.helper-tile.off { opacity: .4; }
+.ht-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--accent); display: grid; place-items: center; font-weight: 800; color: #fff; background: var(--accent); }
+.helper-tile.off .ht-check { background: transparent; }

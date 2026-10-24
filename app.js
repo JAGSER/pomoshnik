@@ -23,7 +23,7 @@ const show = (id) => {
 // один шаг назад по текущему состоянию экрана
 async function goBack() {
   const sheet = document.getElementById("helpers-sheet");
-  if (sheet && !sheet.hidden) { sheet.hidden = true; return; }
+  if (sheet && !sheet.hidden) { sheet.hidden = true; HELPERS_EDIT = false; return; }
   const live = document.getElementById("live");
   if (live && !live.hidden) { stopLive(); return; }
   const cur = curScreen();
@@ -838,7 +838,7 @@ function allowedHelpers(uid) { uid = uid || SESSION.user; return Object.entries(
 function hiddenHelpers() { return (SESSION && store.get("helpersHidden:" + SESSION.user)) || []; }
 function myHelpers(uid) { const hid = !uid || uid === SESSION.user ? hiddenHelpers() : []; return allowedHelpers(uid).filter(([id]) => !hid.includes(id)); }
 // админ может посмотреть, какой список помощников видит каждый человек
-let HELPERS_VIEW = null;
+let HELPERS_VIEW = null, HELPERS_EDIT = false;
 function helpersOn() { return myHelpers().length > 0; }
 const hTitle = (h) => (LANG === "en" && h.title_en ? h.title_en : h.title);
 const hHint = (h) => (LANG === "en" && h.hint_en ? h.hint_en : h.hint);
@@ -870,7 +870,11 @@ function openHelpers() {
     g.append(seg);
   }
   // школьные помощники — отдельным блоком сверху
-  const list = myHelpers(viewer), groups = [["school", "🍎 Для школы"], ["", "🏠 На каждый день"]];
+  const editing = HELPERS_EDIT && viewer === SESSION.user;
+  $("#helpers-edit").textContent = editing ? "✓ Готово" : "✏️ Настроить";
+  $("#helpers-edit").hidden = viewer !== SESSION.user;
+  $(".sheet-hint").textContent = editing ? "Нажмите на помощника, чтобы спрятать его или вернуть. Спрятанные бледные." : "Выберите, с чем помочь. Откроется разговор, где Claude уже знает, чем помочь.";
+  const list = editing ? allowedHelpers() : myHelpers(viewer), groups = [["school", "🍎 Для школы"], ["", "🏠 На каждый день"]];
   const grouped = list.some(([, h]) => h.group);
   groups.forEach(([gid, gname]) => {
   const part = list.filter(([, h]) => (h.group || "") === gid);
@@ -879,7 +883,16 @@ function openHelpers() {
   part.forEach(([id, h]) => {
     const b = el("button", "helper-tile" + (CHAT && CHAT.helper === id ? " on" : "")); b.type = "button";
     b.innerHTML = `<span class="ht-ico">${esc(h.icon)}</span><span class="ht-title">${esc(tOf(h))}</span>`;
-    b.onclick = () => pickHelper(id);
+    if (editing) {
+      const off = hiddenHelpers().includes(id);
+      b.classList.add("editing"); if (off) b.classList.add("off");
+      b.insertAdjacentHTML("beforeend", `<span class="ht-check">${off ? "" : "✓"}</span>`);
+      b.onclick = () => {
+        const cur = hiddenHelpers().filter((x) => x !== id);
+        if (!off) cur.push(id);
+        store.set("helpersHidden:" + SESSION.user, cur); openHelpers();
+      };
+    } else b.onclick = () => pickHelper(id);
     g.append(b);
   });
   });
@@ -900,7 +913,8 @@ function pickHelper(id) {
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
 }
-$("#helpers-close").onclick = navBack;
+$("#helpers-close").onclick = () => { HELPERS_EDIT = false; navBack(); };
+$("#helpers-edit").onclick = () => { HELPERS_EDIT = !HELPERS_EDIT; openHelpers(); };
 $("#helpers-sheet").onclick = (e) => { if (e.target.id === "helpers-sheet") navBack(); };
 
 /* ===== Видео: кадры для Claude + расшифровка звука ===== */
@@ -1828,16 +1842,6 @@ function openSettings() {
     b.classList.toggle("on", b.dataset.model === liveModel());
     b.onclick = () => { store.set("liveModel:" + SESSION.user, b.dataset.model); document.querySelectorAll("#live-seg button").forEach((x) => x.classList.toggle("on", x === b)); };
   });
-  const hs = allowedHelpers();
-  $("#helpers-set").hidden = !hs.length;
-  const hl = $("#helpers-set-list"); hl.innerHTML = "";
-  hs.forEach(([id, h]) => {
-    const row = el("label", "hs-row");
-    const cb = el("input"); cb.type = "checkbox"; cb.checked = !hiddenHelpers().includes(id);
-    cb.onchange = () => { const cur = hiddenHelpers().filter((x) => x !== id); if (!cb.checked) cur.push(id); store.set("helpersHidden:" + SESSION.user, cur); };
-    const t = el("span"); t.textContent = `${h.icon} ${hTitle(h)}`;
-    row.append(cb, t); hl.append(row);
-  });
   const vt = $("#voice-toggle"), vb = $("#voice-box");
   const curDesc = (VOICES.find((x) => x[0] === cur) || [])[1] || "";
   vt.innerHTML = `<span>🎙 ${esc(cur)}</span><span class="vdesc">${esc(curDesc)}</span><span class="vt-arrow">${vb.hidden ? "Выбрать ›" : "Свернуть ˄"}</span>`;
@@ -2407,7 +2411,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=61");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=62");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
