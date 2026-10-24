@@ -278,8 +278,8 @@ async function blobGet(kv, prefix, n) {
   return out;
 }
 async function vidCounts(kv, id) {
-  const [v, hh] = await kv.getMany([["vidc", id, "views"], ["vidc", id, "hearts"]]);
-  return { views: u64(v.value), hearts: u64(hh.value) };
+  const [v, hh, cta, sh, jn] = await kv.getMany([["vidc", id, "views"], ["vidc", id, "hearts"], ["vidc", id, "cta"], ["vidc", id, "shares"], ["vidc", id, "joins"]]);
+  return { views: u64(v.value), hearts: u64(hh.value), cta: u64(cta.value), shares: u64(sh.value), joins: u64(jn.value) };
 }
 function rangeResponse(req, bytes, type, h) {
   const base = { ...h, "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable", "Accept-Ranges": "bytes", "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges" };
@@ -402,6 +402,13 @@ export async function handler(req, info) {
     return json({ id: meta.id, title: meta.title, caption: meta.caption, name: meta.name, lang: meta.lang, created: meta.created, type: meta.type, poster: !!meta.posterN, ...(await vidCounts(kv, meta.id)) }, 200, h);
   }
   // просмотр и реакции — без пароля (их оставляют получатели)
+  if (req.method === "POST" && (url.pathname === "/video-cta" || url.pathname === "/video-share")) {
+    let b; try { b = JSON.parse(await req.text()); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
+    const id = String(b.id || ""); const kv = await kvOpen();
+    if (!kv || !/^[A-Za-z0-9]{8}$/.test(id) || !(await kv.get(["vid", id, "meta"])).value || reactLimited(ip)) return json({ ok: false }, 200, h);
+    await kv.atomic().sum(["vidc", id, url.pathname === "/video-cta" ? "cta" : "shares"], 1n).commit();
+    return json({ ok: true }, 200, h);
+  }
   if (req.method === "POST" && (url.pathname === "/video-view" || url.pathname === "/video-react" || url.pathname === "/video-watch")) {
     let b; try { b = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
     const id = String(b.id || ""); if (!/^[A-Za-z0-9]{8}$/.test(id)) return json({ error: "Неверный ролик" }, 400, h);
@@ -453,7 +460,7 @@ export async function handler(req, info) {
     const n = await blobPut(kv, ["vid", id, "d"], bytes);
     const meta = { id, user: user.id, name: String(m.name || "").slice(0, 40), title: String(m.title || "").slice(0, 80), caption: String(m.caption || "").slice(0, 600),
       lang: m.lang === "en" ? "en" : "ru", type: /webm/.test(req.headers.get("Content-Type") || "") ? "video/webm" : "video/mp4", size: bytes.length, n, created };
-    await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).set(["vidu", user.id, created, id], 1, VID_TTL).commit();
+    await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).set(["vidu", user.id, created, id], 1, VID_TTL).sum(["mk", user.id, "shared"], 1n).commit();
     return json({ ok: true, id }, 200, h);
   }
   if (url.pathname === "/samples") {
@@ -486,7 +493,11 @@ export async function handler(req, info) {
     if ((await kvNum(kv, ipKey)) >= Number(env("GUESTS_PER_IP_HOUR", "6"))) return json({ error: "Слишком много новых входов с этого адреса. Попробуйте через час." }, 429, h);
     await kvInc(kv, ipKey, 1, 1);
     const id = "g_" + rnd(12), secret = rnd(28), now = Date.now();
-    await acctPut({ id, kind: "guest", plan: "trial", created: now, trialEnds: now + TRIAL_DAYS * 86400_000, secret: await sha(secret), lang: body.lang === "en" ? "en" : "ru", ref: String(body.ref || "").slice(0, 20) });
+    const ref = String(body.ref || "").slice(0, 20);
+    await acctPut({ id, kind: "guest", plan: "trial", created: now, trialEnds: now + TRIAL_DAYS * 86400_000, secret: await sha(secret), lang: body.lang === "en" ? "en" : "ru", ref,
+      tz: String(body.tz || "").slice(0, 40), plang: String(body.plang || "").slice(0, 12), os: String(body.os || "").slice(0, 12) });
+    // пришёл по ссылке на ролик — засчитываем ролику и его автору нового пользователя
+    if (/^[A-Za-z0-9]{8}$/.test(ref)) { const meta = (await kv.get(["vid", ref, "meta"])).value; if (meta) await kv.atomic().sum(["vidc", ref, "joins"], 1n).sum(["mk", meta.user, "joins"], 1n).commit(); }
     return json({ ok: true, user: id, password: secret }, 200, h);
   }
   // вход по имени и паролю (зарегистрированные); без имени — как раньше, только по паролю
@@ -510,6 +521,14 @@ export async function handler(req, info) {
 
   if (url.pathname === "/login") {
     return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch, plan: plan || "owner" }, 200, h);
+  }
+  // автор сделал ролик: считаем творческие и простые, запоминаем, откуда он и с какого устройства
+  if (url.pathname === "/video-made") {
+    const kv = await kvOpen(); if (!kv) return json({ ok: false }, 200, h);
+    const op = kv.atomic().sum(["mk", user.id, body.creative ? "creative" : "simple"], 1n).sum(["mk", user.id, "sec"], BigInt(Math.max(0, Math.min(3600, Math.round(Number(body.sec) || 0)))));
+    op.set(["mkp", user.id], { tz: String(body.tz || "").slice(0, 40), plang: String(body.plang || "").slice(0, 12), os: String(body.os || "").slice(0, 12), last: Date.now(), name: String(body.name || "").slice(0, 40) });
+    await op.commit();
+    return json({ ok: true }, 200, h);
   }
   // тариф, лимиты и расход — для экрана «Тарифы»
   if (url.pathname === "/me") {
@@ -545,6 +564,25 @@ export async function handler(req, info) {
   if (url.pathname === "/admin") {
     if (!ADMINS().includes(user.id) || user.acct) return json({ error: "Нет доступа" }, 403, h);
     const kv = await kvOpen();
+    if (body.action === "creators") {
+      const C = {};
+      const get = (uid) => (C[uid] = C[uid] || { user: uid, creative: 0, simple: 0, sec: 0, shared: 0, joins: 0, videos: 0, views: 0, hearts: 0, replies: 0, cta: 0, shares: 0 });
+      for await (const e of kv.list({ prefix: ["mk"] }, { limit: 5000 })) { const [, uid, k] = e.key; get(uid)[k] = u64(e.value); }
+      for await (const e of kv.list({ prefix: ["vidu"] }, { limit: 3000 })) {
+        const [, uid, , vid] = e.key, c = get(uid), n = await vidCounts(kv, vid);
+        c.videos++; c.views += n.views; c.hearts += n.hearts; c.cta += n.cta; c.shares += n.shares;
+        for await (const r of kv.list({ prefix: ["vidr", vid] }, { limit: 200 })) if (r.value.kind === "reply") c.replies++;
+      }
+      const out = [];
+      for (const c of Object.values(C)) {
+        const p = (await kv.get(["mkp", c.user])).value || {};
+        const a = /^[gu]_/.test(c.user) ? await acctGet(c.user) : null;
+        out.push({ ...c, name: (a && (a.name || a.login)) || p.name || (a ? "" : c.user), login: a ? a.login || "" : c.user, plan: a ? a.plan : "семья", since: a ? a.created : 0,
+          tz: p.tz || (a && a.tz) || "", plang: p.plang || (a && a.plang) || "", os: p.os || (a && a.os) || "", last: p.last || 0, ref: a ? a.ref || "" : "" });
+      }
+      out.sort((x, y) => (y.creative + y.simple + y.shared) - (x.creative + x.simple + x.shared) || y.last - x.last);
+      return json({ ok: true, creators: out.slice(0, 300) }, 200, h);
+    }
     if (body.action === "plan") {
       let id = String(body.id || "").toLowerCase();
       if (!/^[gu]_/.test(id)) id = (await kv.get(["login", id])).value || id;

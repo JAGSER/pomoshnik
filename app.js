@@ -269,11 +269,16 @@ async function importMigration(code) {
 
 /* ===== Гость: пользуется сразу, регистрация потом ===== */
 const isAcct = (id) => /^[gu]_/.test(id || "");
+// откуда человек и с какого устройства — для статистики авторов
+function devInfo() {
+  const ua = navigator.userAgent;
+  return { tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "", plang: navigator.language || "", os: /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "Mac" : "" };
+}
 let PLAN = null;
 const LL = (ru, en) => (LANG === "en" ? en : ru);
 async function newGuest() {
   const ref = (location.search.match(/[?&]ref=([\w-]{1,20})/) || [])[1] || "";
-  const r = await fetch(CFG.proxy + "/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang: LANG, ref }) });
+  const r = await fetch(CFG.proxy + "/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang: LANG, ref, ...devInfo() }) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || LL("Нет связи. Проверьте интернет и обновите страницу.", "No connection. Check the internet and reload."));
   SESSION = { user: d.user, password: d.password };
@@ -2415,6 +2420,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     btn.classList.add("ready");
     stopTimer(true);
     waitNote(btn, false); wakeOff(); videoDone(true, title);
+    apiPost("/video-made", { creative: !!scene.frame, sec: Math.round(pcm.length / VRATE), name: profile().name || "", ...devInfo() }).catch(() => {});
     if (PLAN && PLAN.plan !== "owner") loadPlan();
     if (opt.autoShare) openShare(btn._ready, btn._ctx);
   } catch (err) {
@@ -2565,8 +2571,9 @@ function renderVideos(st) {
   document.querySelectorAll("#videos-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === VIDTAB));
   const list = $("#videos-list"); list.innerHTML = "";
   if (!st) { list.innerHTML = `<p class="sheet-hint">${T("Нет связи. Попробуйте позже.")}</p>`; return; }
-  $("#vtab-all").hidden = !st.all;
-  if (VIDTAB === "all" && !st.all) VIDTAB = "mine";
+  $("#vtab-all").hidden = !st.all; $("#vtab-authors").hidden = !st.all;
+  if ((VIDTAB === "all" || VIDTAB === "authors") && !st.all) VIDTAB = "mine";
+  if (VIDTAB === "authors") { renderAuthors(list); return; }
   const items = VIDTAB === "mine" ? st.mine : VIDTAB === "all" ? st.all : st.family;
   if (!items.length) {
     list.innerHTML = `<p class="sheet-hint">${VIDTAB === "all" ? LL("Пока никто не отправлял роликов.", "No videos yet.") : VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
@@ -2580,7 +2587,7 @@ function renderVideos(st) {
     const fresh = VIDTAB === "mine" && (v.views > s.views || v.hearts > s.hearts || (v.replies || []).length > s.replies);
     c.innerHTML = `<img class="vid-thumb" alt="" loading="lazy" ${v.poster ? `src="${CFG.proxy}/video/${v.id}.jpg"` : ""}>
       <div class="vid-body">${who}<b>${esc(v.title || T("Ролик"))}</b>
-        <span class="vid-stats">${fresh ? '<span class="vid-new">' + T("новое") + "</span> " : ""}👀 ${v.views} · ❤️ ${v.hearts}${VIDTAB === "mine" ? ` · 💬 ${(v.replies || []).length}` : ""} · ${fmtDate(v.created)}</span>
+        <span class="vid-stats">${fresh ? '<span class="vid-new">' + T("новое") + "</span> " : ""}👀 ${v.views} · ❤️ ${v.hearts}${VIDTAB === "mine" ? ` · 💬 ${(v.replies || []).length}` : ""}${v.shares ? ` · 🔁 ${v.shares}` : ""}${v.cta ? ` · ➡️ ${v.cta}` : ""}${v.joins ? ` · 🙋 ${v.joins}` : ""} · ${fmtDate(v.created)}</span>
         <div class="vid-replies"></div>
         <div class="vid-btns"><button type="button" class="vid-open">▶ ${T("Смотреть")}</button><button type="button" class="vid-again">📤 ${VIDTAB === "mine" ? T("Отправить ещё") : T("Переслать")}</button></div>
       </div>`;
@@ -2608,6 +2615,33 @@ function hintVideo(b) {
   b.classList.add("hint");
   b.addEventListener("click", () => b.classList.remove("hint"), { once: true });
 }
+// администратор: кто делает ролики, откуда, на каком тарифе и какой отклик получает
+async function renderAuthors(list) {
+  list.innerHTML = `<p class="sheet-hint">${LL("Загружаю…", "Loading…")}</p>`;
+  try {
+    const d = await apiPost("/admin", { action: "creators" });
+    list.innerHTML = "";
+    const all = d.creators || [];
+    const tot = all.reduce((a, c) => ({ made: a.made + c.creative + c.simple, shared: a.shared + c.shared, views: a.views + c.views, joins: a.joins + c.joins }), { made: 0, shared: 0, views: 0, joins: 0 });
+    const head = el("p", "sheet-hint");
+    head.textContent = `Авторов: ${all.length} · роликов сделано: ${tot.made} · отправлено ссылкой: ${tot.shared} · просмотров: ${tot.views} · привели новых: ${tot.joins}`;
+    list.append(head);
+    if (!all.length) { list.append(Object.assign(el("p", "sheet-hint"), { textContent: "Пока никто не делал роликов." })); return; }
+    const planRu = { trial: "пробный", free: "бесплатный", family: "Семья", familyplus: "Семья+", "семья": "семья" };
+    all.forEach((c) => {
+      const card = el("div", "vid-item author");
+      const who = c.name || (c.login && !/^[gu]_/.test(c.login) ? c.login : "Гость " + c.user.slice(2, 7));
+      const where = [tzCity(c.tz), langCountry(c.plang)].filter((x) => x && x !== LL("неизвестно", "unknown")).join(", ");
+      card.innerHTML = `<div class="vid-body"><b>${esc(who)}</b>
+        <span class="vid-who">${esc(planRu[c.plan] || c.plan || "")}${c.login && !/^[gu]_/.test(c.login) && c.login !== who ? " · вход: " + esc(c.login) : ""}</span>
+        <span class="vid-stats">${esc([where, c.os, c.since ? "с " + new Date(c.since).toLocaleDateString(LOCALE()) : "", c.last ? "был " + fmtDate(c.last) : "", c.ref ? "пришёл по ссылке" : ""].filter(Boolean).join(" · "))}</span>
+        <span class="vid-stats">🎬 сделал: творческих ${c.creative}, простых ${c.simple}${c.sec ? ` (${Math.round(c.sec / 60)} мин)` : ""} · 📤 отправил ${c.shared}</span>
+        <span class="vid-stats">👀 ${c.views} · ❤️ ${c.hearts} · 💬 ${c.replies} · 🔁 переслали ${c.shares} · ➡️ перешли ${c.cta} · 🙋 привёл новых ${c.joins}</span></div>`;
+      list.append(card);
+    });
+  } catch (e) { list.innerHTML = `<p class="sheet-hint">${esc(e.message)}</p>`; }
+}
+
 // подробная статистика ролика: города, устройства, откуда открыли, сколько досмотрели, имена
 const TZ_RU = { Moscow: "Москва", Samara: "Самара", Yekaterinburg: "Екатеринбург", Omsk: "Омск", Novosibirsk: "Новосибирск", Krasnoyarsk: "Красноярск", Irkutsk: "Иркутск", Yakutsk: "Якутск", Vladivostok: "Владивосток", Magadan: "Магадан", Kamchatka: "Камчатка", Kaliningrad: "Калининград", Volgograd: "Волгоград", Saratov: "Саратов", Astrakhan: "Астрахань", Ulyanovsk: "Ульяновск", Barnaul: "Барнаул", Tomsk: "Томск", Novokuznetsk: "Новокузнецк", Chita: "Чита", Kyiv: "Киев", Kiev: "Киев", Minsk: "Минск", Almaty: "Алматы", Astana: "Астана", Tashkent: "Ташкент", Tbilisi: "Тбилиси", Yerevan: "Ереван", Baku: "Баку", Istanbul: "Стамбул", Kuala_Lumpur: "Куала-Лумпур", Makassar: "Бали / Макассар", Jakarta: "Джакарта", Bangkok: "Бангкок", Dubai: "Дубай", Berlin: "Берлин", London: "Лондон", Paris: "Париж", Riga: "Рига", Tallinn: "Таллин", Vilnius: "Вильнюс", Warsaw: "Варшава", Prague: "Прага", Belgrade: "Белград" };
 function tzCity(tz) { const c = (tz || "").split("/").pop(); return c ? (LANG === "ru" && TZ_RU[c]) || c.replace(/_/g, " ") : LL("неизвестно", "unknown"); }
@@ -2965,7 +2999,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=78");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=79");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
