@@ -3300,7 +3300,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=103");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=104");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3629,7 +3629,7 @@ function creativeStyle() { return (me().admin && store.get("creativeStyle:" + SE
 let RISO = null;
 async function risoAssets() {
   if (!RISO) {
-    const [lib, doc] = await Promise.all(["riso/lib.js?v=1", "riso/doc.md?v=1"].map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error("шаблон стиля не загрузился"); return r.text(); })));
+    const [lib, doc] = await Promise.all(["riso/lib.js?v=2", "riso/doc.md?v=2"].map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error("шаблон стиля не загрузился"); return r.text(); })));
     RISO = { lib, doc };
   }
   return RISO;
@@ -3983,6 +3983,8 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Код компактный (до ~350 строк): сцены описывай массивом данных и общими функциями, без копирования одинаковых кусков.
 - Если пришлют замечания или кадры — ответь исправленным кодом целиком.
 
+ПЕРСОНАЖИ И БРЕНДЫ: не рисуй известных персонажей, маскотов и логотипы (покемоны, герои мультфильмов и игр, фирменные знаки) — даже если ответ о них. Передай тему своими метафорами, предметами, схемами, датами и талисманом приложения (k.mascot).
+
 ЗВУК: в том же блоке объяви function sound(s) — звуковые эффекты под твою анимацию. Она вызывается один раз и раскладывает звуки по времени: s.play(t, "имя", громкость 0.05…0.3, {pitch}) — pitch от 0.5 до 2 сдвигает высоту (удобно для серии). Других звуков нет, свои не синтезируй. Есть s.duration, s.subs, s.rand(seed).
 Звуки (имя — что это):
 - появление: pop_soft (мягкий поп), pop_high (звонкий поп), pop_double (поп-поп), bubble (пузырёк вверх), bubble_down (пузырёк вниз), drop (капля), marimba (нота маримбы), kalimba (нота калимбы), wood (деревянный стук), bamboo (полый стук), woodblock (высокий стук), rim (щелчок по ободу барабана);
@@ -4041,7 +4043,7 @@ async function makeCreativeScene(v, label) {
   const log = { at: new Date().toISOString(), model: creativeModel(), steps: [] };
   const T0 = Date.now(), sec = () => Math.round((Date.now() - T0) / 1000);
   // бюджет на работу Claude: после него правки и просмотр кадров пропускаются, берём лучшее, что есть
-  const BUDGET = 150;
+  const BUDGET = creativeStyle() === "riso" ? 240 : 150;
   const note = (x) => { log.steps.push(`[${sec()} с] ${x}`); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
   // уменьшенные копии фото, чтобы Claude видел, что на них
   const thumbs = [];
@@ -4114,19 +4116,22 @@ async function makeCreativeScene(v, label) {
     await sb.load(good, brief, v.outro);
     // взгляд арт-директора на кадры
     label("✨ Кадры…");
-    const shotTimes = [0.8, v.speech * 0.2, v.speech * 0.4, v.speech * 0.6, v.speech * 0.8, Math.max(0, v.speech - 0.4)].map((t) => +t.toFixed(2));
+    // в «Риографе» кадры смотрит сам Opus и видит больше кадров (проверка: даёт ли это качество)
+    const nShots = style === "riso" ? 10 : 6;
+    const shotTimes = Array.from({ length: nShots }, (_, i) => i === 0 ? 0.8 : i === nShots - 1 ? Math.max(0, v.speech - 0.4) : v.speech * i / (nShots - 1)).map((t) => +t.toFixed(2));
     const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotTimes }, 30000);
     if (!sh.ok && sec() > BUDGET) note("просмотр кадров пропущен — время вышло");
     if (sh.ok) {
-      if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + good + "\n```" });
-      else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + good + "\n```" }, { role: "assistant", content: "Хорошо." });
+      const own = (c) => (LIB && c.startsWith(LIB) ? c.slice(LIB.length) : c);
+      if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + own(good) + "\n```" });
+      else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + own(good) + "\n```" }, { role: "assistant", content: "Хорошо." });
       msgs.push({ role: "user", content: [
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
         { type: "text", text: `Кадры ролика в моменты ${shotTimes.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
-      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), "claude-sonnet-5-5");
+      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), style === "riso" ? null : "claude-sonnet-5-5", SYS);
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
-      const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
+      const raw2 = /^\s*OK\b/i.test(txt) ? null : extractCode(txt), better = raw2 && (LIB && !raw2.includes("const R = (") ? LIB + raw2 : raw2);
       if (better) {
         const r = await test(better);
         if (r.n != null && r.n <= best.n) good = better;
