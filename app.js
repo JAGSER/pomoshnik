@@ -1462,13 +1462,16 @@ function userVoice() {
 }
 // один и тот же кусок не запрашиваем дважды: чтение вслух и видео ждут общий запрос
 const TTS_INFLIGHT = new Map();
-async function ttsBlob(chunk, voice) {
-  voice = voice || userVoice();
-  const key = ttsKey(chunk, voice);
+// диалоги читает облегчённая модель (дешевле на треть), ролики — полная (живее интонация)
+function ttsDialogModel() { return (CFG.voice || {}).dialogModel || "gemini-3.8-flash-lite-tts"; }
+function ttsVideoModel() { return (CFG.voice || {}).videoModel || "gemini-3.8-flash-tts"; }
+async function ttsBlob(chunk, voice, model) {
+  voice = voice || userVoice(); model = model || ttsDialogModel();
+  const key = ttsKey(chunk, voice, model);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
   if (TTS_INFLIGHT.has(key)) return TTS_INFLIGHT.get(key);
-  const p = ttsLoad(chunk, voice).then((b) => {
+  const p = ttsLoad(chunk, voice, model).then((b) => {
     // запасной голос (когда основной упёрся в лимит) не запоминаем — в следующий раз запишется основным
     if (!b._backup) { TTS_MEM.set(key, b); ADB.put(key, b); }
     return b;
@@ -1486,11 +1489,11 @@ async function ttsSlot() {
   TTS_ACTIVE++;
 }
 function ttsRelease() { TTS_ACTIVE--; const n = TTS_WAIT.shift(); if (n) n(); }
-async function ttsLoad(chunk, voice) {
+async function ttsLoad(chunk, voice, model) {
   await ttsSlot();
   try {
     for (let attempt = 0; ; attempt++) {
-      try { return await ttsLoadOnce(chunk, voice); }
+      try { return await ttsLoadOnce(chunk, voice, model); }
       catch (err) {
         // лимит в минуту: один раз ждём, сколько просит Google (не дольше 25 секунд), и пробуем снова
         if (err.retryAfter && attempt === 0 && err.retryAfter <= 25) { await new Promise((r) => setTimeout(r, err.retryAfter * 1000)); continue; }
@@ -1501,7 +1504,7 @@ async function ttsLoad(chunk, voice) {
     }
   } finally { ttsRelease(); }
 }
-async function ttsLoadOnce(chunk, voice) {
+async function ttsLoadOnce(chunk, voice, model) {
   const v = CFG.voice || {};
   // не ждём дольше 70 секунд: сервер сам ждёт лимит до 30 с, плюс озвучка
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
@@ -1510,7 +1513,7 @@ async function ttsLoadOnce(chunk, voice) {
     r = await fetch(CFG.proxy + "/tts", {
     signal: ctl.signal,
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: v.model }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: model || v.model }),
     });
   } catch (e) { clearTimeout(timer); const er = new Error(ctl.signal.aborted ? "Голос Gemini не ответил вовремя" : "Нет связи с сервером озвучки"); er.network = true; throw er; }
   if (r.status === 501) GEMINI_OFF = true;
@@ -1761,11 +1764,13 @@ function stopSnippet() {
   SNIPPET.btn.classList.remove("playing");
   SNIPPET = null;
 }
-function ttsKey(chunk, voice) {
-  return [voice || userVoice(), (CFG.voice || {}).model || "", chunk.trim()].join("|");
+// полная модель хранится под старым ключом — уже записанная озвучка пригодится роликам
+function ttsKey(chunk, voice, model) {
+  model = model || ttsDialogModel();
+  return [voice || userVoice(), model === ttsVideoModel() ? "" : model, chunk.trim()].join("|");
 }
-async function ttsHas(chunk) {
-  const key = ttsKey(chunk);
+async function ttsHas(chunk, model) {
+  const key = ttsKey(chunk, undefined, model);
   return TTS_MEM.has(key) || !!(await ADB.get(key));
 }
 async function playSnippet(chat, btn) {
@@ -2102,7 +2107,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     const parts = [];
     let done = 0;
     label(`⏳ 0/${chunks.length}`);
-    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c).then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
+    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c, undefined, ttsVideoModel()).then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
@@ -2654,7 +2659,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=71");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=72");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
