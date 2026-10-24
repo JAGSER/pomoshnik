@@ -149,7 +149,7 @@ const EN = {
   "👤 Обо мне — настроить": "👤 About me — set up",
   "Заставка в конце видео": "Ending card in videos",
   "Талисман и «Спросите о своём в «Помощник AI»», 3 секунды": "Mascot and “Ask about yours in Pomoshnik AI”, 3 seconds",
-  "Творческие видео (тест)": "Creative videos (test)",
+  "Творческие видео": "Creative videos",
   "Claude сам придумывает и рисует анимацию под каждый ответ. Дольше — 1–3 минуты": "Claude designs and draws a unique animation for every answer. Takes longer — 1–3 minutes",
   "Выйти": "Sign out",
   "Обо мне": "About me",
