@@ -8,9 +8,39 @@ let PENDING = [];        // приложенные файлы до отправ�
 let ABORT = null;        // остановка ответа
 
 const $ = (s) => document.querySelector(s);
+/* ===== Навигация «назад»: кнопка телефона и полукруглая кнопка у края работают внутри приложения ===== */
+const DEEP = ["screen-chat", "screen-settings", "screen-profile"];
+function curScreen() { const s = [...document.querySelectorAll(".screen")].find((x) => !x.hidden); return s ? s.id : ""; }
+function pushNav() { try { history.pushState({ app: Date.now() }, ""); } catch (_) {} }
+let NAV_SILENT = false, NAV_REUSE = false;
 const show = (id) => {
+  const was = curScreen();
   document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
+  if (DEEP.includes(id) && was !== id && !NAV_SILENT && !NAV_REUSE) pushNav();
+  NAV_REUSE = false;
+  document.querySelectorAll(".fab-back").forEach((b) => (b.hidden = !DEEP.includes(id)));
 };
+// один шаг назад по текущему состоянию экрана
+async function goBack() {
+  const sheet = document.getElementById("helpers-sheet");
+  if (sheet && !sheet.hidden) { sheet.hidden = true; return; }
+  const live = document.getElementById("live");
+  if (live && !live.hidden) { stopLive(); return; }
+  const cur = curScreen();
+  NAV_SILENT = true;
+  try {
+  if (cur === "screen-chat") {
+    if (ABORT) ABORT.abort(); stopAutoSend(); stopListening();
+    const toHelpers = BACK_TO_HELPERS; BACK_TO_HELPERS = false;
+    await startHome();
+    if (toHelpers && helpersOn()) openHelpers();
+  } else if (cur === "screen-settings") { stopPreview(); startHome(); }
+  else if (cur === "screen-profile") openSettings();
+  } finally { NAV_SILENT = false; }
+}
+// кнопки «назад» в приложении снимают запись из истории — так кнопка телефона и экран не расходятся
+function navBack() { if (history.state && history.state.app) history.back(); else goBack(); }
+window.addEventListener("popstate", () => { goBack(); });
 
 function appName() { return LANG === "en" ? EN_APP : CFG.appName || "Помощник AI"; }
 // язык человека: выбранный в настройках → указанный в config.json → язык телефона
@@ -405,12 +435,9 @@ function openChat(chat) {
 }
 // если разговор открыт из списка помощников — «назад» возвращает к этому списку
 let BACK_TO_HELPERS = false;
-$("#btn-back").onclick = async () => {
-  if (ABORT) ABORT.abort(); stopAutoSend(); stopListening();
-  const toHelpers = BACK_TO_HELPERS; BACK_TO_HELPERS = false;
-  await startHome();
-  if (toHelpers && helpersOn()) openHelpers();
-};
+$("#btn-back").onclick = navBack;
+
+document.querySelectorAll(".fab-back").forEach((b) => (b.onclick = navBack));
 
 /* ===== Названия разговоров ===== */
 function chatTitle(c) {
@@ -811,6 +838,7 @@ function openHelpers() {
     g.append(b);
   });
   });
+  if ($("#helpers-sheet").hidden) pushNav();
   $("#helpers-sheet").hidden = false;
 }
 function closeHelpers() { $("#helpers-sheet").hidden = true; }
@@ -821,13 +849,14 @@ function pickHelper(id) {
   // новый разговор, в котором Claude уже работает как выбранный помощник
   const chat = newChat("ask");
   chat.helper = id; chat.title = T(hTitle(h)); chat.emoji = h.icon;
+  NAV_REUSE = true;
   openChat(chat);
   BACK_TO_HELPERS = true;
   if (h.action === "photo") pickFiles("image/*");
   else if (h.action === "live") startLive();
 }
-$("#helpers-close").onclick = closeHelpers;
-$("#helpers-sheet").onclick = (e) => { if (e.target.id === "helpers-sheet") closeHelpers(); };
+$("#helpers-close").onclick = navBack;
+$("#helpers-sheet").onclick = (e) => { if (e.target.id === "helpers-sheet") navBack(); };
 
 /* ===== Видео: кадры для Claude + расшифровка звука ===== */
 async function videoToBlocks(file) {
@@ -1063,6 +1092,7 @@ async function startLive() {
   stopSpeaking();
   track("Живой режим");
   LIVE = { facing: "environment", stream: null, rec: null, busy: false, closed: false, marks: [] };
+  pushNav();
   $("#live").hidden = false;
   $("#live-heard").textContent = ""; $("#live-answer").textContent = "";
   try { await liveCamera(); } catch (e) { stopLive(); alert("Нет доступа к камере. Разрешите камеру для сайта в настройках браузера."); return; }
@@ -1146,7 +1176,7 @@ function stopLive() {
   $("#live-video").srcObject = null;
   scrollDown();
 }
-$("#live-close").onclick = stopLive;
+$("#live-close").onclick = navBack;
 $("#live-flip").onclick = async () => { if (!LIVE) return; LIVE.facing = LIVE.facing === "user" ? "environment" : "user"; try { await liveCamera(); } catch (_) { toast("Не удалось переключить камеру"); } };
 // нажатие на кнопку состояния: во время ответа — перебить и слушать, во время слушания — закончить фразу
 $("#live-state").onclick = () => {
@@ -1733,7 +1763,7 @@ async function prepareAllSamples(btn) {
 
 /* ===== Настройки ===== */
 $("#btn-settings").onclick = openSettings;
-$("#settings-back").onclick = () => { stopPreview(); startHome(); };
+$("#settings-back").onclick = navBack;
 let PREVIEW = null;
 function stopPreview() {
   if (PREVIEW) { try { PREVIEW.pause(); } catch (_) {} PREVIEW = null; }
@@ -1838,7 +1868,7 @@ function openProfile() {
     b.onclick = () => { PF_FORM = b.dataset.form; document.querySelectorAll("#pf-form button").forEach((x) => x.classList.toggle("on", x === b)); };
   });
 }
-$("#profile-back").onclick = () => openSettings();
+$("#profile-back").onclick = navBack;
 $("#pf-save").onclick = () => {
   store.set("profile:" + SESSION.user, {
     name: $("#pf-name").value.trim() || me().name,
@@ -2322,7 +2352,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=59");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=60");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

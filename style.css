@@ -323,3 +323,11 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .followups.start { justify-content: center; }
 .fu-chip { border: 1.5px solid var(--accent); background: var(--surface); color: var(--accent); border-radius: 18px; padding: 10px 14px; font: inherit; font-weight: 700; font-size: .95em; text-align: left; cursor: pointer; max-width: 100%; }
 .fu-chip:active { background: var(--accent-soft); }
+
+/* Полукруглые кнопки «назад» у краёв, чуть ниже середины экрана */
+.fab-back { position: fixed; z-index: 30; top: 62%; width: 26px; height: 52px; padding: 0; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; opacity: .55; backdrop-filter: blur(4px); }
+.fab-back.left { left: env(safe-area-inset-left, 0px); border-left: 0; border-radius: 0 26px 26px 0; padding-right: 4px; }
+.fab-back.right { right: env(safe-area-inset-right, 0px); border-right: 0; border-radius: 26px 0 0 26px; padding-left: 4px; }
+.fab-back:active { opacity: 1; background: var(--accent-soft); color: var(--accent); }
+.fab-back[hidden] { display: none; }
