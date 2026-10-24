@@ -1541,8 +1541,9 @@ class Speaker {
     for (;;) {
       // первый кусок короткий (голос стартует быстрее), остальные крупные (меньше пауз)
       const first = this.count === 0;
-      const min = first ? 50 : 300, max = first ? 260 : 2000;
-      if (!final && rest.length < (first ? min : 1200)) break;
+      // крупные куски Gemini озвучивает слишком долго и соединение обрывается — держим до 450 символов
+      const min = first ? 50 : 150, max = first ? 260 : 450;
+      if (!final && rest.length < (first ? min : 520)) break;
       const re = /[.!?…]+["»)]*\s+/g;
       let end = -1, m;
       while ((m = re.exec(rest))) {
@@ -1571,7 +1572,7 @@ class Speaker {
     this.full = full;
     const t = plain(full);
     let pos = 0;
-    for (const c of chunks) { if (t.slice(pos, pos + c.length) !== c) break; this.add(c); pos += c.length; }
+    for (const c of chunks) { if (c.length > 480 || t.slice(pos, pos + c.length) !== c) break; this.add(c); pos += c.length; }
     this.used = pos;
   }
   next() {
@@ -1584,7 +1585,13 @@ class Speaker {
     while (item && !this.stopped) {
       let url;
       try { url = await item.p; }
-      catch (err) {
+      catch (_) {
+        // одна повторная попытка, прежде чем переходить на голос телефона
+        if (this.stopped) return;
+        try { url = await ttsFetch(item.text); } catch (e) { item.err = e; }
+      }
+      if (!url) {
+        const err = item.err;
         if (this.stopped) return;
         toast((err && err.message ? err.message : "Голос Gemini недоступен") + " — читаю голосом телефона");
         // Gemini не ответил — дочитываем встроенным голосом
@@ -2008,10 +2015,10 @@ function planChunks(full, prev) {
   const t = plain(full);
   const out = [];
   let pos = 0;
-  if (prev) for (const c of prev) { if (t.slice(pos, pos + c.length) !== c) break; out.push(c); pos += c.length; }
+  if (prev) for (const c of prev) { if (c.length > 480 || t.slice(pos, pos + c.length) !== c) break; out.push(c); pos += c.length; }
   let rest = t.slice(pos);
   while (rest.trim()) {
-    const max = out.length === 0 ? 260 : 2000;
+    const max = out.length === 0 ? 260 : 450;
     const re = /[.!?…]+["»)]*\s+/g;
     let end = -1, m;
     while ((m = re.exec(rest))) { const e = m.index + m[0].length; if (e <= max || end < 0) end = e; if (e >= max) break; }
@@ -2433,7 +2440,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=64");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=65");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
