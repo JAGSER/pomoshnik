@@ -32,7 +32,7 @@ function draw(t, k) {
 **Текст**: `text(g,s,x,y,size,{kind:'I'|'D'|'S'|'M', col, al, max, stroke})` · `big(g,s,x,y,size,{fill,stroke,ext,extV,it,max,al})` · `lyric(g,lt,t0,s,x,y,size,{al,col,halo})` · `mono` · `typed(s,lt,t0,cps)` · `banner(g,lt,t0,s,y,{bg})` (лента въезжает слева).
 **Появление**: `pop(g, lt, t0, x, y, g=>{…}, {from, dur, end})` (шлепок вокруг x,y).
 **Элементы**: `sticker(g,x,y,w,h,{rot,col,bar,tape}, (g,w,h)=>{…})` (ярлык со своими координатами) · `tag(g,x,y,title,sub,{center,rot,col})` (бирка) · `rubber(g,s,x,y,{rot,col,size})` (штамп) · `terminal(g,x,y,w,lines,lt,t0)` (строки с '>' печатаются) · `say(g,x,y,s,{tx,ty,col})` (реплика) · `bubble` · `rise(g,lt,t0,s,x,y)` (всплывающее уведомление) · `meter(g,x,y,w,h,f,col)` · `axes(g,ox,oy,w,h,p,{x,y,xt})` · `plot(g,pts,p,{dots})`.
-**HUD**: `hudCounter(g,{label,value,unit,status,statusCol,frac,side,pulse})` (слева вверху) · `hudClock(g,{label,col,ms,blink})` (штамп справа) · `hudCaption(g, CAPS)` (плашка на каждую фразу: `*ключ` подчёркивается, `слово:.4` темнеет на 40 % фразы).
+**HUD**: `hudCounter(g,{label,value,unit,status,statusCol,frac,side,pulse})` (слева вверху) · `hudClock(g,{label,col,ms,year,date,blink})` (штамп справа; ms — метка времени в мс, year — год числом, date — своя строка даты) · `hudCaption(g, CAPS)` (плашка на каждую фразу: `*ключ` подчёркивается, `слово:.4` темнеет на 40 % фразы).
 **Герой**: `hero(g,x,y,s,o)`: (x,y) это центр тела, при s=1 он ≈400×500, ступни на `y + heroFeet(shape)*s`. Параметры o: `shape` drop|bean|round|blob|cloud|star|square|heart · `color` · `fill` 0…1 (тело-сосуд с жидкостью) · `mood` calm|happy|sad|tired|wow|scared|sleep|angry|love · `arms` rest|up|wave|droop|point|none · `run: R.twos(t)*15` · `jump` 0…1 · `look` −1…1 · `talk` 0…1 · `rot` · `top` leaf|antenna|crown|bow · `legs:false`.
 
 ## Рецепт сильного ролика
@@ -45,3 +45,7 @@ function draw(t, k) {
 7. **Ритм**: на каждое слово-событие `pop` или `trace` через 0,3–0,8 с.
 
 Нельзя: `document`, сеть, `Math.random` (используй `R.rnd`), `shadowBlur`, soft-light, зеркальный drawImage на весь кадр, пиксельные циклы. До ~300 фигур на кадр.
+
+
+ВАЖНО: не рисуй известных персонажей, маскотов, логотипы и фирменные образы (покемоны, герои мультфильмов и игр, бренды) — даже если ролик о них. Покажи тему своими метафорами, предметами, датами, схемами и своим героем-талисманом.
+Стикеры и бирки ставь целиком внутри экрана; ролик длинный — меняй композицию и фон каждые 3–5 секунд, не держи один кадр дольше 5 секунд.

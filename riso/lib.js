@@ -280,6 +280,8 @@ const R = (() => {
 
   // ---------- наклеенные элементы ----------
   function sticker(g, x, y, w, h, o = {}, fn) { // бумажный ярлык с тенью; fn(g, w, h) рисует в его координатах
+    // не даём ярлыку уехать за край экрана (обрезанные «GAME F», «GREEN»)
+    if (!o.free) { if (w < 900) x = Math.min(Math.max(x, 60), 1020 - w); if (h < 1500) y = Math.min(Math.max(y, 110), 1690 - h); }
     g.save(); g.translate(x + w / 2, y + h / 2); g.rotate((o.rot || 0) * DEG); g.translate(-w / 2, -h / 2);
     [[1, 5, 6, 7, .09], [3, 8, 2, 3, .09], [2, 4, 1, 1, .13]].forEach(([ox, oy, ex, ey, a]) => {
       g.fillStyle = 'rgba(40,30,20,' + a + ')'; g.fillRect(w, oy, ox + ex, h + ey); g.fillRect(ox, h, w - ox, oy + ey); });
@@ -378,7 +380,8 @@ const R = (() => {
     });
   }
   function hudClock(g, o = {}) { // справа вверху: ● состояние, часы, дата
-    const ms = o.ms ?? Date.UTC(2026, 9, 24, 12) + T * 1000, col = o.col || P.red;
+    // ms можно не задавать; год (1996) или странное число не превращаем в 1970.01.01
+    const year = o.year || (o.ms >= 1000 && o.ms < 3000 ? Math.round(o.ms) : 0), ms = o.ms > 1e11 ? o.ms : year ? Date.UTC(year, 0, 1, 12) + T * 1000 : Date.UTC(2026, 9, 24, 12) + T * 1000, col = o.col || P.red;
     sticker(g, W - 376, 112, 316, 118, { rot: 1.2 }, () => {
       if (o.blink === false || T % 1 < .6) { g.fillStyle = o.dotCol || col; g.beginPath(); g.arc(24, 28, 7, 0, PI2); g.fill(); }
       const lw = mono(g, o.label || 'LIVE', 40, 35, 21, { col, ls: 2, max: 150 }).w;
