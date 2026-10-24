@@ -2275,7 +2275,7 @@ function mascotTip() {
   mascotTip.k = setTimeout(() => { m.classList.remove("talk"); mascotLook(0, 0); }, 600 + tips[i].length * 22);
 }
 // куда смотрит глаз: dx, dy от -1 до 1
-function mascotLook(dx, dy) { const p = document.querySelector("#mascot .m-pupil"); if (p) p.style.transform = `translate(${dx * 24}px, ${dy * 20}px)`; }
+function mascotLook(dx, dy) { const p = document.querySelector("#mascot .m-eye"); if (p) p.style.transform = `translate(${Math.round(dx * 44)}px, ${Math.round(dy * 30)}px)`; }
 function mascotVisible() { const m = $("#mascot"); return !!m && !m.hidden && !document.hidden && curScreen() === "screen-home"; }
 function mascotPlay(cls, ms) { const m = $("#mascot"); m.classList.remove(cls); void m.offsetWidth; m.classList.add(cls); setTimeout(() => m.classList.remove(cls), ms); }
 // осматривается и моргает
@@ -3128,7 +3128,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=84");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=85");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

@@ -428,10 +428,10 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .topbar { position: relative; }
 .mascot { position: relative; width: 48px; height: 48px; min-width: 48px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 14px; }
 .mascot svg { width: 100%; height: 100%; display: block; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.15); overflow: visible; }
-.mascot .m-smile, .mascot .m-eye { transform-box: fill-box; transform-origin: center; }
-.mascot .m-pupil { transition: transform .35s cubic-bezier(.3,1.4,.5,1); }
-.mascot .m-eye { transition: transform .08s; }
-.mascot.blink .m-eye { transform: scaleY(.12); }
+.mascot .m-smile, .mascot .m-ball { transform-box: fill-box; transform-origin: center; }
+.mascot .m-eye { transition: transform .35s cubic-bezier(.3,1.4,.5,1); }
+.mascot .m-ball { transition: transform .08s; }
+.mascot.blink .m-ball { transform: scaleY(.12); }
 .mascot.talk .m-smile { animation: m-talk .28s ease-in-out infinite alternate; }
 @keyframes m-talk { from { transform: scale(1,1); } to { transform: scale(.82,.5); } }
 .mascot.happy .m-smile { animation: m-laugh .9s ease; }
