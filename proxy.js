@@ -27,7 +27,7 @@ function cors(origin) {
   return {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-User, X-Pass, X-Meta",
     "Access-Control-Expose-Headers": "X-TTS-Model",
     "Vary": "Origin",
   };
@@ -201,6 +201,53 @@ async function samplePut(voice, bytes) {
   } catch (e) { console.log("KV запись не удалась", String(e)); }
 }
 
+// ===== Ролики, которыми делятся: хранятся в KV частями, живут полгода =====
+const VID_TTL = { expireIn: 180 * 24 * 3600_000 };
+const VID_MEM = new Map();
+function vidId() { const a = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"; return [...crypto.getRandomValues(new Uint8Array(8))].map((b) => a[b % a.length]).join(""); }
+async function blobPut(kv, prefix, bytes) {
+  const size = 60000, n = Math.ceil(bytes.length / size);
+  for (let i = 0; i < n; i += 10) {
+    const op = kv.atomic();
+    for (let j = i; j < Math.min(n, i + 10); j++) op.set([...prefix, j], bytes.slice(j * size, (j + 1) * size), VID_TTL);
+    await op.commit();
+  }
+  return n;
+}
+async function blobGet(kv, prefix, n) {
+  const keys = []; for (let i = 0; i < n; i++) keys.push([...prefix, i]);
+  const parts = [];
+  for (let i = 0; i < keys.length; i += 10) { const got = await kv.getMany(keys.slice(i, i + 10)); for (const g of got) { if (!g.value) return null; parts.push(g.value); } }
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+async function vidCounts(kv, id) {
+  const [v, hh] = await kv.getMany([["vidc", id, "views"], ["vidc", id, "hearts"]]);
+  return { views: v.value ? Number(v.value) : 0, hearts: hh.value ? Number(hh.value) : 0 };
+}
+function rangeResponse(req, bytes, type, h) {
+  const base = { ...h, "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable", "Accept-Ranges": "bytes", "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges" };
+  const rg = (req.headers.get("Range") || "").match(/bytes=(\d*)-(\d*)/);
+  if (rg) {
+    const a = rg[1] === "" ? Math.max(0, bytes.length - Number(rg[2])) : Number(rg[1]);
+    const b = Math.min(rg[1] !== "" && rg[2] !== "" ? Number(rg[2]) : bytes.length - 1, bytes.length - 1);
+    if (a > b) return new Response(null, { status: 416, headers: { ...base, "Content-Range": `bytes */${bytes.length}` } });
+    return new Response(bytes.slice(a, b + 1), { status: 206, headers: { ...base, "Content-Range": `bytes ${a}-${b}/${bytes.length}`, "Content-Length": String(b - a + 1) } });
+  }
+  return new Response(bytes, { status: 200, headers: { ...base, "Content-Length": String(bytes.length) } });
+}
+const REACT_HITS = new Map();
+function reactLimited(ip) {
+  const now = Date.now(), arr = (REACT_HITS.get(ip) || []).filter((t) => now - t < 3600_000);
+  arr.push(now); REACT_HITS.set(ip, arr);
+  return arr.length > 40;
+}
+function headerAuth(req, ip) {
+  const dec = (v) => { try { return decodeURIComponent(v || ""); } catch (_) { return ""; } };
+  return auth({ user: dec(req.headers.get("X-User")), password: dec(req.headers.get("X-Pass")) }, ip);
+}
+
 // Музыка для видео (сгенерирована в Runway) — хранится в KV частями по 60 КБ
 async function musicGet(id) {
   const kv = await kvOpen(); if (!kv) return null;
@@ -277,6 +324,73 @@ export async function handler(req, info) {
     }
     return new Response(bytes, { status: 200, headers: { ...base, "Content-Length": String(bytes.length) } });
   }
+  // ===== ролики =====
+  const vm = url.pathname.match(/^\/video\/([A-Za-z0-9]{8})\.(mp4|webm|jpg)$/);
+  if (req.method === "GET" && vm) {
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const meta = (await kv.get(["vid", vm[1], "meta"])).value;
+    if (!meta) return json({ error: "Ролик не найден или срок хранения истёк" }, 404, h);
+    if (vm[2] === "jpg") {
+      if (!meta.posterN) return json({ error: "Нет обложки" }, 404, h);
+      const img = await blobGet(kv, ["vid", vm[1], "p"], meta.posterN);
+      return img ? new Response(img, { status: 200, headers: { ...h, "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } }) : json({ error: "Нет обложки" }, 404, h);
+    }
+    let bytes = VID_MEM.get(vm[1]);
+    if (!bytes) { bytes = await blobGet(kv, ["vid", vm[1], "d"], meta.n); if (bytes && VID_MEM.size < 12) VID_MEM.set(vm[1], bytes); }
+    if (!bytes) return json({ error: "Ролик повреждён" }, 404, h);
+    return rangeResponse(req, bytes, meta.type || "video/mp4", h);
+  }
+  const vmeta = url.pathname.match(/^\/video-meta\/([A-Za-z0-9]{8})$/);
+  if (req.method === "GET" && vmeta) {
+    const kv = await kvOpen(); const meta = kv && (await kv.get(["vid", vmeta[1], "meta"])).value;
+    if (!meta) return json({ error: "Ролик не найден" }, 404, h);
+    return json({ id: meta.id, title: meta.title, caption: meta.caption, name: meta.name, lang: meta.lang, created: meta.created, type: meta.type, poster: !!meta.posterN, ...(await vidCounts(kv, meta.id)) }, 200, h);
+  }
+  // просмотр и реакции — без пароля (их оставляют получатели)
+  if (req.method === "POST" && (url.pathname === "/video-view" || url.pathname === "/video-react")) {
+    let b; try { b = await req.json(); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
+    const id = String(b.id || ""); if (!/^[A-Za-z0-9]{8}$/.test(id)) return json({ error: "Неверный ролик" }, 400, h);
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    if (!(await kv.get(["vid", id, "meta"])).value) return json({ error: "Ролик не найден" }, 404, h);
+    const ipKey = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip + id)))].slice(0, 8).map((x) => x.toString(16).padStart(2, "0")).join("");
+    if (url.pathname === "/video-view") {
+      const seenKey = ["vidv", id, ipKey];
+      if (!(await kv.get(seenKey)).value) await kv.atomic().set(seenKey, 1, { expireIn: 6 * 3600_000 }).sum(["vidc", id, "views"], 1n).commit();
+      return json({ ok: true, ...(await vidCounts(kv, id)) }, 200, h);
+    }
+    if (reactLimited(ip)) return json({ error: "Слишком много, попробуйте позже" }, 429, h);
+    const kind = b.kind === "reply" ? "reply" : "heart";
+    const text = String(b.text || "").trim().slice(0, 500), name = String(b.name || "").trim().slice(0, 40);
+    if (kind === "reply" && !text) return json({ error: "Пустой ответ" }, 400, h);
+    const at = Date.now(), op = kv.atomic().set(["vidr", id, at + "-" + ipKey], { kind, text, name, at }, VID_TTL);
+    if (kind === "heart") op.sum(["vidc", id, "hearts"], 1n);
+    await op.commit();
+    return json({ ok: true, ...(await vidCounts(kv, id)) }, 200, h);
+  }
+  // загрузка ролика: тело — сам файл, пароль в заголовках
+  if (req.method === "POST" && (url.pathname === "/video-upload" || url.pathname === "/video-poster")) {
+    const user = headerAuth(req, ip);
+    if (user.err) return json({ error: user.err }, user.status, h);
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (url.pathname === "/video-poster") {
+      const id = url.searchParams.get("id") || "";
+      const meta = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["vid", id, "meta"])).value;
+      if (!meta || meta.user !== user.id) return json({ error: "Ролик не найден" }, 404, h);
+      if (bytes.length > 600_000) return json({ error: "Обложка слишком большая" }, 413, h);
+      meta.posterN = await blobPut(kv, ["vid", id, "p"], bytes);
+      await kv.set(["vid", id, "meta"], meta, VID_TTL);
+      return json({ ok: true }, 200, h);
+    }
+    if (bytes.length < 10_000 || bytes.length > 40_000_000) return json({ error: "Размер ролика не подходит" }, 413, h);
+    let m = {}; try { m = JSON.parse(decodeURIComponent(req.headers.get("X-Meta") || "{}")); } catch (_) {}
+    const id = vidId(), created = Date.now();
+    const n = await blobPut(kv, ["vid", id, "d"], bytes);
+    const meta = { id, user: user.id, name: String(m.name || "").slice(0, 40), title: String(m.title || "").slice(0, 80), caption: String(m.caption || "").slice(0, 600),
+      lang: m.lang === "en" ? "en" : "ru", type: /webm/.test(req.headers.get("Content-Type") || "") ? "video/webm" : "video/mp4", size: bytes.length, n, created };
+    await kv.atomic().set(["vid", id, "meta"], meta, VID_TTL).set(["vidu", user.id, created, id], 1, VID_TTL).commit();
+    return json({ ok: true, id }, 200, h);
+  }
   if (url.pathname === "/samples") {
     const have = [];
     const kv = await kvOpen();
@@ -321,6 +435,28 @@ export async function handler(req, info) {
     return json({ ok: true, code }, 200, h);
   }
 
+  // мои ролики: просмотры, сердечки, ответы; и ролики семьи за неделю
+  if (url.pathname === "/video-stats") {
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+    const mine = [], family = [], weekAgo = Date.now() - 7 * 24 * 3600_000;
+    for await (const e of kv.list({ prefix: ["vidu"] }, { limit: 500 })) {
+      const [, uid, created, id] = e.key;
+      const isMine = uid === user.id;
+      if (!isMine && created < weekAgo) continue;
+      const meta = (await kv.get(["vid", id, "meta"])).value; if (!meta) continue;
+      const c = await vidCounts(kv, id);
+      const item = { id, title: meta.title, name: meta.name, user: uid, created, poster: !!meta.posterN, ...c };
+      if (isMine) {
+        item.replies = [];
+        for await (const r of kv.list({ prefix: ["vidr", id] }, { reverse: true, limit: 20 })) if (r.value.kind === "reply") item.replies.push(r.value);
+        mine.push(item);
+      }
+      if (created >= weekAgo) family.push(item);
+    }
+    mine.sort((a, b) => b.created - a.created); family.sort((a, b) => b.views + b.hearts * 3 - (a.views + a.hearts * 3));
+    return json({ mine: mine.slice(0, 50), family: family.slice(0, 20) }, 200, h);
+  }
+
   // забрать треки из Runway (только с его CDN) и положить в хранилище; уже лежащие не трогаем
   if (url.pathname === "/music-import") {
     const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
@@ -359,6 +495,22 @@ export async function handler(req, info) {
     const line = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().split("\n")[0];
     const m = line.match(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*(.*)$/u);
     return json({ emoji: m ? m[1] : "💬", title: (m ? m[2] : line).replace(/^["«]|["».]$/g, "").slice(0, 60) }, 200, h);
+  }
+
+  // подпись к ролику для мессенджера — от лица отправителя
+  if (url.pathname === "/caption") {
+    const text = String(body.text || "").slice(0, 2500);
+    const r = await callAnthropic(key, {
+      model: env("TITLE_MODEL", "claude-haiku-5-5"),
+      max_tokens: 160,
+      system: body.lang === "en"
+        ? "Write a short warm message (1–2 sentences, up to 200 characters) that a person sends to family or friends together with a short video about the text below. First person, natural, like a real message in a messenger, one fitting emoji. No hashtags, no quotes, do not mention AI or apps."
+        : "Напиши короткое тёплое сообщение (1–2 предложения, до 200 символов), которое человек отправляет родным или друзьям вместе с коротким видео по тексту ниже. От первого лица, живо, как в мессенджере, одно подходящее эмодзи. Без хэштегов и кавычек, не упоминай ИИ и приложения.",
+      messages: [{ role: "user", content: (body.title ? "Тема: " + String(body.title).slice(0, 80) + "\n\n" : "") + text }],
+    });
+    if (!r.ok) return json({ error: "Не удалось придумать подпись" }, 502, h);
+    const d = await r.json();
+    return json({ caption: (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().replace(/^["«]|["»]$/g, "").slice(0, 300) }, 200, h);
   }
 
   // Расшифровка звука из видео (Gemini слышит, Claude — нет)

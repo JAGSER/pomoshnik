@@ -24,6 +24,8 @@ const show = (id) => {
 async function goBack() {
   const sheet = document.getElementById("helpers-sheet");
   if (sheet && !sheet.hidden) { sheet.hidden = true; HELPERS_EDIT = false; return; }
+  const vs = [...document.querySelectorAll(".sheet.vsheet")].find((x) => !x.hidden);
+  if (vs) { vs.hidden = true; if (vs.id === "share-sheet") stopSharePreview(); return; }
   const live = document.getElementById("live");
   if (live && !live.hidden) { stopLive(); return; }
   const cur = curScreen();
@@ -333,6 +335,13 @@ async function startHome() {
     b.onclick = openHelpers;
     grid.append(b);
   }
+  {
+    const b = el("button", "preset preset-videos");
+    b.innerHTML = `<span class="pi">🎬</span><span><span class="pt">Ролики</span><span class="ps">Ваши и семейные: кто посмотрел и что ответил</span></span>`;
+    b.onclick = () => openVideos();
+    grid.append(b);
+  }
+  refreshVidBanner();
 
   const list = $("#history");
   list.innerHTML = "";
@@ -694,6 +703,7 @@ async function ask() {
     const acts = actions(full, msg);
     bubble.append(acts);
     if (msg.options) showFollowups(msg.options);
+    if (!LIVE) offerVideo(acts, full, msg);
     await save();
     autoTitle(CHAT);
     const btn = acts.querySelector(".speak-btn");
@@ -801,7 +811,10 @@ function renderBdayBanner() {
     const age = b.y ? ` (${new Date().getFullYear() + (b.left > 0 && new Date().getMonth() > b.m - 1 ? 1 : 0) - b.y})` : "";
     row.textContent = b.left === 0 ? `🎂 Сегодня день рождения: ${b.name}${age}` : `🎂 ${b.name}: день рождения через ${b.left} ${b.left === 1 ? "день" : b.left < 5 ? "дня" : "дней"}`;
     row.onclick = () => { if (CFG.helpers && CFG.helpers.birthdays && allowedHelpers().some(([id]) => id === "birthdays")) { pickHelper("birthdays"); setTimeout(() => quickSend(`Помоги поздравить: ${b.name}`), 50); } };
-    box.append(row);
+    const vb = el("button", "bday-video"); vb.type = "button";
+    vb.textContent = (LANG === "en" ? "🎬 Make a video card for: " : "🎬 Сделать видеооткрытку для: ") + b.name;
+    vb.onclick = () => bdayVideo(b);
+    box.append(row, vb);
   });
 }
 
@@ -2044,8 +2057,8 @@ function vidNote(btn, text) {
   if (!n || !n.classList.contains("vid-note")) { n = el("div", "vid-note"); row.after(n); }
   n.textContent = text;
 }
-async function videoButton(btn, text, msg) {
-  if (btn._ready) { track("Видео сохранено"); return saveVideo(btn._ready, btn); }
+async function videoButton(btn, text, msg, opt = {}) {
+  if (btn._ready) { track("Видео: отправка"); return openShare(btn._ready, btn._ctx); }
   if (VIDEO_BUSY) { toast("Подождите, видео ещё собирается"); return; }
   if (!useGemini()) { toast("Для видео нужен голос Gemini — сейчас он недоступен"); return; }
   VIDEO_BUSY = true;
@@ -2118,6 +2131,7 @@ async function videoButton(btn, text, msg) {
     if (scene.log) scene.log(`видео собрано за ${Math.round((Date.now() - tEnc) / 1000)} с; озвучка заняла ${tVoice} с; всего ${Math.round((Date.now() - tStart) / 1000)} с`);
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
+    btn._ctx = { title, text, msg, emoji };
     if (IS_APPLE || me().admin || me().creative) {
       let peak = 0; for (let i = 0; i < pcm.length; i += 64) { const x = Math.abs(pcm[i]); if (x > peak) peak = x; }
       const a = (await audioInFile(blob)) + (peak > 0.02 ? "" : "-silent");
@@ -2125,10 +2139,10 @@ async function videoButton(btn, text, msg) {
     }
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
-    label("💾 Видео");
+    label("📤 Отправить");
     btn.classList.add("ready");
     stopTimer(true);
-    toast("Видео готово — нажмите «💾 Видео», чтобы сохранить");
+    if (opt.autoShare) openShare(btn._ready, btn._ctx);
   } catch (err) {
     console.error(err);
     btn.disabled = false;
@@ -2149,6 +2163,181 @@ async function saveVideo(file, btn) {
   a.download = file.name;
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+/* ===== Делиться роликами: ссылка с подписью, просмотры, сердечки и ответы ===== */
+function vidLink(id) { return "https://pomoshnik.ai/v/?" + id; }
+function openVSheet(id) { const sh = $("#" + id); if (sh.hidden) pushNav(); sh.hidden = false; }
+function authHeaders(extra) { return { "X-User": encodeURIComponent(SESSION.user), "X-Pass": encodeURIComponent(SESSION.password), ...extra }; }
+async function apiPost(path, body) {
+  const r = await fetch(CFG.proxy + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: SESSION.user, password: SESSION.password, ...body }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "Нет связи");
+  return d;
+}
+// кадр из ролика для обложки (на 1-й секунде)
+function videoPoster(file) {
+  return new Promise((res) => {
+    const v = document.createElement("video"), url = URL.createObjectURL(file);
+    const done = (b) => { URL.revokeObjectURL(url); res(b); };
+    const t = setTimeout(() => done(null), 6000);
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+    v.onloadeddata = () => { try { v.currentTime = Math.min(1, (v.duration || 2) / 3); } catch (_) { clearTimeout(t); done(null); } };
+    v.onseeked = () => {
+      try { const c = document.createElement("canvas"); c.width = 360; c.height = 640; c.getContext("2d").drawImage(v, 0, 0, 360, 640); c.toBlob((b) => { clearTimeout(t); done(b); }, "image/jpeg", 0.78); }
+      catch (_) { clearTimeout(t); done(null); }
+    };
+    v.onerror = () => { clearTimeout(t); done(null); };
+  });
+}
+async function uploadVideo(file, meta) {
+  const r = await fetch(CFG.proxy + "/video-upload", { method: "POST", headers: authHeaders({ "Content-Type": file.type || "video/mp4", "X-Meta": encodeURIComponent(JSON.stringify(meta)) }), body: file });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.id) throw new Error(d.error || "Не удалось загрузить ролик");
+  videoPoster(file).then((b) => b && fetch(CFG.proxy + "/video-poster?id=" + d.id, { method: "POST", headers: authHeaders({ "Content-Type": "image/jpeg" }), body: b })).catch(() => {});
+  return d.id;
+}
+let SHARE = null;
+function stopSharePreview() { const v = $("#share-video"); if (v) { try { v.pause(); } catch (_) {} } if (SHARE && SHARE.url) { URL.revokeObjectURL(SHARE.url); SHARE.url = null; } v && v.removeAttribute("src"); }
+function shareStatus(t) { $("#share-status").textContent = t || ""; }
+function openShare(file, ctx = {}) {
+  stopSharePreview();
+  const msg = ctx.msg || null;
+  const S = SHARE = { file, ctx, url: URL.createObjectURL(file), id: msg && msg.vidId ? msg.vidId : null, up: null };
+  const v = $("#share-video"); v.src = S.url;
+  const cap = $("#share-caption");
+  cap.value = msg && msg.vidCaption ? msg.vidCaption : ""; cap.placeholder = T("Придумываю подпись…");
+  if (!cap.value) apiPost("/caption", { text: (ctx.text || "").slice(0, 2500), title: ctx.title || "", lang: LANG }).then((d) => { if (SHARE === S && !cap.value) cap.value = d.caption || ""; }).catch(() => { cap.placeholder = T("Напишите пару слов к ролику"); });
+  // ролик загружается сразу, пока человек читает подпись, — тогда «Отправить ссылку» срабатывает мгновенно
+  const linkBtn = $("#share-link");
+  const ready = () => { linkBtn.disabled = false; linkBtn.textContent = T("🔗 Отправить ссылку"); shareStatus(T("По ссылке видно, сколько раз посмотрели, и вам могут ответить")); };
+  if (S.id) ready();
+  else {
+    linkBtn.disabled = true; linkBtn.textContent = T("⏳ Готовлю ссылку…"); shareStatus("");
+    S.up = uploadVideo(file, { title: ctx.title || "", caption: "", name: me().name || profile().name || "", lang: LANG })
+      .then((id) => { S.id = id; if (msg) { msg.vidId = id; save(); } if (SHARE === S) ready(); return id; })
+      .catch((e) => { if (SHARE === S) { linkBtn.disabled = false; linkBtn.textContent = T("🔁 Повторить"); shareStatus(T("Ссылка не получилась: ") + e.message); } throw e; });
+  }
+  linkBtn.onclick = async () => {
+    if (!S.id) { try { await openShare(file, ctx); } catch (_) {} return; }
+    const text = cap.value.trim();
+    if (msg) { msg.vidCaption = text; save(); }
+    track("Видео: ссылка");
+    await shareText((text ? text + "\n" : "") + vidLink(S.id));
+  };
+  $("#share-file").onclick = async () => {
+    track("Видео: файл");
+    const text = cap.value.trim();
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text: text || undefined }); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    saveVideo(file);
+  };
+  $("#share-save").onclick = () => { track("Видео сохранено"); saveVideo(file); };
+  openVSheet("share-sheet");
+}
+async function shareText(t) {
+  if (navigator.share) { try { await navigator.share({ text: t }); return; } catch (e) { if (e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(t); toast(T("Ссылка скопирована: вставьте её в WhatsApp или Telegram")); }
+  catch (_) { prompt(T("Скопируйте ссылку:"), t); }
+}
+$("#share-close").onclick = () => navBack();
+$("#share-sheet").onclick = (e) => { if (e.target.id === "share-sheet") navBack(); };
+
+// ролики: мои (просмотры, сердечки, ответы) и семейные за неделю
+let VSTATS = null;
+function vidSeen() { return store.get("vidSeen:" + SESSION.user) || {}; }
+function markVidSeen() {
+  if (!VSTATS) return;
+  const seen = {}; VSTATS.mine.forEach((v) => (seen[v.id] = { views: v.views, hearts: v.hearts, replies: (v.replies || []).length }));
+  store.set("vidSeen:" + SESSION.user, seen);
+  store.set("vidFamilySeen:" + SESSION.user, Date.now());
+}
+async function loadVidStats() { try { VSTATS = await apiPost("/video-stats", {}); } catch (_) { VSTATS = VSTATS || null; } return VSTATS; }
+const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c);
+async function refreshVidBanner() {
+  const box = $("#vid-banner"); box.hidden = true;
+  const st = await loadVidStats(); if (!st || curScreen() !== "screen-home") return;
+  const seen = vidSeen(), lines = [];
+  st.mine.forEach((v) => {
+    const s = seen[v.id] || { views: 0, hearts: 0, replies: 0 };
+    const newR = (v.replies || []).slice(0, (v.replies || []).length - s.replies);
+    newR.slice(0, 2).forEach((r) => lines.push(`💬 ${r.name || T("Кто-то")} ${T("ответил(а) на ваш ролик:")} «${r.text.slice(0, 80)}»`));
+    if (v.views > s.views || v.hearts > s.hearts) lines.push(`❤️ «${v.title || T("Ролик")}»: ${v.views} ${plural(v.views, "просмотр", "просмотра", "просмотров")}${v.hearts ? `, ${v.hearts} ${plural(v.hearts, "сердечко", "сердечка", "сердечек")}` : ""}`);
+  });
+  const lastFam = store.get("vidFamilySeen:" + SESSION.user) || 0;
+  const famNew = st.family.filter((v) => v.user !== SESSION.user && v.created > lastFam);
+  if (famNew.length) lines.push(`🎬 ${T("Новые ролики семьи за неделю:")} ${famNew.length}`);
+  if (!lines.length) return;
+  box.innerHTML = "";
+  const b = el("button", "vid-banner-row"); b.type = "button";
+  b.innerHTML = lines.slice(0, 3).map((l) => `<span>${esc(l)}</span>`).join("");
+  b.onclick = () => openVideos(famNew.length && !st.mine.length ? "family" : "mine");
+  box.append(b); box.hidden = false;
+}
+let VIDTAB = "mine";
+async function openVideos(tab) {
+  if (tab) VIDTAB = tab;
+  openVSheet("videos-sheet");
+  const list = $("#videos-list"); list.innerHTML = `<p class="sheet-hint">${T("Загружаю…")}</p>`;
+  const st = await loadVidStats();
+  renderVideos(st);
+  markVidSeen(); $("#vid-banner").hidden = true;
+}
+function renderVideos(st) {
+  document.querySelectorAll("#videos-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === VIDTAB));
+  const list = $("#videos-list"); list.innerHTML = "";
+  if (!st) { list.innerHTML = `<p class="sheet-hint">${T("Нет связи. Попробуйте позже.")}</p>`; return; }
+  const items = VIDTAB === "mine" ? st.mine : st.family;
+  if (!items.length) {
+    list.innerHTML = `<p class="sheet-hint">${VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
+    return;
+  }
+  const seen = vidSeen();
+  items.forEach((v) => {
+    const c = el("div", "vid-item");
+    const who = VIDTAB === "family" ? `<span class="vid-who">${esc(v.user === SESSION.user ? T("Вы") : v.name || "")}</span>` : "";
+    const s = seen[v.id] || { views: 0, hearts: 0, replies: 0 };
+    const fresh = VIDTAB === "mine" && (v.views > s.views || v.hearts > s.hearts || (v.replies || []).length > s.replies);
+    c.innerHTML = `<img class="vid-thumb" alt="" loading="lazy" ${v.poster ? `src="${CFG.proxy}/video/${v.id}.jpg"` : ""}>
+      <div class="vid-body">${who}<b>${esc(v.title || T("Ролик"))}</b>
+        <span class="vid-stats">${fresh ? '<span class="vid-new">' + T("новое") + "</span> " : ""}👀 ${v.views} · ❤️ ${v.hearts}${VIDTAB === "mine" ? ` · 💬 ${(v.replies || []).length}` : ""} · ${fmtDate(v.created)}</span>
+        <div class="vid-replies"></div>
+        <div class="vid-btns"><button type="button" class="vid-open">▶ ${T("Смотреть")}</button><button type="button" class="vid-again">📤 ${VIDTAB === "mine" ? T("Отправить ещё") : T("Переслать")}</button></div>
+      </div>`;
+    const rep = c.querySelector(".vid-replies");
+    (v.replies || []).slice(0, 5).forEach((r) => { const p = el("p", "vid-reply"); p.textContent = `💬 ${r.name || T("Кто-то")}: ${r.text}`; rep.append(p); });
+    c.querySelector(".vid-open").onclick = () => window.open(vidLink(v.id), "_blank");
+    c.querySelector(".vid-again").onclick = () => shareText((v.title ? v.title + "\n" : "") + vidLink(v.id));
+    list.append(c);
+  });
+}
+document.querySelectorAll("#videos-tabs button").forEach((b) => (b.onclick = () => { VIDTAB = b.dataset.tab; renderVideos(VSTATS); }));
+$("#videos-close").onclick = () => navBack();
+$("#videos-sheet").onclick = (e) => { if (e.target.id === "videos-sheet") navBack(); };
+
+// под полезным ответом — предложение сделать ролик и отправить семье
+function offerVideo(acts, text, msg) {
+  if (CHAT && CHAT.autoVideo) {
+    CHAT.autoVideo = false; save();
+    const vb = acts.querySelector(".vid-btn"); if (vb) setTimeout(() => videoButton(vb, text, msg, { autoShare: true }), 300);
+    return;
+  }
+  if (plain(text).length < 450 || !useGemini()) return;
+  document.querySelectorAll(".offer-vid").forEach((x) => x.remove());
+  const b = el("button", "offer-vid"); b.type = "button";
+  b.textContent = T("🎬 Сделать ролик и отправить семье");
+  b.onclick = () => { b.remove(); const vb = acts.querySelector(".vid-btn"); if (vb) videoButton(vb, text, msg, { autoShare: true }); };
+  acts.after(b);
+}
+// видеооткрытка ко дню рождения: Claude пишет поздравление, из него сразу делается ролик
+function bdayVideo(b) {
+  const useHelper = CFG.helpers && CFG.helpers.birthdays && allowedHelpers().some(([id]) => id === "birthdays");
+  if (useHelper) pickHelper("birthdays"); else openChat(newChat((me().presets || Object.keys(CFG.presets))[0]));
+  CHAT.autoVideo = true;
+  setTimeout(() => quickSend(LANG === "en"
+    ? `Write a short warm birthday greeting for ${b.name} from me (4–6 sentences) — I'll turn it into a video card.`
+    : `Напиши короткое тёплое поздравление с днём рождения для: ${b.name}, от меня (4–6 предложений). Из него я сделаю видеооткрытку.`), 60);
 }
 
 // Субтитры: кусок делится на фразы, время — пропорционально длине фраз
@@ -2446,7 +2635,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=68");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=69");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

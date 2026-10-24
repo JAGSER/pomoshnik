@@ -351,3 +351,32 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .music-row[hidden] { display: none; }
 .music-lbl { font-weight: 600; flex: 0 0 100%; }
 #set-music { flex: 1; min-width: 0; font: inherit; font-size: 18px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+
+/* ===== Ролики: отправка, список, баннер ===== */
+.share-card { display: flex; flex-direction: column; gap: 10px; }
+.share-card > * { flex: none; }
+.share-video { width: 100%; height: 30vh; max-height: 30vh; border-radius: 16px; background: #000; object-fit: contain; }
+.share-lbl { font-weight: 700; margin-top: 4px; }
+.share-caption { width: 100%; font: inherit; font-size: 1.05em; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; resize: vertical; }
+.share-main { font-size: 1.15em; min-height: 58px; }
+.share-main:disabled { opacity: .7; }
+.share-status { margin: 0; text-align: center; }
+.share-more { display: flex; gap: 8px; }
+.share-more .btn { flex: 1; border: 1.5px solid var(--line); color: var(--ink); font-size: 1em; padding: 12px 8px; white-space: nowrap; }
+.vid-banner { margin-bottom: 12px; }
+.vid-banner[hidden] { display: none; }
+.vid-banner-row { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 6px; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 16px; padding: 14px 16px; font: inherit; font-weight: 600; font-size: 1.02em; cursor: pointer; }
+.bday-video { text-align: left; border: 1.5px dashed var(--accent); background: transparent; color: var(--accent); border-radius: 16px; padding: 12px 16px; font: inherit; font-weight: 700; cursor: pointer; }
+#videos-tabs { margin: 10px 0 12px; }
+.videos-list { display: flex; flex-direction: column; gap: 10px; }
+.vid-item { display: flex; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 10px; }
+.vid-thumb { width: 72px; height: 128px; border-radius: 12px; object-fit: cover; background: var(--accent-soft); flex: none; }
+.vid-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.vid-body b { font-size: 1.05em; line-height: 1.25; }
+.vid-who { color: var(--accent); font-weight: 700; font-size: .9em; }
+.vid-stats { color: var(--muted); font-size: .92em; }
+.vid-new { background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 1px 7px; font-size: .85em; font-weight: 700; }
+.vid-reply { margin: 0; background: var(--accent-soft); border-radius: 12px; padding: 6px 10px; font-size: .95em; }
+.vid-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.vid-btns button { font: inherit; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 8px 12px; cursor: pointer; }
+.offer-vid { display: block; margin: 10px 0 0; width: 100%; text-align: center; border: 1.5px dashed var(--accent); background: transparent; color: var(--accent); border-radius: 14px; padding: 12px; font: inherit; font-weight: 700; cursor: pointer; }
