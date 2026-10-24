@@ -2238,7 +2238,7 @@ function isStandalone() { return matchMedia("(display-mode: standalone)").matche
 function updateInstall() {
   const can = !isStandalone() && (INSTALL_EVT || IS_IOS);
   document.querySelectorAll(".install-btn").forEach((b) => (b.hidden = !can));
-  const m = $("#mascot"); if (m) { m.hidden = !!can; if (can) $("#mascot-tip").hidden = true; }
+  const m = $("#mascot"); if (m) { m.hidden = !!can; if (can) $("#mascot-tip").hidden = true; m.classList.toggle("first", !can && !store.get("tipsClicks")); }
 }
 /* ===== Логотип-помощник: советы по нажатию, иногда шевелится ===== */
 const TIPS = () => [
@@ -2324,7 +2324,7 @@ function mascotTip() {
   box.innerHTML = tips[i] + `<span class="m-next">${LL("Нажмите на значок ещё раз для следующего совета", "Tap the logo again for another tip")}</span>`;
   box.hidden = false;
   clearTimeout(mascotTip.t); mascotTip.t = setTimeout(() => (box.hidden = true), 9000);
-  const m = $("#mascot"); m.classList.remove("hinting");
+  const m = $("#mascot"); m.classList.remove("hinting", "first");
   // «говорит»: рот двигается, глаз смотрит на сообщение
   mascotLook(-0.5, 1);
   m.classList.add("talk"); clearTimeout(mascotTip.k);
@@ -3280,7 +3280,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=93");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=94");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
