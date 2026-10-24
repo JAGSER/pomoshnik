@@ -562,11 +562,22 @@ export async function handler(req, info) {
   // мои ролики: просмотры, сердечки, ответы; и ролики семьи за неделю
   if (url.pathname === "/video-stats") {
     const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
-    const mine = [], family = [], weekAgo = Date.now() - 7 * 24 * 3600_000;
-    for await (const e of kv.list({ prefix: ["vidu"] }, { limit: 500 })) {
+    const mine = [], family = [], every = [], weekAgo = Date.now() - 7 * 24 * 3600_000;
+    // круги семьи: кто чьи ролики видит (Vie отдельно от русскоязычной семьи; администратор видит всех)
+    let circles = { mama: ["ru"], papa: ["ru"], sister: ["ru"], yuri: ["ru", "vie"], vie: ["vie"] };
+    try { if (env("FAMILY_CIRCLES")) circles = JSON.parse(env("FAMILY_CIRCLES")); } catch (_) {}
+    const myCircles = user.acct ? [] : circles[user.id] || [];
+    const isAdmin = !user.acct && ADMINS().includes(user.id);
+    for await (const e of kv.list({ prefix: ["vidu"] }, { reverse: true, limit: 1000 })) {
       const [, uid, created, id] = e.key;
       const isMine = uid === user.id;
-      if (!isMine && (created < weekAgo || user.acct || /^[gu]_/.test(uid))) continue;
+      const theirs = circles[uid] ? circles[uid][0] : null;
+      const inFamily = !isMine && created >= weekAgo && theirs && myCircles.includes(theirs);
+      if (isAdmin && every.length < 150) {
+        const meta = (await kv.get(["vid", id, "meta"])).value;
+        if (meta) every.push({ id, title: meta.title, name: meta.name || (/^[gu]_/.test(uid) ? "" : uid), user: uid, created, poster: !!meta.posterN, ...(await vidCounts(kv, id)) });
+      }
+      if (!isMine && !inFamily) continue;
       const meta = (await kv.get(["vid", id, "meta"])).value; if (!meta) continue;
       const c = await vidCounts(kv, id);
       const item = { id, title: meta.title, name: meta.name, user: uid, created, poster: !!meta.posterN, ...c };
@@ -578,7 +589,8 @@ export async function handler(req, info) {
       if (created >= weekAgo) family.push(item);
     }
     mine.sort((a, b) => b.created - a.created); family.sort((a, b) => b.views + b.hearts * 3 - (a.views + a.hearts * 3));
-    return json({ mine: mine.slice(0, 50), family: family.slice(0, 20) }, 200, h);
+    every.sort((a, b) => b.created - a.created);
+    return json({ mine: mine.slice(0, 50), family: family.slice(0, 20), all: isAdmin ? every : undefined }, 200, h);
   }
 
   // забрать треки из Runway (только с его CDN) и положить в хранилище; уже лежащие не трогаем

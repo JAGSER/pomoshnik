@@ -182,7 +182,7 @@ const EN = {
   "Придумываю подпись…": "Writing a message…", "Напишите пару слов к ролику": "Write a few words", "⏳ Готовлю ссылку…": "⏳ Preparing the link…", "🔁 Повторить": "🔁 Try again",
   "По ссылке видно, сколько раз посмотрели, и вам могут ответить": "With a link you'll see how many people watched, and they can reply to you", "Ссылка не получилась: ": "Couldn't make a link: ",
   "Ссылка скопирована: вставьте её в WhatsApp или Telegram": "Link copied: paste it into WhatsApp or Telegram", "Скопируйте ссылку:": "Copy the link:",
-  "🎬 Ролики": "🎬 Videos", "Ролики": "Videos", "Ваши и семейные: кто посмотрел и что ответил": "Yours and your family's: who watched and what they replied", "Мои": "Mine", "Семья за неделю": "Family this week",
+  "🎬 Ролики": "🎬 Videos", "Ролики": "Videos", "Ваши и семейные: кто посмотрел и что ответил": "Yours and your family's: who watched and what they replied", "Мои": "Mine", "Семья за неделю": "Family this week", "Все ролики": "All videos",
   "Загружаю…": "Loading…", "Нет связи. Попробуйте позже.": "No connection. Try again later.", "Вы": "You", "Ролик": "Video", "новое": "new", "Смотреть": "Watch", "Отправить ещё": "Send again", "Переслать": "Forward", "Кто-то": "Someone",
   "Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».": "No videos sent yet. Under any answer tap «🎬 Video», then «📤 Send» → «Send a link».",
   "За неделю в семье ещё не отправляли роликов.": "No family videos this week yet.", "ответил(а) на ваш ролик:": "replied to your video:", "Новые ролики семьи за неделю:": "New family videos this week:",

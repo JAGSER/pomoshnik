@@ -2565,15 +2565,17 @@ function renderVideos(st) {
   document.querySelectorAll("#videos-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === VIDTAB));
   const list = $("#videos-list"); list.innerHTML = "";
   if (!st) { list.innerHTML = `<p class="sheet-hint">${T("Нет связи. Попробуйте позже.")}</p>`; return; }
-  const items = VIDTAB === "mine" ? st.mine : st.family;
+  $("#vtab-all").hidden = !st.all;
+  if (VIDTAB === "all" && !st.all) VIDTAB = "mine";
+  const items = VIDTAB === "mine" ? st.mine : VIDTAB === "all" ? st.all : st.family;
   if (!items.length) {
-    list.innerHTML = `<p class="sheet-hint">${VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
+    list.innerHTML = `<p class="sheet-hint">${VIDTAB === "all" ? LL("Пока никто не отправлял роликов.", "No videos yet.") : VIDTAB === "mine" ? T("Пока нет отправленных роликов. Под любым ответом нажмите «🎬 Видео», потом «📤 Отправить» → «Отправить ссылку».") : T("За неделю в семье ещё не отправляли роликов.")}</p>`;
     return;
   }
   const seen = vidSeen();
   items.forEach((v) => {
     const c = el("div", "vid-item");
-    const who = VIDTAB === "family" ? `<span class="vid-who">${esc(v.user === SESSION.user ? T("Вы") : v.name || "")}</span>` : "";
+    const who = VIDTAB !== "mine" ? `<span class="vid-who">${esc(v.user === SESSION.user ? T("Вы") : v.name || (/^[gu]_/.test(v.user) ? LL("Гость", "Guest") : v.user))}</span>` : "";
     const s = seen[v.id] || { views: 0, hearts: 0, replies: 0 };
     const fresh = VIDTAB === "mine" && (v.views > s.views || v.hearts > s.hearts || (v.replies || []).length > s.replies);
     c.innerHTML = `<img class="vid-thumb" alt="" loading="lazy" ${v.poster ? `src="${CFG.proxy}/video/${v.id}.jpg"` : ""}>
@@ -2919,7 +2921,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=76");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=77");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
