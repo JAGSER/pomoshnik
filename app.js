@@ -428,13 +428,21 @@ function renderAcct() {
     }
   }
   if (PLAN && PLAN.plan === "owner" && PLAN.admin) {
-    const b = el("button", "btn btn-ghost btn-wide"); b.type = "button"; b.textContent = "📋 Заявки и гости";
+    const b = el("button", "btn btn-ghost btn-wide"); b.type = "button"; b.textContent = "📋 Заявки, гости и хранилище";
     const out = el("pre", "creative-log");
     b.onclick = async () => {
       out.textContent = "Загружаю…";
       try {
         const d = await apiPost("/admin", {});
-        out.textContent = `Гостей: ${d.guests}, сохранённых аккаунтов: ${d.users}, вопросов гостей сегодня: ${d.today}\n\n` +
+        const st = d.stor || {}, MB = (b) => Math.round(b / 1048576), pc = (x, lim) => Math.round((x / lim) * 100);
+        const used = (st.vbytes || 0) + (st.mbytes || 0), wu = (st.wMonth || 0) / 1024, ru = (st.rMonth || 0) / 4096;
+        const warn = Math.max(pc(used, 1073741824), pc(wu, 500000), pc(ru, 1000000)) >= 75 ? "\n⚠️ Подходим к лимиту бесплатного хранилища: пора переносить ролики в Cloudflare R2." : "";
+        const storText = `Хранилище (бесплатный Deno, примерно):\n` +
+          `• место: ${MB(used)} МБ из 1024 (${pc(used, 1073741824)}%): роликов ${st.vids || 0} на ${MB(st.vbytes || 0)} МБ, музыка ${MB(st.mbytes || 0)} МБ\n` +
+          `• загружено роликов в этом месяце: ${st.upMonth || 0}\n` +
+          `• запись за месяц: ${Math.round(wu / 1000)} тыс. из 500 тыс. единиц (${pc(wu, 500000)}%)\n` +
+          `• чтение за месяц: ${Math.round(ru / 1000)} тыс. из 1 млн единиц (${pc(ru, 1000000)}%)${warn}\n\n`;
+        out.textContent = storText + `Гостей: ${d.guests}, сохранённых аккаунтов: ${d.users}, вопросов гостей сегодня: ${d.today}\n\n` +
           (d.leads.length ? d.leads.map((l) => `${new Date(l.at).toLocaleString(LOCALE())} · ${l.plan} · ${l.contact}${l.company ? " · " + l.company : ""}${l.note ? "\n  " + l.note : ""} · ${l.user}`).join("\n") : "Заявок пока нет");
       } catch (e) { out.textContent = e.message; }
     };
@@ -3032,7 +3040,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=80");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=81");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

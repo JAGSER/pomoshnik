@@ -260,7 +260,10 @@ async function samplePut(voice, bytes) {
 const VID_TTL = { expireIn: 180 * 24 * 3600_000 };
 const VID_MEM = new Map();
 function vidId() { const a = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"; return [...crypto.getRandomValues(new Uint8Array(8))].map((b) => a[b % a.length]).join(""); }
+// учёт хранилища: сколько байт записано и прочитано за месяц (лимиты бесплатного Deno KV)
+async function storCount(kv, kind, n) { try { await kv.atomic().sum(["stor", kind, new Date().toISOString().slice(0, 7)], BigInt(Math.round(n))).commit(); } catch (_) {} }
 async function blobPut(kv, prefix, bytes) {
+  storCount(kv, "w", bytes.length);
   const size = 60000, n = Math.ceil(bytes.length / size);
   for (let i = 0; i < n; i += 10) {
     const op = kv.atomic();
@@ -270,6 +273,7 @@ async function blobPut(kv, prefix, bytes) {
   return n;
 }
 async function blobGet(kv, prefix, n) {
+  storCount(kv, "r", n * 60000);
   const keys = []; for (let i = 0; i < n; i++) keys.push([...prefix, i]);
   const parts = [];
   for (let i = 0; i < keys.length; i += 10) { const got = await kv.getMany(keys.slice(i, i + 10)); for (const g of got) { if (!g.value) return null; parts.push(g.value); } }
@@ -306,6 +310,7 @@ async function headerAuth(req, ip) {
 // Музыка для видео (сгенерирована в Runway) — хранится в KV частями по 60 КБ
 async function musicGet(id) {
   const kv = await kvOpen(); if (!kv) return null;
+  storCount(kv, "r", 3_800_000);
   const n = (await kv.get(["music", id, "n"])).value; if (!n) return null;
   const keys = []; for (let i = 0; i < n; i++) keys.push(["music", id, i]);
   const parts = [];
@@ -316,6 +321,7 @@ async function musicGet(id) {
 }
 async function musicPut(id, bytes) {
   const kv = await kvOpen(); if (!kv) throw new Error("хранилище недоступно");
+  storCount(kv, "w", bytes.length);
   const size = 60000, n = Math.ceil(bytes.length / size);
   for (let i = 0; i < n; i++) await kv.set(["music", id, i], bytes.slice(i * size, (i + 1) * size));
   await kv.set(["music", id, "n"], n);
@@ -592,7 +598,15 @@ export async function handler(req, info) {
     }
     const leads = []; for await (const e of kv.list({ prefix: ["lead"] }, { reverse: true, limit: 100 })) leads.push(e.value);
     let guests = 0, users = 0; for await (const e of kv.list({ prefix: ["acct"] }, { limit: 5000 })) e.value.pw ? users++ : guests++;
-    return json({ ok: true, leads, guests, users, today: await kvNum(kv, ["q", "_guests", DAY()]) }, 200, h);
+    // хранилище: занятое место по роликам и музыке, запись и чтение за месяц
+    let vids = 0, vbytes = 0, mbytes = 0, upMonth = 0; const m0 = new Date(MONTH() + "-01T00:00:00Z").getTime();
+    for await (const e of kv.list({ prefix: ["vidu"] }, { limit: 5000 })) {
+      const meta = (await kv.get(["vid", e.key[3], "meta"])).value; if (!meta) continue;
+      vids++; vbytes += (meta.size || 0) + (meta.posterN || 0) * 40000; if (e.key[2] >= m0) upMonth++;
+    }
+    for await (const e of kv.list({ prefix: ["music"] }, { limit: 2000 })) if (e.key[2] === "n") mbytes += u64(e.value) * 60000;
+    const stor = { vids, vbytes, mbytes, upMonth, wMonth: await kvNum(kv, ["stor", "w", MONTH()]), rMonth: await kvNum(kv, ["stor", "r", MONTH()]) };
+    return json({ ok: true, leads, guests, users, stor, today: await kvNum(kv, ["q", "_guests", DAY()]) }, 200, h);
   }
   // Переезд: положить данные приложения на час, вернуть одноразовый код
   if (url.pathname === "/migrate") {
