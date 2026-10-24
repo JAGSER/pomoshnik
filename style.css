@@ -331,3 +331,10 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .fab-back.right { right: env(safe-area-inset-right, 0px); border-right: 0; border-radius: 26px 0 0 26px; padding-left: 4px; }
 .fab-back:active { opacity: 1; background: var(--accent-soft); color: var(--accent); }
 .fab-back[hidden] { display: none; }
+
+/* Настройка помощников и напоминания о днях рождения */
+.helpers-set-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.hs-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); cursor: pointer; }
+.hs-row input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.bday-banner { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.bday-row { text-align: left; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 16px; padding: 14px 16px; font: inherit; font-weight: 700; font-size: 1.05em; cursor: pointer; }

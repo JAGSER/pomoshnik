@@ -178,6 +178,7 @@ const EN = {
   "картинка — быстро, звук — записью iPhone": "picture fast, sound recorded by iPhone",
   "проверка: быстрый кодировщик дал тишину → звук записью iPhone": "check: the fast encoder produced silence → sound recorded by iPhone",
   // помощники
+  "Снимите галочку, чтобы спрятать помощника из списка.": "Untick a helper to hide it from the list.",
   "🍎 Для школы": "🍎 For school", "🏠 На каждый день": "🏠 Everyday",
   "Помощники": "Helpers", "⭐ Помощники": "⭐ Helpers", "Готовые помощники на разные случаи": "Ready-made helpers for different needs",
   "Выберите, с чем помочь. Откроется разговор, где Claude уже знает, чем помочь.": "Choose what you need help with. A chat opens where Claude already knows how to help.",

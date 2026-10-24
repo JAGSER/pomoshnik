@@ -315,6 +315,7 @@ async function startHome() {
   show("screen-home");
   $("#hello").textContent = personalOn() ? `Здравствуйте, ${profile().name}!` : "Здравствуйте!";
 
+  renderBdayBanner();
   const grid = $("#preset-grid");
   grid.innerHTML = "";
   (u.presets || Object.keys(CFG.presets)).forEach((pid) => {
@@ -617,7 +618,7 @@ async function ask() {
   const today = new Date().toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric", weekday: "long" });
   const hp = activeHelper();
   const FOLLOW = LIVE ? "" : "В самом конце ответа добавь одну строку вида [[кнопки: вариант | вариант | вариант]] — 2-4 коротких варианта (до 6 слов каждый), которые человек может просто нажать вместо того, чтобы печатать: от его лица, на языке разговора. Если ты задаёшь вопрос — варианты это готовые ответы на него. Если вопроса нет — что логично спросить или сделать дальше. Эту строку не упоминай в тексте.";
-  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}` : "", FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}${CHAT.helper === "birthdays" ? "\n" + bdSystem() : ""}` : "", FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -670,7 +671,7 @@ async function ask() {
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (!started) { started = true; body.classList.remove("typing"); if (LIVE && LIVE.t0) liveTime(); }
           full += ev.delta.text;
-          const shown = LIVE ? liveClean(full) : optClean(full);
+          const shown = LIVE ? liveClean(full) : optClean(full).replace(/\[\[\s*др[+-][^\]]*\]\]/gi, "");
           body.innerHTML = md(shown);
           if (live) live.push(shown);
           if (LIVE) $("#live-answer").textContent = liveTail(plain(shown));
@@ -684,7 +685,7 @@ async function ask() {
     }
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
     let rawMarks = null, opts = [];
-    if (!LIVE) { opts = optParse(full); full = optClean(full); body.innerHTML = md(full); }
+    if (!LIVE) { opts = optParse(full); full = bdApply(optClean(full)); body.innerHTML = md(full); }
     if (LIVE) { rawMarks = [...full.matchAll(MARK_RE)].map((m) => m[0]); if (rawMarks.length) rawMarks.push(`кадр ${LIVE.fw}×${LIVE.fh}`); liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     if (rawMarks && rawMarks.length) msg.marks = rawMarks;
@@ -763,6 +764,47 @@ function contextMessages() {
 // четыре кнопки не исчезают: после первого вопроса поднимаются наверх в один ряд
 function liftPanel() { const ec = $("#empty-chat"); if (ec && !ec.classList.contains("compact")) { ec.classList.add("compact"); $("#messages").prepend(ec); } }
 
+/* ===== Дни рождения: список на устройстве, напоминание на главном экране ===== */
+const BD_ADD = /\[\[\s*др\+\s*:([^\]]*)\]\]/gi, BD_DEL = /\[\[\s*др-\s*:([^\]]*)\]\]/gi;
+function bdays() { return (SESSION && store.get("birthdays:" + SESSION.user)) || []; }
+function bdApply(text) {
+  let list = bdays(), changed = false;
+  for (const m of text.matchAll(BD_DEL)) { const n = m[1].trim().toLowerCase(); const l2 = list.filter((b) => b.name.toLowerCase() !== n); if (l2.length !== list.length) { list = l2; changed = true; } }
+  for (const m of text.matchAll(BD_ADD)) {
+    const [name, date, year] = m[1].split("|").map((x) => (x || "").trim());
+    const dm = (date || "").match(/^(\d{1,2})\.(\d{1,2})$/);
+    if (!name || !dm) continue;
+    list = list.filter((b) => b.name.toLowerCase() !== name.toLowerCase());
+    list.push({ name, d: +dm[1], m: +dm[2], y: /^\d{4}$/.test(year) ? +year : null }); changed = true;
+  }
+  if (changed) store.set("birthdays:" + SESSION.user, list);
+  return text.replace(BD_ADD, "").replace(BD_DEL, "").trimEnd();
+}
+function bdDaysLeft(b) {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  let t = new Date(now.getFullYear(), b.m - 1, b.d);
+  if (t < now) t = new Date(now.getFullYear() + 1, b.m - 1, b.d);
+  return Math.round((t - now) / 864e5);
+}
+function bdSystem() {
+  const l = bdays(); if (!l.length) return "Сохранённых дней рождения пока нет.";
+  return "Сохранённые дни рождения:\n" + l.map((b) => `- ${b.name}: ${String(b.d).padStart(2, "0")}.${String(b.m).padStart(2, "0")}${b.y ? "." + b.y : ""} (через ${bdDaysLeft(b)} дн.)`).join("\n");
+}
+function renderBdayBanner() {
+  const box = $("#bday-banner");
+  const soon = bdays().map((b) => ({ ...b, left: bdDaysLeft(b) })).filter((b) => b.left <= 7).sort((a, b) => a.left - b.left);
+  box.hidden = !soon.length;
+  if (!soon.length) return;
+  box.innerHTML = "";
+  soon.forEach((b) => {
+    const row = el("button", "bday-row"); row.type = "button";
+    const age = b.y ? ` (${new Date().getFullYear() + (b.left > 0 && new Date().getMonth() > b.m - 1 ? 1 : 0) - b.y})` : "";
+    row.textContent = b.left === 0 ? `🎂 Сегодня день рождения: ${b.name}${age}` : `🎂 ${b.name}: день рождения через ${b.left} ${b.left === 1 ? "день" : b.left < 5 ? "дня" : "дней"}`;
+    row.onclick = () => { if (CFG.helpers && CFG.helpers.birthdays && allowedHelpers().some(([id]) => id === "birthdays")) { pickHelper("birthdays"); setTimeout(() => quickSend(`Помоги поздравить: ${b.name}`), 50); } };
+    box.append(row);
+  });
+}
+
 /* ===== Кнопки-подсказки: чтобы не нужно было придумывать, что спросить ===== */
 const OPT_RE = /\[\[\s*(?:кнопки|buttons|butang|pilihan)\s*:([^\]]*)\]\]/i;
 function optParse(s) { const m = s.match(OPT_RE); return m ? m[1].split("|").map((x) => x.trim()).filter(Boolean).slice(0, 4) : []; }
@@ -791,7 +833,10 @@ function showStarters(chat) {
 
 /* ===== Помощники: готовые режимы с крупными плитками ===== */
 // помощники, которые положены этому человеку (в config.json у каждого есть список "for")
-function myHelpers(uid) { uid = uid || SESSION.user; return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(uid)); }
+function allowedHelpers(uid) { uid = uid || SESSION.user; return Object.entries(CFG.helpers || {}).filter(([, h]) => !h.for || h.for.includes(uid)); }
+// человек сам прячет ненужных помощников в настройках (хранится на устройстве)
+function hiddenHelpers() { return (SESSION && store.get("helpersHidden:" + SESSION.user)) || []; }
+function myHelpers(uid) { const hid = !uid || uid === SESSION.user ? hiddenHelpers() : []; return allowedHelpers(uid).filter(([id]) => !hid.includes(id)); }
 // админ может посмотреть, какой список помощников видит каждый человек
 let HELPERS_VIEW = null;
 function helpersOn() { return myHelpers().length > 0; }
@@ -1783,6 +1828,16 @@ function openSettings() {
     b.classList.toggle("on", b.dataset.model === liveModel());
     b.onclick = () => { store.set("liveModel:" + SESSION.user, b.dataset.model); document.querySelectorAll("#live-seg button").forEach((x) => x.classList.toggle("on", x === b)); };
   });
+  const hs = allowedHelpers();
+  $("#helpers-set").hidden = !hs.length;
+  const hl = $("#helpers-set-list"); hl.innerHTML = "";
+  hs.forEach(([id, h]) => {
+    const row = el("label", "hs-row");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = !hiddenHelpers().includes(id);
+    cb.onchange = () => { const cur = hiddenHelpers().filter((x) => x !== id); if (!cb.checked) cur.push(id); store.set("helpersHidden:" + SESSION.user, cur); };
+    const t = el("span"); t.textContent = `${h.icon} ${hTitle(h)}`;
+    row.append(cb, t); hl.append(row);
+  });
   const vt = $("#voice-toggle"), vb = $("#voice-box");
   const curDesc = (VOICES.find((x) => x[0] === cur) || [])[1] || "";
   vt.innerHTML = `<span>🎙 ${esc(cur)}</span><span class="vdesc">${esc(curDesc)}</span><span class="vt-arrow">${vb.hidden ? "Выбрать ›" : "Свернуть ˄"}</span>`;
@@ -2352,7 +2407,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=60");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=61");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
