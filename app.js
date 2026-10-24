@@ -2320,6 +2320,54 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("#mascot")) mascotTip();
   else if (!e.target.closest("#mascot-tip")) { const b = $("#mascot-tip"); if (b) b.hidden = true; }
 });
+// редкие трюки: толкает имя, крутит шестерёнку, пружинит на линии, кувырок, кружится глаз
+const MASCOT_TRICKS = {
+  push() {
+    const m = $("#mascot"), n = $("#hello");
+    mascotLook(-1, 0, 1600);
+    m.animate([{ transform: "none" }, { transform: "translateX(-10px) rotate(-6deg)", offset: 0.35 }, { transform: "translateX(-14px) rotate(-8deg)", offset: 0.6 }, { transform: "none" }], { duration: 1600, easing: "ease-in-out" });
+    n.animate([{ transform: "none" }, { transform: "none", offset: 0.3 }, { transform: "translateX(-18px)", offset: 0.6 }, { transform: "translateX(-18px)", offset: 0.8 }, { transform: "none" }], { duration: 1900, easing: "ease-in-out" });
+  },
+  gear() {
+    const m = $("#mascot"), g = $("#btn-settings");
+    mascotLook(1, 0, 1800);
+    m.animate([{ transform: "none" }, { transform: "translateX(8px) rotate(8deg)", offset: 0.25 }, { transform: "translateX(8px) rotate(8deg)", offset: 0.8 }, { transform: "none" }], { duration: 1800, easing: "ease-in-out" });
+    g.animate([{ transform: "rotate(0)" }, { transform: "rotate(0)", offset: 0.2 }, { transform: "rotate(540deg)" }], { duration: 1800, easing: "cubic-bezier(.2,.8,.3,1)" });
+  },
+  bounce() {
+    const m = $("#mascot"), bar = m.closest(".topbar");
+    const d = Math.max(6, bar.getBoundingClientRect().bottom - m.getBoundingClientRect().bottom - 2);
+    mascotLook(0, 1, 1800);
+    m.animate([
+      { transform: "none" }, { transform: `translateY(${d}px) scale(1.15,.8)`, offset: 0.2 }, { transform: "translateY(-16px) scale(.92,1.1)", offset: 0.4 },
+      { transform: `translateY(${d}px) scale(1.1,.85)`, offset: 0.58 }, { transform: "translateY(-6px)", offset: 0.75 }, { transform: `translateY(${d * 0.4}px) scale(1.04,.96)`, offset: 0.88 }, { transform: "none" },
+    ], { duration: 1800, easing: "ease-in-out" });
+  },
+  flip() {
+    const m = $("#mascot");
+    m.animate([{ transform: "none" }, { transform: "translateY(4px) scale(1.1,.85)", offset: 0.2 }, { transform: "translateY(-22px) rotate(180deg)", offset: 0.55 }, { transform: "translateY(0) rotate(360deg) scale(1.1,.88)", offset: 0.85 }, { transform: "rotate(360deg)" }], { duration: 1300, easing: "ease-in-out" });
+    setTimeout(() => mascotPlay("happy", 1000), 1100);
+  },
+  dizzy() {
+    // глаз крутится по кругу, лицо покачивается
+    let a = 0; const t = setInterval(() => { a += 0.5; mascotLook(Math.cos(a), Math.sin(a)); if (a > 12) { clearInterval(t); mascotLook(0, 0); } }, 70);
+    $("#mascot").animate([{ transform: "none" }, { transform: "rotate(-10deg)" }, { transform: "rotate(10deg)" }, { transform: "rotate(-6deg)" }, { transform: "none" }], { duration: 1700, easing: "ease-in-out" });
+  },
+};
+let MASCOT_LAST = "";
+function mascotTrick(name) {
+  if (!mascotVisible() || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const tip = $("#mascot-tip"); if (tip && !tip.hidden) return;
+  const all = Object.keys(MASCOT_TRICKS).filter((k) => k !== MASCOT_LAST);
+  const k = name || all[Math.floor(Math.random() * all.length)];
+  MASCOT_LAST = k; MASCOT_TRICKS[k]();
+}
+// обычно раз в 3–6 минут; у администратора для проверки — каждые 10 секунд
+(function mascotTricks() {
+  const test = SESSION && me().admin;
+  setTimeout(() => { mascotTrick(); mascotTricks(); }, test ? 10000 : 180000 + Math.random() * 180000);
+})();
+
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL_EVT = e; updateInstall(); });
 window.addEventListener("appinstalled", () => { INSTALL_EVT = null; updateInstall(); });
 document.querySelectorAll(".install-btn").forEach((b) => (b.onclick = async () => {
@@ -3135,7 +3183,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=86");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=87");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
