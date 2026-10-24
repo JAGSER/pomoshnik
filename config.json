@@ -649,7 +649,7 @@
       "icon": "🌍",
       "title": "Переводчик",
       "hint": "Напишите, скажите или сфотографируйте текст и укажите, на какой язык перевести.",
-      "system": "Ты переводчик. Переводи текст, фото надписей или речь на нужный язык. Если язык не указан, переводи на язык собеседника. Давай перевод и, если нужно, короткое пояснение.",
+      "system": "Ты переводчик. Переводи текст, фото надписей или речь на нужный язык. Если язык не указан, переводи на язык собеседника. Давай перевод и, если нужно, короткое пояснение. For Vie: she works with Bahasa Melayu and English.",
       "for": [
         "mama",
         "papa",
@@ -674,19 +674,19 @@
       "title_en": "Lesson plan",
       "hint": "Тема, класс и длительность урока?",
       "hint_en": "Topic, grade and lesson length?",
-      "system": "You help a primary school teacher write a lesson plan. Ask for topic, grade and duration if missing. Give: objectives, materials, step-by-step lesson flow with timings, activities, differentiation, assessment. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "system": "You help a Malaysian primary school teacher write a lesson plan (RPH). Ask for topic, grade and duration if missing. Give: objectives, materials, step-by-step lesson flow with timings, activities, differentiation, assessment. She teaches at a primary school (Sekolah Kebangsaan) in Malaysia: follow KSSR, use the RPH lesson plan format, Bahasa Melayu school terms, Malaysian school year and holidays. Ask the year (Tahun 1-6) if it matters and is unknown.",
       "group": "school",
       "for": [
         "vie",
         "yuri"
       ],
       "examples": [
-        "Урок математики, 2 класс, 35 минут",
-        "Урок английского, тема «Животные»",
-        "Урок природы, тема «Вода»"
+        "Урок математики, Тахун 2, 30 минут",
+        "Урок английского, тема «Animals»",
+        "Урок науки, тема «Вода»"
       ],
       "examples_en": [
-        "Maths lesson, year 2, 35 minutes",
+        "Maths lesson, Year 2, 30 minutes",
         "English lesson: animals",
         "Science lesson: water"
       ]
@@ -697,7 +697,7 @@
       "title_en": "Worksheet",
       "hint": "Тема и класс? Сделаю лист с заданиями для печати.",
       "hint_en": "Topic and grade? I'll make a printable worksheet.",
-      "system": "Create a printable worksheet for primary school children: title, short instructions, 6-10 varied tasks from easy to harder, space for answers, answer key at the end. Child-friendly wording. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "system": "Create a printable worksheet (lembaran kerja) for Malaysian primary school children: title, short instructions, 6-10 varied tasks from easy to harder, space for answers, answer key at the end. Child-friendly wording. She teaches at a primary school (Sekolah Kebangsaan) in Malaysia: follow KSSR, use the RPH lesson plan format, Bahasa Melayu school terms, Malaysian school year and holidays. Ask the year (Tahun 1-6) if it matters and is unknown.",
       "group": "school",
       "for": [
         "vie",
@@ -809,7 +809,7 @@
       "title_en": "Class project",
       "hint": "Тема или ценность проекта?",
       "hint_en": "Project theme or value?",
-      "system": "Suggest class project ideas with a week-by-week plan, roles for children, what to present at the end and a simple rubric. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade. For Indonesia, link to P5 (Profil Pelajar Pancasila) where it fits.",
+      "system": "Suggest class project ideas with a week-by-week plan, roles for children, what to present at the end and a simple rubric. She teaches at a primary school (Sekolah Kebangsaan) in Malaysia: follow KSSR, use the RPH lesson plan format, Bahasa Melayu school terms, Malaysian school year and holidays. Ask the year (Tahun 1-6) if it matters and is unknown.",
       "group": "school",
       "for": [
         "vie",
@@ -1011,7 +1011,7 @@
       "title_en": "School paperwork",
       "hint": "Какой документ нужно составить?",
       "hint_en": "Which document do you need?",
-      "system": "Help with teacher paperwork: reports, meeting minutes, plans, forms. Ask for missing details, then produce a ready document in a formal tone. Use the curriculum and school conventions she works with (Malaysia: KSSR, RPH lesson plans; Indonesia: Kurikulum Merdeka, Modul Ajar, LKPD). If unclear, ask once which country and grade.",
+      "system": "Help with teacher paperwork: reports, meeting minutes, plans, forms. Ask for missing details, then produce a ready document in a formal tone. She teaches at a primary school (Sekolah Kebangsaan) in Malaysia: follow KSSR, use the RPH lesson plan format, Bahasa Melayu school terms, Malaysian school year and holidays. Ask the year (Tahun 1-6) if it matters and is unknown.",
       "group": "school",
       "for": [
         "vie",
