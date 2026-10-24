@@ -13,5 +13,8 @@
 {"id": "tropical1", "title": "Тропики", "title_en": "Tropical", "icon": "🌴", "moods": ["travel", "upbeat"], "gain": 1, "skip": 0},
 {"id": "pop1", "title": "Бодрая", "title_en": "Upbeat pop", "icon": "⚡", "moods": ["upbeat", "celebrate"], "gain": 1, "skip": 0},
 {"id": "news1", "title": "Объясняющая", "title_en": "Explainer", "icon": "📰", "moods": ["tech"], "gain": 1, "skip": 0},
-{"id": "lullaby1", "title": "Колыбельная", "title_en": "Lullaby", "icon": "🌛", "moods": ["calm", "kids"], "gain": 1, "skip": 0}
+{"id": "lullaby1", "title": "Колыбельная", "title_en": "Lullaby", "icon": "🌛", "moods": ["calm", "kids"], "gain": 1, "skip": 0},
+{"id": "funk1", "title": "Фанк", "title_en": "Funk", "icon": "🕺", "moods": ["upbeat", "food"], "gain": 1, "skip": 0},
+{"id": "emotional1", "title": "Трогательная", "title_en": "Heartfelt", "icon": "💛", "moods": ["emotional"], "gain": 1, "skip": 0},
+{"id": "festive1", "title": "Новогодняя", "title_en": "Festive", "icon": "🎄", "moods": ["celebrate"], "gain": 1, "skip": 0}
 ]}
