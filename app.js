@@ -305,30 +305,30 @@ async function loadPlan() {
 // своё название приложения (тариф «Семья+») — только внутри приложения, в роликах всегда «Помощник AI»
 function appTitle() { return (PLAN && PLAN.rename && SESSION && store.get("appTitle:" + SESSION.user)) || ""; }
 const PLANS_P = () => [
-  { id: "trial", unit: LL("0 ₽ за творческий ролик", "0 ₽ per creative video"), name: LL("Пробный", "Trial"), price: "0 ₽", per: LL("7 дней или 3 творческих ролика", "7 days or 3 creative videos"), tag: LL("Для начала", "To start"),
+  { id: "trial", hot: [1, 2], unit: LL("0 ₽ за творческий ролик", "0 ₽ per creative video"), name: LL("Пробный", "Trial"), price: "0 ₽", per: LL("7 дней или 3 творческих ролика", "7 days or 3 creative videos"), tag: LL("Для начала", "To start"),
     items: LL(["Всё, что есть в «Семье+»", "3 творческих ролика с анимацией, музыкой и звуками", "Лучшая модель Claude и живой голос", "Отправка ссылкой, просмотры, сердечки, ответы", "Все помощники и живой режим с камерой"],
       ["Everything in Family+", "3 creative videos with animation, music and sound", "The best Claude model and a natural voice", "Send by link, see views, hearts and replies", "All helpers and live camera mode"]) },
-  { id: "free", unit: LL("0 ₽ за творческий ролик", "0 ₽ per creative video"), name: LL("Бесплатный", "Free"), price: "0 ₽", per: LL("навсегда", "forever"), tag: LL("Навсегда", "Forever"),
+  { id: "free", hot: [3], unit: LL("0 ₽ за творческий ролик", "0 ₽ per creative video"), name: LL("Бесплатный", "Free"), price: "0 ₽", per: LL("навсегда", "forever"), tag: LL("Навсегда", "Forever"),
     items: LL(["Claude Haiku, 10 вопросов в день", "Простые ролики до 40 секунд с живым голосом", "Отправка ссылкой, просмотры и ответы", "1 творческий ролик в месяц в подарок", "Основные помощники", "Чтение ответов вслух голосом телефона"],
       ["Claude Haiku, 10 questions a day", "Simple videos up to 40 seconds with a natural voice", "Send by link, views and replies", "1 creative video a month as a gift", "Main helpers", "Answers read aloud by the phone's voice"]) },
-  { id: "family", unit: LL("≈ 20 ₽ за творческий ролик", "≈ 20 ₽ per creative video"), name: LL("Семья", "Family"), price: "590 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true, buy: true,
+  { id: "family", hot: [1, 3], unit: LL("≈ 20 ₽ за творческий ролик", "≈ 20 ₽ per creative video"), name: LL("Семья", "Family"), price: "590 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true, buy: true,
     items: LL(["До 4 человек, у каждого свои разговоры", "Claude Sonnet, вопросы без дневного лимита", "Живой голос для чтения и роликов", "30 творческих роликов в месяц на семью", "Ролики до 3 минут", "Музыка на выбор и звуки", "Все помощники, видеооткрытки ко дням рождения", "«Ролики семьи»: кто посмотрел и что ответил"],
       ["Up to 4 people, each with their own chats", "Claude Sonnet, no daily question limit", "Natural voice for reading and videos", "30 creative videos a month for the family", "Videos up to 3 minutes", "Choose music, plus sound effects", "All helpers, birthday video cards", "Family videos: who watched and what they replied"]) },
-  { id: "familyplus", unit: LL("≈ 12 ₽ за творческий ролик", "≈ 12 ₽ per creative video"), name: LL("Семья+", "Family+"), price: "1 190 ₽", per: LL("в месяц", "a month"), tag: LL("Максимум", "Maximum"), buy: true,
+  { id: "familyplus", hot: [2, 3], unit: LL("≈ 12 ₽ за творческий ролик", "≈ 12 ₽ per creative video"), name: LL("Семья+", "Family+"), price: "1 190 ₽", per: LL("в месяц", "a month"), tag: LL("Максимум", "Maximum"), buy: true,
     items: LL(["Всё из «Семьи»", "До 6 человек", "Claude Opus и режим «Подумать» для сложных вопросов", "100 творческих роликов в месяц", "Своё название внутри приложения: «Мамин помощник»", "Живой режим с камерой без ограничений"],
       ["Everything in Family", "Up to 6 people", "Claude Opus and Think mode for hard questions", "100 creative videos a month", "Your own name inside the app", "Unlimited live camera mode"]) },
 ];
 const PLANS_B = () => [
-  { id: "expert", unit: LL("230 ₽ за творческий ролик", "230 ₽ per creative video"), name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
+  { id: "expert", hot: [1], unit: LL("230 ₽ за творческий ролик", "230 ₽ per creative video"), name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
     items: LL(["30 творческих роликов в месяц", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
       ["30 creative videos a month", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
-  { id: "start", unit: LL("≈ 980 ₽ за творческий ролик", "≈ 980 ₽ per creative video"), name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
+  { id: "start", hot: [2, 3], unit: LL("≈ 980 ₽ за творческий ролик", "≈ 980 ₽ per creative video"), name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
     items: LL(["60 творческих роликов в месяц", "До 3 сотрудников", "Свой логотип, цвета и шрифты", "1 персональный аватар бренда", "Формат 9:16, ролики до 60 секунд", "Музыка и звуки"],
       ["60 creative videos a month", "Up to 3 team members", "Your logo, colours and fonts", "1 personal brand avatar", "9:16, videos up to 60 seconds", "Music and sound effects"]) },
-  { id: "business", unit: LL("725 ₽ за творческий ролик", "725 ₽ per creative video"), name: LL("Бизнес", "Business"), price: "290 000 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true,
+  { id: "business", hot: [2, 4], unit: LL("725 ₽ за творческий ролик", "725 ₽ per creative video"), name: LL("Бизнес", "Business"), price: "290 000 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true,
     items: LL(["400 творческих роликов в месяц", "До 10 сотрудников", "Брендбук: стиль держится сам", "3 персональных аватара", "Свой голос: клон голоса основателя или диктора", "Форматы 9:16, 16:9 и 1:1, ролики до 3 минут", "Субтитры и несколько языков", "Личный менеджер"],
       ["400 creative videos a month", "Up to 10 team members", "Brand book: your style is kept automatically", "3 personal avatars", "Your own cloned voice", "9:16, 16:9 and 1:1, videos up to 3 minutes", "Subtitles and several languages", "A personal manager"]) },
-  { id: "studio", unit: LL("595 ₽ за творческий ролик", "595 ₽ per creative video"), name: LL("Студия", "Studio"), price: "1 190 000 ₽", per: LL("в месяц", "a month"), tag: LL("Агентствам и сетям", "Agencies and chains"),
+  { id: "studio", hot: [4, 5], unit: LL("595 ₽ за творческий ролик", "595 ₽ per creative video"), name: LL("Студия", "Studio"), price: "1 190 000 ₽", per: LL("в месяц", "a month"), tag: LL("Агентствам и сетям", "Agencies and chains"),
     items: LL(["До 2 000 творческих роликов в месяц", "Сотрудники без ограничений", "Несколько брендов в одном кабинете", "Аватары и голоса без ограничений", "Своё приложение на своём домене для клиентов", "Доступ по API", "Приоритетная очередь и выделенная поддержка"],
       ["Up to 2,000 creative videos a month", "Unlimited team members", "Several brands in one account", "Unlimited avatars and voices", "Your own app on your own domain", "API access", "Priority queue and dedicated support"]) },
 ];
@@ -367,7 +367,7 @@ function renderPlans() {
   (PLANTAB === "personal" ? PLANS_P() : PLANS_B()).forEach((p) => {
     const c = el("article", "plan-card" + (p.top ? " top" : "") + (PLANTAB === "business" ? " biz" : ""));
     const mine = PLAN && PLAN.plan === p.id;
-    c.innerHTML = `<span class="pc-tag">${esc(mine ? LL("Ваш тариф", "Your plan") : p.tag)}</span><h3>${esc(p.name)}</h3><div class="pc-price">${esc(p.price)} <small>${esc(p.per)}</small></div>${p.unit ? `<div class="pc-unit">${esc(p.unit)}</div>` : ""}<ul>${p.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    c.innerHTML = `<span class="pc-tag">${esc(mine ? LL("Ваш тариф", "Your plan") : p.tag)}</span><h3>${esc(p.name)}</h3><div class="pc-price">${esc(p.price)} <small>${esc(p.per)}</small></div>${p.unit ? `<div class="pc-unit">${esc(p.unit)}</div>` : ""}<ul>${p.items.map((x, i) => `<li${(p.hot || []).includes(i) ? ' class="hot"' : ""}>${esc(x)}</li>`).join("")}</ul>`;
     if ((p.buy || PLANTAB === "business") && !mine) {
       const b = el("button", "btn btn-primary btn-wide pc-buy"); b.type = "button";
       b.textContent = PLANTAB === "business" ? LL("Оставить заявку", "Request") : LL("Оформить", "Get it");
@@ -3294,7 +3294,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=108");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=109");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

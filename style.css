@@ -454,3 +454,6 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .mascot.first { border-radius: 14px; animation: mpulse 1.4s ease-in-out infinite; }
 @keyframes mpulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); transform: scale(1); } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); transform: scale(1.06); } }
 .pc-unit { font-size: .85em; color: var(--muted); margin: -2px 0 6px; font-variant-numeric: tabular-nums; }
+/* самые сильные пункты тарифа */
+.plan-card li.hot { font-weight: 700; color: var(--ink); background: var(--accent-soft); border-radius: 8px; padding: 4px 6px; margin: 0 -6px; }
+.plan-card li.hot::before { content: "★"; }
