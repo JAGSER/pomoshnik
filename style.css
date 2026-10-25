@@ -457,3 +457,10 @@ button.think-toggle { font: inherit; font-size: .8em; }
 /* самые сильные пункты тарифа */
 .plan-card li.hot { font-weight: 700; color: var(--ink); background: var(--accent-soft); border-radius: 8px; padding: 4px 6px; margin: 0 -6px; }
 .plan-card li.hot::before { content: "★"; }
+/* страница из ролика */
+.share-page { margin-top: 12px; display: grid; gap: 8px; }
+.page-form { display: grid; gap: 8px; }
+.page-form input { font: inherit; padding: 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.page-done { display: flex; flex-wrap: wrap; gap: 8px; }
+.page-done .btn { flex: 1 1 140px; text-decoration: none; text-align: center; }
+.page-leads .page-lead { margin: 4px 0; font-size: .9em; padding: 8px 10px; background: var(--surface); border-radius: 10px; }

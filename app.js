@@ -2776,9 +2776,59 @@ function openShare(file, ctx = {}) {
     toast(mobile ? LL("Ролик сохраняется в «Загрузки», он появится и в галерее", "Saving to Downloads, it will also appear in your gallery") : LL("Ролик скачивается", "Downloading the video"));
   };
   renderAud(S, msg);
+  renderPageMaker(S, msg, ctx);
   openVSheet("share-sheet");
 }
 // кто из семьи увидит ролик в ленте: по умолчанию все, выбор спрятан в неброскую строку
+// страница из ролика (пока только у администратора): контакты → Opus делает посадочную страницу с роликом и формой заявки
+function renderPageMaker(S, msg, ctx) {
+  const box = $("#share-page"); box.innerHTML = ""; box.hidden = !me().admin; if (box.hidden) return;
+  const saved = store.get("pageContacts:" + SESSION.user) || {};
+  const link = (id) => "https://pomoshnik.ai/p/?" + id;
+  const showDone = (id) => {
+    box.innerHTML = "";
+    const row = el("div", "page-done");
+    const a = el("a", "btn btn-primary"); a.textContent = "🌐 Открыть страницу"; a.href = link(id); a.target = "_blank"; a.rel = "noopener";
+    const cp = el("button", "btn btn-ghost"); cp.type = "button"; cp.textContent = "🔗 Скопировать ссылку";
+    cp.onclick = async () => { try { await navigator.clipboard.writeText(link(id)); toast("Ссылка скопирована"); } catch (_) { prompt("Ссылка:", link(id)); } };
+    const ld = el("button", "btn btn-ghost"); ld.type = "button"; ld.textContent = "📥 Заявки";
+    const out = el("div", "page-leads");
+    ld.onclick = async () => {
+      out.textContent = "Загружаю…";
+      try {
+        const d = await apiPost("/page-leads", { id }); out.innerHTML = "";
+        out.append(el("p", "sheet-hint")); out.lastChild.textContent = `Просмотров: ${d.views} · заявок: ${d.leads.length}`;
+        d.leads.forEach((l) => { const p = el("p", "page-lead"); p.textContent = `${new Date(l.at).toLocaleString(LOCALE())} · ${l.name || "без имени"} · ${l.phone || ""}${l.msg ? " · " + l.msg : ""}`; out.append(p); });
+      } catch (e) { out.textContent = e.message; }
+    };
+    const again = el("button", "aud-line"); again.type = "button"; again.textContent = "↻ Сделать страницу заново";
+    again.onclick = () => form(id);
+    row.append(a, cp, ld); box.append(row, out, again);
+  };
+  const form = (pageId) => {
+    box.innerHTML = "";
+    const f = el("div", "page-form");
+    const inp = (ph, key, mode) => { const i = el("input"); i.placeholder = ph; i.value = saved[key] || ""; if (mode) i.inputMode = mode; i.dataset.key = key; f.append(i); return i; };
+    const t = el("p", "sheet-hint"); t.textContent = "🌐 Страница из ролика: ролик, текст, кнопки связи и форма заявки. Контакты необязательны."; f.append(t);
+    const ins = [inp("Имя или название (например, Студия Анны)", "name"), inp("WhatsApp: +7 900 000-00-00", "whatsapp", "tel"), inp("Telegram: ник без @", "telegram"), inp("Телефон для звонка", "phone", "tel")];
+    const go = el("button", "btn btn-primary btn-wide"); go.type = "button"; go.textContent = "Сделать страницу";
+    go.onclick = async () => {
+      const contacts = {}; ins.forEach((i) => (contacts[i.dataset.key] = i.value.trim()));
+      store.set("pageContacts:" + SESSION.user, contacts);
+      go.disabled = true; go.textContent = "⏳ Ролик загружается…";
+      try {
+        const vid = S.id || (S.up && (await S.up)); if (!vid) throw new Error("Ролик ещё не загрузился");
+        go.textContent = "⏳ Claude делает страницу, ~30 сек…";
+        const d = await apiPost("/page-make", { videoId: vid, pageId, text: (ctx && ctx.text) || "", title: (ctx && ctx.title) || "", contacts, lang: LANG });
+        if (msg) { msg.pageId = d.id; save(); }
+        showDone(d.id);
+      } catch (e) { go.disabled = false; go.textContent = "Сделать страницу"; toast(e.message || "Не получилось"); }
+    };
+    f.append(go); box.append(f);
+  };
+  if (msg && msg.pageId) showDone(msg.pageId);
+  else { const b = el("button", "btn btn-ghost btn-wide"); b.type = "button"; b.textContent = "🌐 Сделать страницу из ролика"; b.onclick = () => form(); box.append(b); }
+}
 // ролик попадает в семейную ленту только когда им поделились (ссылкой или файлом), а не при сохранении себе
 function pubVideo(S) { (async () => { try { const id = S.id || (S.up && (await S.up)); if (id && !S.pub) { await apiPost("/video-pub", { id }); S.pub = true; } } catch (_) {} })(); }
 function renderAud(S, msg) {
@@ -3294,7 +3344,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=109");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=110");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {

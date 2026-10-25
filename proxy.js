@@ -409,6 +409,26 @@ export async function handler(req, info) {
     if (!meta) return json({ error: "Ролик не найден" }, 404, h);
     return json({ id: meta.id, title: meta.title, caption: meta.caption, name: meta.name, lang: meta.lang, created: meta.created, type: meta.type, poster: !!meta.posterN, ...(await vidCounts(kv, meta.id)) }, 200, h);
   }
+  // ===== Страница из ролика: публичная часть (просмотр и заявки) =====
+  const pg = url.pathname.match(/^\/page\/([A-Za-z0-9]{8})$/);
+  if (req.method === "GET" && pg) {
+    const kv = await kvOpen(); const page = kv && (await kv.get(["page", pg[1]])).value;
+    if (!page) return json({ error: "Страница не найдена" }, 404, h);
+    const meta = page.videoId ? (await kv.get(["vid", page.videoId, "meta"])).value : null;
+    if (!url.searchParams.has("nocount") && !reactLimited(ip)) await kv.atomic().sum(["pagec", pg[1], "views"], 1n).commit();
+    return json({ id: page.id, content: page.content, contacts: page.contacts, videoId: meta ? page.videoId : null, poster: !!(meta && meta.posterN), lang: page.lang || "ru" }, 200, h);
+  }
+  if (req.method === "POST" && url.pathname === "/page-lead") {
+    let b; try { b = JSON.parse(await req.text()); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
+    const id = String(b.id || ""), kv = await kvOpen();
+    if (!kv || !/^[A-Za-z0-9]{8}$/.test(id)) return json({ error: "Неверная страница" }, 400, h);
+    if (reactLimited(ip)) return json({ error: "Слишком часто, попробуйте через минуту" }, 429, h);
+    const page = (await kv.get(["page", id])).value; if (!page) return json({ error: "Страница не найдена" }, 404, h);
+    const lead = { name: String(b.name || "").slice(0, 80), phone: String(b.phone || "").slice(0, 40), msg: String(b.msg || "").slice(0, 600), at: Date.now() };
+    if (!lead.phone && !lead.msg) return json({ error: "Оставьте телефон или сообщение" }, 400, h);
+    await kv.atomic().set(["plead", id, lead.at], lead, VID_TTL).sum(["pagec", id, "leads"], 1n).commit();
+    return json({ ok: true }, 200, h);
+  }
   // просмотр и реакции — без пароля (их оставляют получатели)
   if (req.method === "POST" && (url.pathname === "/video-cta" || url.pathname === "/video-share")) {
     let b; try { b = JSON.parse(await req.text()); } catch (_) { return json({ error: "Неверный запрос" }, 400, h); }
@@ -712,6 +732,42 @@ export async function handler(req, info) {
   const key = user.key || env("ANTHROPIC_KEY");
   if (!key) return json({ error: "Ключ не настроен" }, 500, h);
 
+  // ===== Страница из ролика: создание и заявки (пока только администратор) =====
+  if (url.pathname === "/page-make") {
+    if (!ADMINS().includes(user.id)) return json({ error: "Пока недоступно" }, 403, h);
+    const kv = await kvOpen(), vid = String(body.videoId || "");
+    const meta = /^[A-Za-z0-9]{8}$/.test(vid) && (await kv.get(["vid", vid, "meta"])).value;
+    if (!meta || meta.user !== user.id) return json({ error: "Ролик не найден" }, 404, h);
+    const c = body.contacts || {}, contacts = { name: String(c.name || "").slice(0, 60), whatsapp: String(c.whatsapp || "").replace(/[^\d+]/g, "").slice(0, 20), telegram: String(c.telegram || "").replace(/[^\w@]/g, "").replace(/^@/, "").slice(0, 40), phone: String(c.phone || "").replace(/[^\d+()\- ]/g, "").slice(0, 24) };
+    const lang = body.lang === "en" ? "en" : "ru";
+    const sys = `Ты копирайтер и дизайнер посадочных страниц. По тексту ролика сделай содержание одностраничного сайта, на котором вверху будет этот ролик. Ответь ТОЛЬКО JSON без пояснений, по схеме:
+{"brand": "короткое имя/название (если дано — используй его)", "headline": "сильный заголовок до 8 слов", "sub": "подзаголовок 1–2 предложения", "accent": "#RRGGBB — акцентный цвет под тему, хорошо читается на светлом фоне", "sections": [ ... ], "cta": {"title": "призыв", "text": "1 предложение", "button": "текст кнопки до 3 слов"}}
+Секции (3–5 штук, порядок на твой выбор), типы:
+{"type":"benefits","title":"...","items":[{"icon":"одно эмодзи","title":"до 5 слов","text":"1–2 предложения"}]} (3–4 пункта)
+{"type":"steps","title":"...","items":[{"title":"...","text":"..."}]} (3–4 шага)
+{"type":"facts","title":"...","items":[{"value":"число или короткое значение","label":"что это"}]} (2–4, только факты из текста)
+{"type":"faq","title":"...","items":[{"q":"вопрос","a":"ответ"}]} (2–4)
+{"type":"prices","title":"...","items":[{"name":"...","price":"...","note":"..."}]} — ТОЛЬКО если цены есть в тексте.
+Правила: опирайся только на текст ролика, ничего не выдумывай (никаких отзывов, цен, гарантий, адресов, которых нет в тексте). Пиши живо и конкретно, без канцелярита и без длинных тире. Язык: ${lang === "en" ? "английский" : "русский"}.`;
+    const r = await callAnthropic(key, { model: env("PAGE_MODEL", "claude-opus-5-5"), max_tokens: 3000, system: sys,
+      messages: [{ role: "user", content: `Название/имя: ${contacts.name || "(не задано)"}\nТема ролика: ${String(body.title || meta.title || "").slice(0, 100)}\n\nТекст ролика:\n${String(body.text || "").slice(0, 6000)}` }] });
+    if (!r.ok) return json({ error: "Не удалось придумать страницу" }, 502, h);
+    const d = await r.json(); const txt = (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join("");
+    let content; try { content = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)); } catch (_) { return json({ error: "Страница получилась с ошибкой, попробуйте ещё раз" }, 502, h); }
+    const id = String(body.pageId || "");
+    const pid = /^[A-Za-z0-9]{8}$/.test(id) && ((await kv.get(["page", id])).value || {}).owner === user.id ? id : vidId();
+    const created = Date.now();
+    await kv.atomic().set(["page", pid], { id: pid, owner: user.id, videoId: vid, content, contacts, lang, created }, VID_TTL).set(["pageu", user.id, created, pid], 1, VID_TTL).commit();
+    return json({ ok: true, id: pid }, 200, h);
+  }
+  if (url.pathname === "/page-leads") {
+    const kv = await kvOpen(), id = String(body.id || "");
+    const page = /^[A-Za-z0-9]{8}$/.test(id) && (await kv.get(["page", id])).value;
+    if (!page || page.owner !== user.id) return json({ error: "Страница не найдена" }, 404, h);
+    const leads = []; for await (const e of kv.list({ prefix: ["plead", id] }, { reverse: true, limit: 100 })) leads.push(e.value);
+    const views = (await kv.get(["pagec", id, "views"])).value;
+    return json({ ok: true, leads, views: Number(views && views.value !== undefined ? views.value : views || 0) }, 200, h);
+  }
   // Название и эмодзи для разговора — коротко и дёшево, через Haiku
   if (url.pathname === "/title") {
     const text = String(body.text || "").slice(0, 3000);
