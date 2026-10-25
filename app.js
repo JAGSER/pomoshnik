@@ -3346,7 +3346,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=112");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=113");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3623,7 +3623,7 @@ async function pickTrack(ctxText, chat) {
   const list = await musicList(); if (!list.length) return null;
   const pref = musicPref();
   if (pref === "off") return null;
-  if (pref !== "auto") return list.find((t) => t.id === pref) || null;
+  if (pref !== "auto") { const t = list.find((x) => x.id === pref); if (t) return t; } // убранный трек — подбираем сами
   const hp = chat && chat.helper && CFG.helpers ? CFG.helpers[chat.helper] : null;
   const hay = `${ctxText} ${hp ? hp.title + " " + (hp.title_en || "") : ""}`;
   const mood = (MOODS.find(([, re]) => re.test(hay)) || ["upbeat"])[0];
