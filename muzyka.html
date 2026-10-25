@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Музыка для роликов · Помощник AI</title>
+<meta name="robots" content="noindex">
+<style>
+:root { --bg: #F6F1E9; --surface: #FFFDF9; --ink: #1F1B16; --muted: #6E655A; --line: #E4DACB; --accent: #B5532E; --soft: #F3E1D6; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1B1814; --surface: #25211C; --ink: #F2ECE3; --muted: #A99F92; --line: #3A342C; --accent: #E07A50; --soft: #3B2A21; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right)) 120px max(16px, env(safe-area-inset-left)); }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 16px; }
+.row { background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 8px; }
+.row.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--soft); }
+.top { display: flex; align-items: center; gap: 10px; }
+.n { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 2ch; }
+.t { flex: 1; font-weight: 700; }
+.t small { display: block; font-weight: 400; color: var(--muted); font-size: 14px; }
+label { display: flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; user-select: none; }
+label input { width: 20px; height: 20px; accent-color: var(--accent); }
+audio { width: 100%; height: 40px; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; gap: 10px; align-items: center; }
+.bar span { flex: 1; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.bar button { font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 10px 14px; background: var(--accent); color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎵 Музыка для роликов</h1>
+  <p class="lead">Все треки, которые сейчас подбираются к роликам. Послушайте и отметьте «Оставить» у тех, что нравятся. Внизу соберётся список, его можно скопировать и прислать.</p>
+  <div id="list">Загружаю…</div>
+</div>
+<div class="bar"><span id="sel">Пока ничего не отмечено</span><button type="button" id="copy">Скопировать</button></div>
+<script>
+let PROXY = "https://pomoshnik.jagser.deno.net";
+const MOODS = { upbeat: "бодрое", tech: "техника", celebrate: "праздник", emotional: "чувства", calm: "спокойное", food: "еда", travel: "путешествия", kids: "дети" };
+let picked = new Set(); try { picked = new Set(JSON.parse(localStorage.getItem("musicPick") || "[]")); } catch (_) {}
+let TR = [];
+function upd() {
+  try { localStorage.setItem("musicPick", JSON.stringify([...picked])); } catch (_) {}
+  const l = TR.map((t, i) => [i + 1, t]).filter(([, t]) => picked.has(t.id));
+  document.getElementById("sel").textContent = l.length ? `Оставить ${l.length}: ` + l.map(([n, t]) => `${n} ${t.title}`).join(", ") : "Пока ничего не отмечено";
+}
+(async () => {
+  try { const c = await (await fetch("config.json", { cache: "no-store" })).json(); if (c.proxy) PROXY = c.proxy; } catch (_) {}
+  const d = await (await fetch("music/music.json", { cache: "no-store" })).json();
+  TR = d.tracks || [];
+  const box = document.getElementById("list"); box.textContent = "";
+  const players = [];
+  TR.forEach((t, i) => {
+    const r = document.createElement("div"); r.className = "row";
+    const top = document.createElement("div"); top.className = "top";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
+    const ti = document.createElement("div"); ti.className = "t"; ti.textContent = `${t.icon || "🎵"} ${t.title}`;
+    const sm = document.createElement("small"); sm.textContent = (t.moods || []).map((m) => MOODS[m] || m).join(" · "); ti.append(sm);
+    const lb = document.createElement("label"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "t-" + t.id; cb.checked = picked.has(t.id);
+    lb.append(cb, document.createTextNode("Оставить"));
+    const au = document.createElement("audio"); au.controls = true; au.preload = "none"; au.src = t.file ? "music/" + t.file : `${PROXY}/music/${t.id}.mp3`;
+    au.addEventListener("play", () => players.forEach((p) => p !== au && p.pause()));
+    players.push(au);
+    r.classList.toggle("on", cb.checked);
+    cb.onchange = () => { cb.checked ? picked.add(t.id) : picked.delete(t.id); r.classList.toggle("on", cb.checked); upd(); };
+    top.append(n, ti, lb); r.append(top, au); box.append(r);
+  });
+  upd();
+})();
+document.getElementById("copy").onclick = async (e) => {
+  const t = document.getElementById("sel").textContent;
+  try { await navigator.clipboard.writeText(t); e.target.textContent = "Скопировано"; } catch (_) { prompt("Скопируйте:", t); }
+  setTimeout(() => (e.target.textContent = "Скопировать"), 2000);
+};
+</script>
+</body>
+</html>
