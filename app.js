@@ -320,8 +320,8 @@ const PLANS_P = () => [
 ];
 const PLANS_B = () => [
   { id: "expert", hot: [1, 2], unit: LL("230 ₽ за творческий ролик", "230 ₽ per creative video"), name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
-    items: LL(["30 творческих роликов в месяц", "Страница-лендинг из ролика: анимации ролика на сайте, кнопки связи и заявки", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
-      ["30 creative videos a month", "A landing page made from your video: its animations on a site, contact buttons and requests", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
+    items: LL(["30 творческих роликов в месяц", "Сайт-лендинг из ролика, кнопки связи и заявки", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
+      ["30 creative videos a month", "A landing site made from your video, contact buttons and requests", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
   { id: "start", hot: [1, 3, 4], unit: LL("≈ 980 ₽ за творческий ролик", "≈ 980 ₽ per creative video"), name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
     items: LL(["60 творческих роликов в месяц", "Страницы-лендинги из роликов", "До 3 сотрудников", "Свой логотип, цвета и шрифты", "1 персональный аватар бренда", "Формат 9:16, ролики до 60 секунд", "Музыка и звуки"],
       ["60 creative videos a month", "Landing pages made from your videos", "Up to 3 team members", "Your logo, colours and fonts", "1 personal brand avatar", "9:16, videos up to 60 seconds", "Music and sound effects"]) },
@@ -377,7 +377,7 @@ function renderPlans() {
     box.append(c);
   });
   // как страницы списываются из лимита роликов
-  if (PLANTAB === "business") { const n = el("p", "plans-note"); n.textContent = LL("Страница-лендинг из ролика списывает 10 роликов из лимита тарифа, правка готовой страницы: 1 ролик.", "A landing page counts as 10 videos from your plan's limit, editing a page counts as 1 video."); box.append(n); }
+  if (PLANTAB === "business") { const n = el("p", "plans-note"); n.textContent = LL("Сайт-лендинг из ролика списывает 5 роликов из лимита тарифа, правка готового сайта: 1 ролик.", "A landing site counts as 5 videos from your plan's limit, editing a site counts as 1 video."); box.append(n); }
   renderLead();
 }
 function renderLead() {
@@ -3346,7 +3346,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=111");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=112");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
