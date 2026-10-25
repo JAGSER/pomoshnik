@@ -319,18 +319,18 @@ const PLANS_P = () => [
       ["Everything in Family", "Up to 6 people", "Claude Opus and Think mode for hard questions", "100 creative videos a month", "Your own name inside the app", "Unlimited live camera mode"]) },
 ];
 const PLANS_B = () => [
-  { id: "expert", hot: [1], unit: LL("230 ₽ за творческий ролик", "230 ₽ per creative video"), name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
-    items: LL(["30 творческих роликов в месяц", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
-      ["30 creative videos a month", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
-  { id: "start", hot: [2, 3], unit: LL("≈ 980 ₽ за творческий ролик", "≈ 980 ₽ per creative video"), name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
-    items: LL(["60 творческих роликов в месяц", "До 3 сотрудников", "Свой логотип, цвета и шрифты", "1 персональный аватар бренда", "Формат 9:16, ролики до 60 секунд", "Музыка и звуки"],
-      ["60 creative videos a month", "Up to 3 team members", "Your logo, colours and fonts", "1 personal brand avatar", "9:16, videos up to 60 seconds", "Music and sound effects"]) },
-  { id: "business", hot: [2, 4], unit: LL("725 ₽ за творческий ролик", "725 ₽ per creative video"), name: LL("Бизнес", "Business"), price: "290 000 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true,
-    items: LL(["400 творческих роликов в месяц", "До 10 сотрудников", "Брендбук: стиль держится сам", "3 персональных аватара", "Свой голос: клон голоса основателя или диктора", "Форматы 9:16, 16:9 и 1:1, ролики до 3 минут", "Субтитры и несколько языков", "Личный менеджер"],
-      ["400 creative videos a month", "Up to 10 team members", "Brand book: your style is kept automatically", "3 personal avatars", "Your own cloned voice", "9:16, 16:9 and 1:1, videos up to 3 minutes", "Subtitles and several languages", "A personal manager"]) },
-  { id: "studio", hot: [4, 5], unit: LL("595 ₽ за творческий ролик", "595 ₽ per creative video"), name: LL("Студия", "Studio"), price: "1 190 000 ₽", per: LL("в месяц", "a month"), tag: LL("Агентствам и сетям", "Agencies and chains"),
-    items: LL(["До 2 000 творческих роликов в месяц", "Сотрудники без ограничений", "Несколько брендов в одном кабинете", "Аватары и голоса без ограничений", "Своё приложение на своём домене для клиентов", "Доступ по API", "Приоритетная очередь и выделенная поддержка"],
-      ["Up to 2,000 creative videos a month", "Unlimited team members", "Several brands in one account", "Unlimited avatars and voices", "Your own app on your own domain", "API access", "Priority queue and dedicated support"]) },
+  { id: "expert", hot: [1, 2], unit: LL("230 ₽ за творческий ролик", "230 ₽ per creative video"), name: LL("Эксперт", "Expert"), price: "6 900 ₽", per: LL("в месяц", "a month"), tag: LL("Мастерам и экспертам", "For freelancers"),
+    items: LL(["30 творческих роликов в месяц", "Страница-лендинг из ролика: анимации ролика на сайте, кнопки связи и заявки", "Свой логотип в кадре вместо «Помощник AI»", "Голос и музыка из библиотеки", "Формат 9:16, ролики до 60 секунд", "Отправка ссылкой, просмотры и ответы клиентов"],
+      ["30 creative videos a month", "A landing page made from your video: its animations on a site, contact buttons and requests", "Your logo on screen instead of ours", "Voice and music from the library", "9:16, videos up to 60 seconds", "Send by link, see client views and replies"]) },
+  { id: "start", hot: [1, 3, 4], unit: LL("≈ 980 ₽ за творческий ролик", "≈ 980 ₽ per creative video"), name: LL("Старт", "Start"), price: "59 000 ₽", per: LL("в месяц", "a month"), tag: LL("Один бренд", "One brand"),
+    items: LL(["60 творческих роликов в месяц", "Страницы-лендинги из роликов", "До 3 сотрудников", "Свой логотип, цвета и шрифты", "1 персональный аватар бренда", "Формат 9:16, ролики до 60 секунд", "Музыка и звуки"],
+      ["60 creative videos a month", "Landing pages made from your videos", "Up to 3 team members", "Your logo, colours and fonts", "1 personal brand avatar", "9:16, videos up to 60 seconds", "Music and sound effects"]) },
+  { id: "business", hot: [1, 3, 5], unit: LL("725 ₽ за творческий ролик", "725 ₽ per creative video"), name: LL("Бизнес", "Business"), price: "290 000 ₽", per: LL("в месяц", "a month"), tag: LL("Самый выбираемый", "Most popular"), top: true,
+    items: LL(["400 творческих роликов в месяц", "Страницы-лендинги из роликов", "До 10 сотрудников", "Брендбук: стиль держится сам", "3 персональных аватара", "Свой голос: клон голоса основателя или диктора", "Форматы 9:16, 16:9 и 1:1, ролики до 3 минут", "Субтитры и несколько языков", "Личный менеджер"],
+      ["400 creative videos a month", "Landing pages made from your videos", "Up to 10 team members", "Brand book: your style is kept automatically", "3 personal avatars", "Your own cloned voice", "9:16, 16:9 and 1:1, videos up to 3 minutes", "Subtitles and several languages", "A personal manager"]) },
+  { id: "studio", hot: [1, 5, 6], unit: LL("595 ₽ за творческий ролик", "595 ₽ per creative video"), name: LL("Студия", "Studio"), price: "1 190 000 ₽", per: LL("в месяц", "a month"), tag: LL("Агентствам и сетям", "Agencies and chains"),
+    items: LL(["До 2 000 творческих роликов в месяц", "Страницы-лендинги из роликов", "Сотрудники без ограничений", "Несколько брендов в одном кабинете", "Аватары и голоса без ограничений", "Своё приложение на своём домене для клиентов", "Доступ по API", "Приоритетная очередь и выделенная поддержка"],
+      ["Up to 2,000 creative videos a month", "Landing pages made from your videos", "Unlimited team members", "Several brands in one account", "Unlimited avatars and voices", "Your own app on your own domain", "API access", "Priority queue and dedicated support"]) },
 ];
 let PLANTAB = "personal", LEAD = null;
 function planLine() {
@@ -376,6 +376,8 @@ function renderPlans() {
     }
     box.append(c);
   });
+  // как страницы списываются из лимита роликов
+  if (PLANTAB === "business") { const n = el("p", "plans-note"); n.textContent = LL("Страница-лендинг из ролика списывает 10 роликов из лимита тарифа, правка готовой страницы: 1 ролик.", "A landing page counts as 10 videos from your plan's limit, editing a page counts as 1 video."); box.append(n); }
   renderLead();
 }
 function renderLead() {
@@ -3344,7 +3346,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=110");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=111");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
