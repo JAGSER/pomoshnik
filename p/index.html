@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Страница</title>
+<meta name="description" content="Посадочная страница с роликом">
+<meta property="og:image" content="https://pomoshnik.ai/icon-512.png">
+<meta name="theme-color" content="#FBF8F3">
+<link rel="icon" href="../icon.svg">
+<style>
+/* Посадочная страница из ролика: ролик сверху, заголовок, секции, кнопки связи и форма заявки.
+   Весь текст ставится через textContent — содержимое страницы не может выполнить код. */
+:root { --bg: #FBF8F3; --surface: #FFFFFF; --ink: #1C1A17; --muted: #6B645B; --line: #E8E1D6; --accent: #B5532E; --accent-ink: #FFFFFF; --soft: #F4E7DE; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16140F; --surface: #211E19; --ink: #F3EEE6; --muted: #A8A094; --line: #36312A; --soft: #2C241E; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 640px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-left)) calc(110px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right)); }
+.brand { font-weight: 800; letter-spacing: .02em; color: var(--accent); font-size: 15px; text-transform: uppercase; margin: 0 0 10px; }
+h1 { font-size: clamp(30px, 8vw, 44px); line-height: 1.08; margin: 0 0 12px; letter-spacing: -.02em; text-wrap: balance; }
+.sub { font-size: 19px; color: var(--muted); margin: 0 0 20px; text-wrap: pretty; }
+.hero-btns { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 24px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 0 20px; border-radius: 14px; border: 0; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.btn.main { background: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: var(--surface); color: var(--ink); border: 1.5px solid var(--line); }
+.player { position: relative; border-radius: 24px; overflow: hidden; background: #000; aspect-ratio: 9 / 16; width: min(100%, 380px); margin: 0 auto 32px; box-shadow: 0 18px 40px rgba(0,0,0,.18); }
+.player video { width: 100%; height: 100%; display: block; object-fit: cover; }
+.sound { position: absolute; right: 12px; bottom: 12px; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 0; background: rgba(0,0,0,.6); color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+section { margin: 0 0 34px; }
+h2 { font-size: 26px; line-height: 1.15; margin: 0 0 14px; letter-spacing: -.01em; text-wrap: balance; }
+.cards { display: grid; gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: start; }
+.card .ic { font-size: 30px; line-height: 1; grid-row: span 2; }
+.card b { font-size: 18px; }
+.card p, .step p, .faq p { margin: 0; color: var(--muted); }
+.steps { counter-reset: s; display: grid; gap: 12px; }
+.step { position: relative; padding: 4px 0 4px 54px; }
+.step::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 2px; width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; display: grid; place-items: center; }
+.step b { display: block; font-size: 18px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.fact { background: var(--soft); border-radius: 18px; padding: 16px; }
+.fact .v { font-size: 30px; font-weight: 800; color: var(--accent); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fact .l { color: var(--muted); font-size: 15px; margin-top: 4px; }
+.prices { display: grid; gap: 8px; }
+.price { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.price b { font-size: 18px; } .price .p { font-weight: 800; color: var(--accent); white-space: nowrap; } .price .n { grid-column: 1 / -1; color: var(--muted); font-size: 15px; }
+.faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 8px; }
+.faq summary { font-weight: 700; cursor: pointer; }
+.faq p { margin-top: 8px; }
+.cta { background: var(--accent); color: var(--accent-ink); border-radius: 24px; padding: 22px 20px; }
+.cta h2 { color: inherit; } .cta p { margin: 0 0 14px; opacity: .9; }
+form { display: grid; gap: 10px; }
+input, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1.5px solid transparent; border-radius: 12px; padding: 13px 14px; }
+textarea { min-height: 84px; resize: vertical; }
+form .btn { background: var(--ink); color: var(--bg); }
+.ok { font-weight: 700; }
+.contacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.contacts a { color: inherit; font-weight: 700; }
+.dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; gap: 8px; justify-content: center; padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+.dock .btn { flex: 1; max-width: 300px; }
+.made { text-align: center; color: var(--muted); font-size: 14px; margin-top: 30px; }
+.made a { color: inherit; }
+.state { padding: 40px 0; text-align: center; color: var(--muted); }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="state">Загружаю…</p></div>
+<script>
+const ID = (location.search.match(/^\?([A-Za-z0-9]{8})/) || [])[1] || "";
+let PROXY = "https://pomoshnik.jagser.deno.net";
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = String(text); return e; }
+const S = (x, n = 400) => String(x == null ? "" : x).slice(0, n);
+(async () => {
+  const app = $("app");
+  try { const c = await (await fetch("../config.json", { cache: "no-store" })).json(); if (c.proxy) PROXY = c.proxy; } catch (_) {}
+  let P;
+  try { const r = await fetch(`${PROXY}/page/${ID}`); if (!r.ok) throw 0; P = await r.json(); }
+  catch (_) { app.innerHTML = ""; app.append(el("p", "state", "Страница не найдена или срок её хранения истёк.")); return; }
+  const C = P.content || {}, K = P.contacts || {}, EN = P.lang === "en";
+  const L = (ru, en) => (EN ? en : ru);
+  document.documentElement.lang = EN ? "en" : "ru";
+  if (/^#[0-9a-f]{6}$/i.test(C.accent || "")) document.documentElement.style.setProperty("--accent", C.accent);
+  document.title = S(C.headline || C.brand || "", 80);
+  app.innerHTML = "";
+  // связь: WhatsApp, Telegram, звонок
+  const links = [];
+  if (K.whatsapp) links.push(["WhatsApp", "https://wa.me/" + K.whatsapp.replace(/\D/g, "")]);
+  if (K.telegram) links.push(["Telegram", "https://t.me/" + K.telegram]);
+  if (K.phone) links.push([L("Позвонить", "Call"), "tel:" + K.phone.replace(/[^\d+]/g, "")]);
+  const mk = (cls, [t, href]) => { const a = el("a", "btn " + cls, t); a.href = href; if (/^https/.test(href)) { a.target = "_blank"; a.rel = "noopener"; } return a; };
+
+  if (C.brand || K.name) app.append(el("p", "brand", S(K.name || C.brand, 60)));
+  app.append(el("h1", "", S(C.headline, 120)));
+  if (C.sub) app.append(el("p", "sub", S(C.sub, 300)));
+  const hb = el("div", "hero-btns");
+  const toForm = el("a", "btn main", S((C.cta && C.cta.button) || L("Оставить заявку", "Get in touch"), 30)); toForm.href = "#lead";
+  hb.append(toForm); links.slice(0, 2).forEach((l) => hb.append(mk("ghost", l)));
+  app.append(hb);
+
+  if (P.videoId) {
+    const pl = el("div", "player"), v = document.createElement("video");
+    v.src = `${PROXY}/video/${P.videoId}.mp4`; if (P.poster) v.poster = `${PROXY}/video/${P.videoId}.jpg`;
+    v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true; v.setAttribute("playsinline", "");
+    const snd = el("button", "sound", L("🔊 Со звуком", "🔊 Sound on")); snd.type = "button";
+    snd.onclick = () => { v.muted = !v.muted; if (!v.muted) { v.currentTime = 0; v.play().catch(() => {}); } snd.textContent = v.muted ? L("🔊 Со звуком", "🔊 Sound on") : L("🔇 Без звука", "🔇 Mute"); };
+    pl.append(v, snd); app.append(pl);
+  }
+
+  (Array.isArray(C.sections) ? C.sections : []).slice(0, 6).forEach((s) => {
+    const sec = el("section"); if (s.title) sec.append(el("h2", "", S(s.title, 90)));
+    const items = Array.isArray(s.items) ? s.items.slice(0, 8) : [];
+    if (s.type === "benefits") { const g = el("div", "cards"); items.forEach((it) => { const c = el("div", "card"); c.append(el("span", "ic", S(it.icon, 4) || "✦"), el("b", "", S(it.title, 80)), el("p", "", S(it.text, 300))); g.append(c); }); sec.append(g); }
+    else if (s.type === "steps") { const g = el("div", "steps"); items.forEach((it) => { const c = el("div", "step"); c.append(el("b", "", S(it.title, 80)), el("p", "", S(it.text, 300))); g.append(c); }); sec.append(g); }
+    else if (s.type === "facts") { const g = el("div", "facts"); items.forEach((it) => { const c = el("div", "fact"); c.append(el("div", "v", S(it.value, 20)), el("div", "l", S(it.label, 80))); g.append(c); }); sec.append(g); }
+    else if (s.type === "prices") { const g = el("div", "prices"); items.forEach((it) => { const c = el("div", "price"); c.append(el("b", "", S(it.name, 80)), el("span", "p", S(it.price, 30))); if (it.note) c.append(el("span", "n", S(it.note, 160))); g.append(c); }); sec.append(g); }
+    else if (s.type === "faq") { const g = el("div", "faq"); items.forEach((it) => { const d = el("details"), sm = el("summary", "", S(it.q, 160)); d.append(sm, el("p", "", S(it.a, 500))); g.append(d); }); sec.append(g); }
+    else return;
+    app.append(sec);
+  });
+
+  // заявка
+  const cta = el("section", "cta"); cta.id = "lead";
+  cta.append(el("h2", "", S((C.cta && C.cta.title) || L("Оставьте заявку", "Leave a request"), 90)));
+  cta.append(el("p", "", S((C.cta && C.cta.text) || L("Напишите телефон, и вам ответят.", "Leave your phone and we'll get back to you."), 200)));
+  const f = el("form"); f.noValidate = true;
+  const nm = el("input"); nm.id = "f-name"; nm.placeholder = L("Имя", "Name"); nm.autocomplete = "name";
+  const ph = el("input"); ph.id = "f-phone"; ph.placeholder = L("Телефон или ник в мессенджере", "Phone or messenger"); ph.autocomplete = "tel"; ph.inputMode = "tel";
+  const ms = el("textarea"); ms.id = "f-msg"; ms.placeholder = L("Комментарий (необязательно)", "Comment (optional)");
+  const sb = el("button", "btn", S((C.cta && C.cta.button) || L("Отправить", "Send"), 30)); sb.type = "submit";
+  const st = el("p", "ok"); st.setAttribute("role", "status");
+  f.append(nm, ph, ms, sb, st);
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!ph.value.trim() && !ms.value.trim()) { st.textContent = L("Оставьте телефон или сообщение.", "Leave a phone or a message."); return; }
+    sb.disabled = true; st.textContent = L("Отправляю…", "Sending…");
+    try {
+      const r = await fetch(PROXY + "/page-lead", { method: "POST", body: JSON.stringify({ id: ID, name: nm.value, phone: ph.value, msg: ms.value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "");
+      f.replaceChildren(el("p", "ok", L("Спасибо! Заявка отправлена, скоро с вами свяжутся.", "Thank you! Your request has been sent.")));
+    } catch (err) { sb.disabled = false; st.textContent = err.message || L("Не отправилось. Попробуйте ещё раз.", "Not sent. Please try again."); }
+  };
+  cta.append(f);
+  if (links.length) { const cs = el("div", "contacts"); links.forEach((l) => { const a = el("a", "", l[0]); a.href = l[1]; if (/^https/.test(l[1])) { a.target = "_blank"; a.rel = "noopener"; } cs.append(a); }); cta.append(cs); }
+  app.append(cta);
+
+  const made = el("p", "made"); const a = el("a", "", L("Сделано в «Помощник AI»", "Made with Pomoshnik AI")); a.href = "../?ref=" + ID; made.append(a); app.append(made);
+  // нижняя панель: главное действие всегда под пальцем
+  const dock = el("div", "dock");
+  if (links[0]) dock.append(mk("ghost", links[0]));
+  const d2 = el("a", "btn main", S((C.cta && C.cta.button) || L("Оставить заявку", "Get in touch"), 30)); d2.href = "#lead"; dock.append(d2);
+  document.body.append(dock);
+})();
+</script>
+</body>
+</html>
