@@ -990,9 +990,9 @@ export async function handler(req, info) {
     messages: body.messages,
   };
   // творческий ролик: Opus 5.5 думает всегда, и раздумья тратят тот же лимит длины ответа.
-  // На длинной озвучке он раньше выдумывал весь запас и не успевал написать код:
-  // теперь думает меньше, а запас длины вдвое больше
-  if (body.purpose === "video") { payload.max_tokens = 64000; payload.output_config = { effort: env("VIDEO_EFFORT", "low") }; }
+  // На длинной озвучке он раньше выдумывал весь запас и не успевал написать код,
+  // поэтому даём максимальный запас: думает сколько нужно и успевает написать код
+  if (body.purpose === "video") payload.max_tokens = Number(env("VIDEO_MAX_TOKENS", "128000"));
   // «Подумать»: модель сначала рассуждает, сама решая, сколько думать
   if (think) {
     payload.thinking = { type: "adaptive" };
