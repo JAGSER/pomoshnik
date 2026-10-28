@@ -2165,11 +2165,15 @@ function openSettings() {
     sel.value = musicPref(); if (sel.value !== musicPref()) sel.value = "auto";
     sel.onchange = () => { store.set("music:" + SESSION.user, sel.value); stopPreview(); $("#music-play").textContent = "▶"; };
     $(".music-row").hidden = !list.length;
+    // громкость музыки: 100% — обычная, 0% — без музыки, до 200% — громче
+    const vr = $("#set-music-vol"), vv = $("#music-vol-val");
+    vr.value = musicVol(); vv.textContent = musicVol() + "%";
+    vr.oninput = () => { vv.textContent = vr.value + "%"; store.set("musicVol:" + SESSION.user, +vr.value); if (PREVIEW) PREVIEW.volume = Math.min(1, +vr.value / 200); };
     const pb = $("#music-play");
     pb.onclick = () => {
       const was = pb.textContent; stopPreview(); if (was !== "▶") { pb.textContent = "▶"; return; }
       const t = list.find((x) => x.id === sel.value) || list[0]; if (!t) return;
-      PREVIEW = audioFor(musicSrc(t)); PREVIEW.playbackRate = 1; pb.textContent = "⏹";
+      PREVIEW = audioFor(musicSrc(t)); PREVIEW.playbackRate = 1; PREVIEW.volume = Math.min(1, musicVol() / 200); pb.textContent = "⏹";
       PREVIEW.onended = () => { pb.textContent = "▶"; PREVIEW = null; };
       PREVIEW.play().catch(() => (pb.textContent = "▶"));
     };
@@ -2599,7 +2603,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     const parts = [];
     let done = 0;
     label(`⏳ 0/${chunks.length}`);
-    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c, undefined, ttsVideoModel(), "video").then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
+    const blobs = await Promise.all(chunks.map((c) => ttsBlob(c, undefined, ttsDialogModel(), "video").then((b) => { done++; label(`⏳ ${done}/${chunks.length}`); return b; })));
     for (const b of blobs) parts.push((await ac.decodeAudioData(await b.arrayBuffer())).getChannelData(0));
     if (msg && (!msg.tts || msg.tts.length < chunks.length)) { msg.tts = chunks.slice(); save(); }
     const total = parts.reduce((n, a) => n + a.length, 0);
@@ -2618,7 +2622,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     // 2) сборка видео (если в разговоре есть фото — получится слайдшоу из них)
     const photos = await chatPhotos(msg);
     // звуки и музыка под голос
-    try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat); } catch (e) { console.warn("Музыка:", e); }
+    try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat, subs); } catch (e) { console.warn("Музыка:", e); }
     let scene = null;
     const creativeLeft = !PLAN || !PLAN.usage || PLAN.usage.creativeLeft > 0;
     if (creativeOn() && !creativeLeft && PLAN.usage.needReg) vidNote(btn, LL("ℹ️ Творческие ролики с анимацией откроются, когда вы сохраните аккаунт: ⚙️ → придумайте имя и пароль. Сейчас сделан обычный ролик.", "ℹ️ Creative videos with animation unlock once you save your account: ⚙️ → choose a name and password. This one is a simple video."));
@@ -3346,7 +3350,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=113");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=114");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -3632,32 +3636,85 @@ async function pickTrack(ctxText, chat) {
   const arr = pool.length ? pool : list;
   return arr[Math.floor(Math.random() * arr.length)];
 }
-async function addMusic(pcm, speech, outro, ctxText, chat) {
-  const tr = await pickTrack(ctxText, chat); if (!tr) return;
+// громкость музыки в процентах от обычной (100 — как было, 0 — без музыки)
+function musicVol() { const v = SESSION ? store.get("musicVol:" + SESSION.user) : null; return v === null || v === undefined || isNaN(+v) ? 100 : Math.max(0, Math.min(200, +v)); }
+// настроение куска рассказа → трек (joyful — основной трек по теме разговора) и громкость
+const MOOD_TRACKS = { calm: [["lofi1", "jazz1"], "calm"], tender: [["emotional1", "acoustic1"], "emotional"], sad: [["emotional1"], "emotional"], tense: [["emotional1"], "emotional"], triumphant: [["inspire1", "celebrate1"], "celebrate"] };
+const MOOD_GAIN = { joyful: 1, calm: 0.9, tender: 0.9, sad: 0.7, tense: 0.45, triumphant: 1 };
+// длинный ролик: Claude размечает, где рассказ весёлый, где грустный или тревожный
+async function moodPlan(subs, speech) {
+  if (speech < 45 || !subs || subs.length < 8) return null;
+  try {
+    const r = await fetch(CFG.proxy + "/music-moods", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: SESSION.user, password: SESSION.password, lines: subs.map((x) => x.text) }) });
+    if (!r.ok) return null;
+    const seg = ((await r.json()).segments || []).filter((x) => x.from < subs.length);
+    if (!seg.length) return null;
+    let out = [];
+    seg.forEach((x, i) => { const t0 = i === 0 ? 0 : subs[x.from].t0; if (out.length && out[out.length - 1].mood === x.mood) return; out.push({ t0, mood: x.mood }); });
+    // куски короче 15 с не меняют музыку — присоединяем к предыдущему
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let i = 1; i < out.length; i++) {
+        const t1 = i + 1 < out.length ? out[i + 1].t0 : speech;
+        if (t1 - out[i].t0 < 15) { out.splice(i, 1); changed = true; break; }
+        if (out[i].mood === out[i - 1].mood) { out.splice(i, 1); changed = true; break; }
+      }
+    }
+    return out.length > 1 ? out : null;
+  } catch (_) { return null; }
+}
+const TRACK_PCM = new Map();
+async function trackPcm(tr) {
+  if (TRACK_PCM.has(tr.id)) return TRACK_PCM.get(tr.id);
   const buf = await (await fetch(musicSrc(tr))).arrayBuffer();
-  const ac = new OfflineAudioContext(1, 1, VRATE);
-  const au = await ac.decodeAudioData(buf);
+  const au = await new OfflineAudioContext(1, 1, VRATE).decodeAudioData(buf);
   // пересэмплируем в моно 48 кГц
   const off = new OfflineAudioContext(1, Math.ceil(au.duration * VRATE), VRATE);
   const src = off.createBufferSource(); src.buffer = au; src.connect(off.destination); src.start();
   const m = (await off.startRendering()).getChannelData(0);
   // выравниваем громкость трека: все треки к одному уровню, тихие подтягиваем
   let ss = 0, n = 0; for (let i = 0; i < m.length; i += 16) { ss += m[i] * m[i]; n++; }
-  const rms = Math.sqrt(ss / Math.max(1, n)) || 0.1, norm = Math.min(4, 0.2 / rms);
+  const rms = Math.sqrt(ss / Math.max(1, n)) || 0.1, r = { m, norm: Math.min(4, 0.2 / rms) };
+  if (TRACK_PCM.size > 3) TRACK_PCM.clear();
+  TRACK_PCM.set(tr.id, r);
+  return r;
+}
+async function addMusic(pcm, speech, outro, ctxText, chat, subs) {
+  const vol = musicVol() / 100; if (!vol) return;
+  const base = await pickTrack(ctxText, chat); if (!base) return;
+  const list = await musicList();
+  // музыка следует за рассказом, если трек подбирается сам; выбранный вручную играет весь ролик
+  const plan = musicPref() === "auto" ? await moodPlan(subs, speech) : null;
+  const segs = (plan || [{ t0: 0, mood: "joyful" }]).map((x, i, a) => {
+    let tr = base;
+    if (x.mood !== "joyful" && MOOD_TRACKS[x.mood]) { const [ids, tag] = MOOD_TRACKS[x.mood]; tr = ids.map((id) => list.find((t) => t.id === id)).find(Boolean) || list.find((t) => (t.moods || []).includes(tag)) || base; }
+    return { tr, gain: MOOD_GAIN[x.mood] || 1, t0: x.t0, t1: i + 1 < a.length ? a[i + 1].t0 : Infinity };
+  });
+  const mus = new Float32Array(pcm.length), X = Math.round(VRATE * 2.5);
+  for (let k = 0; k < segs.length; k++) {
+    const s = segs[k], { m, norm } = await trackPcm(s.tr), first = k === 0, last = k === segs.length - 1;
+    const a = first ? 0 : Math.max(0, Math.round(s.t0 * VRATE) - X / 2), b = last ? pcm.length : Math.min(pcm.length, Math.round(s.t1 * VRATE) + X / 2);
+    const start = Math.round((s.tr.skip || 0) * VRATE), g = norm * (s.tr.gain || 1) * s.gain;
+    for (let i = a; i < b; i++) {
+      let w = g;
+      if (!first && i - a < X) w *= Math.sin(((i - a) / X) * Math.PI / 2);
+      if (!last && b - i < X) w *= Math.sin(((b - i) / X) * Math.PI / 2);
+      mus[i] += m[(start + i - a) % m.length] * w;
+    }
+  }
   // огибающая голоса — музыка тише, когда говорят
   const win = Math.round(VRATE * 0.05), env = new Float32Array(Math.ceil(pcm.length / win));
   for (let k = 0; k < env.length; k++) { let a = 0; for (let i = k * win; i < Math.min(pcm.length, (k + 1) * win); i += 8) a = Math.max(a, Math.abs(pcm[i])); env[k] = a; }
-  const start = Math.round((tr.skip || 0) * VRATE), fadeIn = VRATE * 0.6, fadeOut = VRATE * 1.2;
+  const fadeIn = VRATE * 0.6, fadeOut = VRATE * 1.2;
   let duck = 0.5;
   for (let i = 0; i < pcm.length; i++) {
     const t = i / VRATE;
     const target = t > speech ? 0.9 : env[Math.floor(i / win)] > 0.04 ? 0.3 : 0.5;
     duck += (target - duck) * 0.0004;
-    let g = duck * norm * (tr.gain || 1);
+    let g = duck * vol;
     if (i < fadeIn) g *= i / fadeIn;
     if (i > pcm.length - fadeOut) g *= (pcm.length - i) / fadeOut;
-    const j = (start + i) % m.length;
-    pcm[i] += m[j] * g;
+    pcm[i] += mus[i] * g;
   }
   // мягкий ограничитель: срезает только редкие пики, общую громкость голоса не трогает
   for (let i = 0; i < pcm.length; i++) { const x = pcm[i], a = Math.abs(x); if (a > 0.9) pcm[i] = Math.sign(x) * (0.9 + 0.09 * Math.tanh((a - 0.9) / 0.09)); }
@@ -4033,9 +4090,34 @@ let CUR_VID = null;
 async function directorCall(messages, onChars, model) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: DIRECTOR_PROMPT, messages }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: DIRECTOR_PROMPT, messages, bg: true }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
+  // сервер пишет код сам и отдаёт номер задания: забираем текст по кускам.
+  // Если телефон ушёл в фон или пропала связь, просто продолжаем, когда он вернётся.
+  if ((r.headers.get("Content-Type") || "").includes("application/json")) {
+    const { job } = await r.json();
+    let out = "", errs = 0;
+    const T0 = Date.now();
+    for (;;) {
+      await new Promise((res) => setTimeout(res, 2000));
+      let d;
+      try {
+        const q = await fetch(CFG.proxy + "/job", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: SESSION.user, password: SESSION.password, job, from: out.length }) });
+        d = await q.json();
+        if (!q.ok) throw Object.assign(new Error(d.error || "Задание потерялось"), { fatal: q.status === 404 });
+        errs = 0;
+      } catch (e) {
+        if (e.fatal) throw e;
+        if (++errs > 600) throw new Error("Нет связи с сервером");
+        continue;
+      }
+      if (d.text) { out += d.text; if (onChars) onChars(out.length); }
+      if (d.done) { if (d.err && !out) throw new Error(d.err); return { text: out, stop: d.stop }; }
+      if (d.age > 180000) throw new Error("Сервер перестал писать ролик");
+      if (Date.now() - T0 > 40 * 60000) throw new Error("Ролик пишется слишком долго");
+    }
+  }
   const reader = r.body.getReader(), dec = new TextDecoder();
   let buf = "", out = "", stop = null;
   for (;;) {

@@ -237,6 +237,51 @@ async function kvOpen() {
   try { if (typeof Deno !== "undefined" && Deno.openKv) KV = await Deno.openKv(); } catch (e) { console.log("KV недоступен", String(e)); }
   return KV;
 }
+/* Код творческого ролика пишется на сервере: телефон может уйти в фон или потерять связь,
+   а сервер сам дождётся ответа Claude и сложит его в хранилище; телефон забирает текст кусками (/job). */
+const JOB_PART = 20000, JOB_TTL = { expireIn: 86400_000 };
+async function jobRun(kv, id, owner, key, payload, selfUrl) {
+  let text = "", stop = null, err = null, saved = 0, last = 0;
+  const flush = async (done) => {
+    const at = kv.atomic();
+    for (let i = Math.floor(saved / JOB_PART); i <= Math.floor(text.length / JOB_PART); i++) at.set(["cjob", id, "p", i], text.slice(i * JOB_PART, (i + 1) * JOB_PART), JOB_TTL);
+    at.set(["cjob", id, "m"], { user: owner, len: text.length, stop, err, done: !!done, t: Date.now() }, JOB_TTL);
+    await at.commit(); saved = text.length; last = Date.now();
+  };
+  // пока пишется ответ, сервер сам себя будит, чтобы его не усыпили без запросов от телефона
+  const ping = setInterval(() => { fetch(selfUrl + "/").catch(() => {}); }, 20000);
+  try {
+    let res = null;
+    for (let a = 0; a < 4; a++) {
+      res = await callAnthropic(key, payload);
+      if (res.ok) break;
+      const t = await res.text();
+      if (res.status === 400 && payload.tools && /tool/i.test(t)) { delete payload.tools; continue; }
+      if ([429, 500, 502, 503, 529].includes(res.status) && a < 3) { await new Promise((r) => setTimeout(r, 6000 * (a + 1))); continue; }
+      throw new Error(res.status === 529 ? "Claude перегружен, попробуйте через минуту" : res.status === 429 ? "Слишком много запросов, подождите немного" : "Claude сейчас недоступен (" + res.status + ")");
+    }
+    const rd = res.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
+        if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") text += ev.delta.text;
+        else if (ev.type === "message_delta" && ev.delta?.stop_reason) stop = ev.delta.stop_reason;
+        else if (ev.type === "error") err = "Claude прервал ответ";
+      }
+      if (Date.now() - last > 1500) await flush(false);
+    }
+    if (!stop && !err) err = "Ответ Claude оборвался";
+  } catch (e) { err = String(e.message || e).slice(0, 200); }
+  finally { clearInterval(ping); }
+  await flush(true);
+}
 async function sampleGet(voice) {
   const kv = await kvOpen();
   if (!kv) return null;
@@ -863,6 +908,35 @@ export async function handler(req, info) {
   }
 
 
+  // текст творческого ролика, который пишется на сервере: отдаём с того места, где телефон остановился
+  if (url.pathname === "/job") {
+    const kv = await kvOpen(), id = String(body.job || "");
+    const m = kv && /^[a-z0-9]{16}$/.test(id) && (await kv.get(["cjob", id, "m"])).value;
+    if (!m || m.user !== user.id) return json({ error: "Задание не найдено" }, 404, h);
+    const from = Math.max(0, Math.min(Math.floor(Number(body.from) || 0), m.len)), p0 = Math.floor(from / JOB_PART);
+    let text = "";
+    for (let i = p0; i * JOB_PART < m.len; i++) text += (await kv.get(["cjob", id, "p", i])).value || "";
+    text = text.slice(from - p0 * JOB_PART);
+    return json({ text, done: m.done, stop: m.stop, err: m.err, age: Date.now() - m.t }, 200, h);
+  }
+  // настроение по ходу рассказа — для смены фоновой музыки в длинном ролике
+  if (url.pathname === "/music-moods") {
+    const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 500).map((x, i) => `${i}. ${String(x || "").slice(0, 160)}`).join("\n");
+    if (!lines) return json({ error: "Нет текста" }, 400, h);
+    const r = await callAnthropic(key, {
+      model: env("MOOD_MODEL", "claude-sonnet-5-5"), max_tokens: 1500,
+      system: `Ты музыкальный редактор. Ниже фразы озвучки ролика по порядку, с номерами. Раздели их на последовательные куски по настроению, чтобы под каждый кусок подобрать фоновую музыку.
+Настроения: joyful (весело, бодро, игриво), calm (спокойно, нейтральный рассказ), tender (тепло, нежно, трогательно), sad (грусть, потеря, слёзы), tense (тревога, страх, опасность, напряжение), triumphant (победа, счастливая развязка, праздник).
+Меняй настроение только при явной смене того, что происходит; кусок не короче 5–6 фраз. Ответь ТОЛЬКО JSON-массивом без пояснений: [{"from":0,"mood":"calm"},{"from":14,"mood":"sad"}] — from это номер первой фразы куска, первый кусок с 0.`,
+      messages: [{ role: "user", content: lines }],
+    });
+    if (!r.ok) return json({ error: "Не удалось разобрать настроение" }, 502, h);
+    const d = await r.json(); const txt = (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join("");
+    let seg = []; try { seg = JSON.parse(txt.slice(txt.indexOf("["), txt.lastIndexOf("]") + 1)); } catch (_) {}
+    const OK = ["joyful", "calm", "tender", "sad", "tense", "triumphant"];
+    seg = (Array.isArray(seg) ? seg : []).filter((s) => s && OK.includes(s.mood) && Number.isFinite(+s.from)).map((s) => ({ from: Math.max(0, Math.floor(+s.from)), mood: s.mood })).sort((a, b) => a.from - b.from);
+    return json({ segments: seg }, 200, h);
+  }
   if (url.pathname !== "/chat") return json({ error: "Не найдено" }, 404, h);
 
   // живой режим: быстрые модели доступны всем (они дешевле основной)
@@ -928,6 +1002,16 @@ export async function handler(req, info) {
     }];
   }
 
+  // творческий ролик: пишем на сервере, телефону сразу отдаём номер задания
+  if (body.purpose === "video" && body.bg) {
+    const kv = await kvOpen();
+    if (kv) {
+      const id = rnd(16);
+      await kv.set(["cjob", id, "m"], { user: user.id, len: 0, stop: null, err: null, done: false, t: Date.now() }, JOB_TTL);
+      jobRun(kv, id, user.id, key, payload, url.origin).catch((e) => console.log("job", String(e)));
+      return json({ job: id }, 200, h);
+    }
+  }
   let res = await callAnthropic(key, payload);
   // Если что-то из дополнительных настроек не принято — повторяем без него
   for (let i = 0; i < 2 && res.status === 400; i++) {
