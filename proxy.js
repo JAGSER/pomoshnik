@@ -257,6 +257,7 @@ async function jobRun(kv, id, owner, key, payload, selfUrl) {
       if (res.ok) break;
       const t = await res.text();
       if (res.status === 400 && payload.tools && /tool/i.test(t)) { delete payload.tools; continue; }
+      if (res.status === 400 && payload.output_config && /effort|output_config/i.test(t)) { delete payload.output_config; continue; }
       if ([429, 500, 502, 503, 529].includes(res.status) && a < 3) { await new Promise((r) => setTimeout(r, 6000 * (a + 1))); continue; }
       throw new Error(res.status === 529 ? "Claude перегружен, попробуйте через минуту" : res.status === 429 ? "Слишком много запросов, подождите немного" : "Claude сейчас недоступен (" + res.status + ")");
     }
@@ -988,6 +989,10 @@ export async function handler(req, info) {
     stream: true,
     messages: body.messages,
   };
+  // творческий ролик: Opus 5.5 думает всегда, и раздумья тратят тот же лимит длины ответа.
+  // На длинной озвучке он раньше выдумывал весь запас и не успевал написать код:
+  // теперь думает меньше, а запас длины вдвое больше
+  if (body.purpose === "video") { payload.max_tokens = 64000; payload.output_config = { effort: env("VIDEO_EFFORT", "low") }; }
   // «Подумать»: модель сначала рассуждает, сама решая, сколько думать
   if (think) {
     payload.thinking = { type: "adaptive" };
@@ -1017,6 +1022,7 @@ export async function handler(req, info) {
   for (let i = 0; i < 2 && res.status === 400; i++) {
     const text = await res.text();
     if (payload.thinking && /thinking|effort|output_config/i.test(text)) { delete payload.thinking; delete payload.output_config; }
+    else if (payload.output_config && /effort|output_config/i.test(text)) delete payload.output_config;
     else if (payload.tools && /tool/i.test(text)) delete payload.tools;
     else return json({ error: "Ошибка запроса", details: text.slice(0, 500) }, 400, h);
     res = await callAnthropic(key, payload);
