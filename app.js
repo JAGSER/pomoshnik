@@ -3350,7 +3350,7 @@ async function encodeVideo(scene, pcm, progress) {
 
 // Быстрый путь: кодируем кадры и звук напрямую, без проигрывания (десятки секунд вместо минут)
 async function encodeFast(scene, pcm, progress, noAudio) {
-  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=114");
+  if (!window.Mp4Muxer) await loadScript("mp4-muxer.js?v=115");
   // H.264 открывается везде; VP9 — запасной вариант, если H.264 кодировать нечем
   let vcfg = null, vcodec = null;
   for (const [codec, mc] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["avc1.420034", "avc"], ["vp09.00.40.08", "vp9"]]) {
@@ -4113,7 +4113,7 @@ async function directorCall(messages, onChars, model) {
         continue;
       }
       if (d.text) { out += d.text; if (onChars) onChars(out.length); }
-      if (d.done) { if (d.err && !out) throw new Error(d.err); return { text: out, stop: d.stop }; }
+      if (d.done) { if (d.err && !out) throw new Error(d.err); return { text: out, stop: d.stop, err: d.err }; }
       if (d.age > 180000) throw new Error("Сервер перестал писать ролик");
       if (Date.now() - T0 > 40 * 60000) throw new Error("Ролик пишется слишком долго");
     }
@@ -4138,7 +4138,10 @@ async function directorCall(messages, onChars, model) {
 }
 function extractCode(s) {
   const m = s.match(/```(?:js|javascript)?\s*\n([\s\S]*?)```/i) || s.match(/```(?:js|javascript)?\s*\n([\s\S]*)$/i);
-  return m ? m[1].trim() : null;
+  if (m) return m[1].trim();
+  // код без обёртки ``` — берём с первой строки, похожей на код
+  const i = s.search(/^(?:\/\/|\/\*|const |let |var |function |class |"use strict")/m);
+  return i >= 0 && /function\s+draw\s*\(/.test(s.slice(i)) ? s.slice(i).trim() : null;
 }
 
 async function makeCreativeScene(v, label) {
@@ -4182,10 +4185,10 @@ async function makeCreativeScene(v, label) {
   let cut = false;
   // правки пишет быстрый Sonnet: он только чинит готовый код
   const write = async (what, fast) => {
-    const { text: txt, stop } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null);
+    const { text: txt, stop, err: jerr } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null);
     cut = stop === "max_tokens";
     const code = extractCode(txt);
-    note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}`);
+    note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}${jerr ? ", сервер: " + jerr : ""}`);
     msgs.push({ role: "assistant", content: txt });
     return code;
   };
@@ -4194,6 +4197,14 @@ async function makeCreativeScene(v, label) {
     await sendPhotos(sb);
     label("✨ Идея…");
     let code = await write("Код");
+    // ответ без кода (переспросил, начал рассуждать, оборвался до кода) — просим ещё раз, строго кодом
+    for (let a = 0; !code && a < 2; a++) {
+      const last = String(msgs[msgs.length - 1].content || "");
+      note(`ответ без кода: «${last.slice(0, 200).replace(/\s+/g, " ")}»`);
+      if (!last.trim()) msgs.pop();
+      msgs.push({ role: "user", content: "В ответе нет кода. Ничего не спрашивай и не сокращай задачу: сразу пришли полный код ролика одним блоком ```js, без пояснений до и после. Озвучка длинная, поэтому опиши сцены данными (массив сцен с временем и содержанием) и сделай общие функции рисования, чтобы код был компактным." });
+      code = await write(`Код, попытка ${a + 2}`);
+    }
     if (!code) throw new Error("Claude не прислал код");
     // запуск и автопроверка: до двух исправлений, запоминаем лучший вариант
     // точки проверки: каждые 0,5 с, но не больше ~120 на ролик
