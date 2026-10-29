@@ -1,0 +1,53 @@
+# Стиль «Изометрия»: инфографика на тёмно-синем
+
+Библиотека подключена: глобальная `ISO`, своё не объявляй. Рисуй через `ISO` и обычный canvas. Мир: x вправо-вниз, y влево-вниз, z вверх; 1 ед. мира = 1 px при масштабе вида 1. `lt` = секунды от склейки.
+
+## Правила
+1. **Палитра `ISO.P`**: фон `bg` (`night`, `deep`), панели `panel`, рамки `edge`, линии `line`, акцент `cyan` (ключевые слова, данные), `red`/`redD` только для проблемы, `orange` второй акцент, `green` готово, текст `white`, подписи `grey`; предметы `steel`, `kraft`. Без градиентов под текстом и свечения у интерфейса.
+2. **Слои кадра**: `bg` → сцена в `cam` → `finish` (виньетка) → `hud`. Свечение только `glow` у источников (узлы, фары, маяк); shadowBlur нельзя.
+3. **Сцена = диорама**: платформа `slab`, призмы `block` и готовые предметы. Рисуй от дальних к ближним (меньше x+y раньше). Голубой контур только у платформ и подсвеченного героя.
+4. **Текст**: `title` жирный белый, одно `*ключевое` цветом, 100–120 px, x=60, y≈330 (или по центру). Подписи `label` капсом 22–28 px. Числа `odo`. До 2–3 текстовых блоков. Без длинного тире.
+5. **Синхрон**: слова появляются в моменты речи (`слово@сек`), склейка на ключевом слове (добавь момент в `CUTS`). Ни одной фразы целиком: ключевые слова, числа, подписи.
+6. **Движение**: после склейки сцена уже видна, детали достраиваются за 0,2–0,5 с (`rack.grow`, `fall`, `pop`, `trace`, `stag`); предметы и UI пружиной, текст `eo` без перелёта, уход быстрее появления (`out`). Три слоя: главное, вторичное (`ripple`, `pulses`), фон (пыль `bg`, дрейф `cam`).
+7. **Разнообразие каждые 2–4 с**: диорама, крупный план грани (`view` с s=4–6), карта `dotMap`+`arcPts`, сканер `radial`+`dial`, панель `card`+`odo`+`gauge`, карточка `steps`. Финал: итоговая строка этапов и `stamp`.
+8. **Сквозной герой** (например `parcel` с `hi:1`, маяк) и трекер `hud`: статус, время, этапы меняются на событиях.
+
+## Каркас
+```js
+const P = ISO.P, CUTS = [0, 3.7, 5.8 /* фразы + ключевые слова */];
+function s1(g, lt, t) {
+  ISO.bg(g);
+  ISO.cam(g, lt, { z: ISO.lerp(1, 1.04, lt / 2), cy: 1100 }, g => {
+    ISO.view(540, 1150, 1);
+    ISO.slab(g, -250, -250, -24, 500, 500, 24, { grid: 50, p: ISO.eo(ISO.pr(lt, 0, .6)) });
+    ISO.parcel(g, 0, 0, ISO.fall(lt, .1, 360), 1, { hi: 1, lt });
+  });
+  ISO.title(g, lt, 'На@.15 складе@.4 | *робот@.9', 60, 330, { size: 112 });
+}
+const SC = [s1 /* … */];
+function draw(t, k) {
+  const g = ISO.begin(t, k), sc = ISO.cuts(t, CUTS);
+  SC[sc.i](g, sc.lt, t); ISO.finish(g);
+  ISO.hud(g, { a: ISO.pr(t, 1.7, 2.2), id: 'заказ 0042', status: 'в работе', min: ISO.kf([[0, 0], [35, 90]], t), stage: ISO.kf([[0, 0], [30, 6]], t) });
+}
+```
+
+## API
+**Время**: `cl` `pr(t,a,b)` `lerp` `eo` `ei` `eio` `eb`(перелёт) · `spring(t,f,z)` 0→1 с перелётом, t в сек · `kf([[t,v]…],t)` · `step([[t,v,…]],t)` · `stag(lt,t0,i,gap,d)` · `fall(lt,t0,h,dur)`→z падения с отскоком · `typed(s,lt,t0,cps)` · `num(v,d)`→«100 000» · `hash` `rnd(seed)` · `shade(hex,k)` `rgba(hex,a)` `mix(a,b,p)`.
+**Кадр**: `begin(t,k)`→g · `cuts(t,list)`→{i,t0,t1,lt,d,p,left} · `cam(g,lt,{z,kick,cx,cy,x,y,rot},fn)` (kick 0.07 оседает) · `shake` · `bg(g,{tone,px,py,stars})` · `finish(g)` · `dim(g,a)` · `scrim(g,y0,y1,a)` (подложка под текст) · `stripes(g)` (красные полосы тревоги) · `scanline(g,lt)` · `glow(g,x,y,r,col,a,ry)`.
+**Изометрия**: `view(ox,oy,s)` задаёт проекцию для всего ниже · `pt(x,y,z)`→[sx,sy] · `floorPts([[x,y]…],z)` · `block(g,x,y,z,w,d,h,{col|top,left,right,edge})` ((x,y,z) дальний нижний угол) · `tile(g,x,y,z,w,d,{fill,stroke})` · `grid` · `slab(g,x,y,z,w,d,h,{grid,p})` · `ring(g,x,y,z,r)` · `pad(g,x,y,z,r,lt)` (голо-площадка) · `cyl(g,x,y,z,r,h)` · `onFace(g,x,y,z,'top'|'left'|'right',q=>…)` рисуешь в плоскости грани в ед. мира · `faceText(g,s,x,y,z,size,{face})` · `qTop` `qL` `qR` пути граней.
+**Предметы** (ед. мира): `parcel(g,x,y,z,s,{open,tape,label,hi,lt,floor})` центр дна, 112×112×92·s · `beacon(g,x,y,z,lt)` · `robot(g,x,y,z,s,{beam,aim:[sx,sy],lift})` · `rack(g,x,y,z,len,dep,hgt,{levels,cols,seed,grow})` · `cells(g,x,y,z,nc,nr,cw,ch,{seed,cols})` стена тысяч ячеек на плоскости y · `belt(g,x,y,z,len,wid,lt,{axis:'y',speed})` · `truck(g,x,y,z,s,{van,lights,mark,lt})` едет по +x · `building(g,x,y,z,w,d,h,{seed,lit,edge})` · `door(g,x,y,z,{ring,num})` на фасаде y=const · `lamp(g,x,y,z,h)` · `shadow(g,x,y,z,r)`.
+**Схемы** (px экрана): `trace(g,pts,p,col,lw,{dash,off})`→голова · `along(pts,u)`→[x,y,угол] · `pulses(g,pts,lt,{n,speed,col,rev})` · `arcPts(x0,y0,x1,y1,bend)` · `node(g,x,y,r,{fill,col,p})` · `ripple(g,x,y,lt,{once,flat,n,per,r0,r1,col})` · `reticle(g,x,y,r,lt,{lock})` · `check(g,x,y,s,p,col)` · `radial(g,cx,cy,lt,{n,r0,r1,p})` · `dial(g,cx,cy,r,lt,{p,frac})` · `gauge(g,x,y,w,h,f,{label})` · `dotMap(g,x,y,w,h,{seed,col})` · `pin` · `cursor(g,x,y,s,{press})` · `barcode(g,x,y,w,h,p)` · `laser(g,x0,y0,x1,y1)` · `moon(g,x,y,r)`.
+**Текст и UI**: `title(g,lt,spec,x,y,{size,al,max,kcol,out,lines})`→{size,h,n,w}, spec «Слово@.2 *ключ@.6 | вторая@1.1» (@ сек от склейки, | перенос, y верх блока, сам переносит и ужимает) · `text(g,s,x,y,size,{al,col,w,max})` · `label(g,s,x,y,size,{col,al,n,max})` капс с разрядкой, n букв печатается · `odo(g,v,x,y,size,{d,unit,al,col})` барабан · `odoTime(g,мин,x,y,size)` · `pill(g,s,x,y,{col,al,size})` · `card(g,x,y,w,h,{p,col})` · `stamp(g,lt,t0,s,x,y,{col,rot})` · `callout(g,lt,t0,ax,ay,bx,by,s,{col})` · `steps(g,lt,[{s,sub,st:'done'|'now'|'next',t}],x,y,{gap,size,w})` · `pop(g,lt,t0,x,y,fn,{from,out})` · `rise(g,lt,t0,fn,{out})` · `rr` · `font(size,w)`.
+**Трекер**: `hud(g,{a,id,status,col,min,stage,n:7,flash,done,tcol})` занимает y 118…262: № и статус слева, время «ч мин» справа, линия этапов.
+
+## Рецепт сильного ролика
+1. Хук до 1 с: крупный предмет или кнопка со словом, действие (нажатие, падение).
+2. Один герой-предмет через все сцены с `hi:1` (маяк, пинг) и трекер: статус меняется на событиях (`flash`), время прокручивается барабаном, этапы зеленеют.
+3. На каждую фразу своя форма: диорама → крупный план грани → карта из точек → сканер → панель с числом → карточка статусов. Склейка на ключевом слове, камера оседает.
+4. Крупные числа считаются `odo` в момент, когда их произносят; на итоге `stamp` и зелёный цвет.
+5. Финал 2 с: итоговая строка этапов с мини-диорамами, крупная фраза с зелёным ключом, всё уже стоит, живут только пинги и пыль.
+Скорость: тяжёлые стены ячеек и карты кэшируются сами; до ~300 фигур на кадр, не рисуй сотни окон или ячеек вручную.
+
+## Звук
+`s.play(t,'имя',0.08…0.2,{pitch})`. Склейки: `marimba_run`, `kalimba_run` (чередуй, pitch 0.9–1.12). Кнопка `click`; падение предмета `drop`; статус `toggle_on`; счётчики `counter`, `odometer`; печать `type`; узел и пинг `pop_high`, `bubble`, `notify`; ящики и ленты `woodblock`, `rim`; звонок: два `marimba` (pitch 1.26 и 1); итог `success`, `success3`. 25–35 событий, звук точно в кадр события.

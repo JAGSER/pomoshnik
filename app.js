@@ -2198,6 +2198,24 @@ function openSettings() {
         document.querySelectorAll("#creative-model button").forEach((x) => x.classList.toggle("on", x === b));
       };
     });
+    const stSel = document.getElementById("set-style");
+    if (stSel) {
+      const curStyle = creativeStyle();
+      const fillStyles = (list) => {
+        stSel.innerHTML = "";
+        [{ id: "", name: T("Авто") }, ...list].forEach((s) => {
+          const o = document.createElement("option");
+          o.value = s.id;
+          o.textContent = s.id ? T(String(s.name || s.id)) : s.name;
+          stSel.appendChild(o);
+        });
+        stSel.value = curStyle;
+        if (stSel.value !== curStyle) stSel.value = "";
+      };
+      fillStyles([]);
+      loadStyleList().then(fillStyles).catch(() => fillStyles([]));
+      stSel.onchange = () => store.set("creativeStyle:" + SESSION.user, stSel.value || "");
+    }
   }
   document.querySelectorAll("#rate-seg button").forEach((b) => {
     b.classList.toggle("on", Number(b.dataset.rate) === RATE);
@@ -4087,10 +4105,22 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 - Главное — голос, под ним ещё будет музыка: громкость 0.08…0.2, в среднем не чаще одного звука в 1–1,5 с (серия тиков у счётчика — один звук). Финальную заставку озвучивает приложение.`;
 
 let CUR_VID = null;
-async function directorCall(messages, onChars, model) {
+// стиль творческого ролика: библиотека styles/<id>/lib.js + инструкция doc.md (на время одного ролика)
+let STYLE_RUN = null;
+const _extractCode = (...a) => extractCode(...a);
+function creativeStyle() { try { return store.get("creativeStyle:" + SESSION.user) || ""; } catch (_) { return ""; } }
+async function loadStyleList() {
+  try {
+    const r = await fetch("styles/index.json", { cache: "no-cache" });
+    if (!r.ok) return [];
+    const a = await r.json();
+    return Array.isArray(a) ? a.filter((s) => s && s.id).sort((x, y) => (+x.n || 0) - (+y.n || 0)) : [];
+  } catch (_) { return []; }
+}
+async function directorCall(messages, onChars, model, system) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: DIRECTOR_PROMPT, messages, bg: true }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: system || (STYLE_RUN && STYLE_RUN.sys) || DIRECTOR_PROMPT, messages, bg: true }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Claude не ответил"); }
   // сервер пишет код сам и отдаёт номер задания: забираем текст по кускам.
@@ -4164,6 +4194,26 @@ async function makeCreativeScene(v, label) {
   // бюджет на работу Claude: после него правки и просмотр кадров пропускаются, берём лучшее, что есть
   const BUDGET = 150;
   const note = (x) => { log.steps.push(`[${sec()} с] ${x}`); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
+  // стиль ролика: грузим один раз на ролик, system уходит во все запросы directorCall (и в правки)
+  const styleId = creativeStyle();
+  let style = null;
+  STYLE_RUN = null;
+  if (styleId) {
+    try {
+      const getF = async (f) => { const r = await fetch(`styles/${encodeURIComponent(styleId)}/${f}`); if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.text(); };
+      const [libText, docText] = await Promise.all([getF("lib.js"), getF("doc.md")]);
+      const m = libText.match(/(?:^|\n)\s*(?:const|var|let)\s+([A-Za-z_$][\w$]*)\s*=/);
+      const konst = m ? m[1] : "стиля";
+      style = { id: styleId, lib: libText, konst, sys: DIRECTOR_PROMPT + "\n\nСТИЛЬ РОЛИКА (обязательно, рисуй через его библиотеку " + konst + "):\n" + docText };
+      STYLE_RUN = style;
+      note(`стиль: ${styleId} (библиотека ${konst})`);
+    } catch (e) { style = null; STYLE_RUN = null; note("стиль не загрузился: " + ((e && e.message) || e)); }
+  } else note("стиль: авто");
+  // библиотека стиля в начале кода: draw и её функции в одной области видимости, до sb.load и тестов
+  const extractCode = (...a) => {
+    const c = _extractCode(...a);
+    return style && typeof c === "string" && c ? style.lib + "\n\n" + c : c;
+  };
   // уменьшенные копии фото, чтобы Claude видел, что на них
   const thumbs = [];
   for (const b of photos.slice(0, 12)) {
