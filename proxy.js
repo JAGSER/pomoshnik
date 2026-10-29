@@ -240,6 +240,55 @@ async function kvOpen() {
 /* Код творческого ролика пишется на сервере: телефон может уйти в фон или потерять связь,
    а сервер сам дождётся ответа Claude и сложит его в хранилище; телефон забирает текст кусками (/job). */
 const JOB_PART = 20000, JOB_TTL = { expireIn: 86400_000 };
+// ---- Кэширование промптов Anthropic ----
+// Точки кэша: system + два последних сообщения пользователя (текущее и предыдущее), итого не больше 3 из 4.
+// Точка на предыдущем вопросе гарантирует, что следующий запрос найдёт запись прошлого шага,
+// даже если ответы длинные (веб-поиск и т. п.). Короткие префиксы API просто не кэширует, это не ошибка.
+function addCache(payload, ttl, onlySystem) {
+  stripCache(payload); // вдруг клиент сам прислал cache_control: не превысим лимит 4
+  const cc = ttl ? { type: "ephemeral", ttl } : { type: "ephemeral" };
+  if (typeof payload.system === "string" && payload.system.trim()) {
+    payload.system = [{ type: "text", text: payload.system, cache_control: cc }];
+  }
+  if (onlySystem || !Array.isArray(payload.messages)) return;
+  const msgs = payload.messages.slice(); // не трогаем body.messages
+  let marked = 0;
+  for (let i = msgs.length - 1; i >= 0 && marked < 2; i--) {
+    const m = msgs[i];
+    if (!m || m.role !== "user") continue;
+    const c = cacheContent(m.content, cc);
+    if (c) { msgs[i] = { ...m, content: c }; marked++; }
+  }
+  payload.messages = msgs;
+}
+function cacheContent(content, cc) {
+  // строка = короткая запись одного текстового блока, префикс от этого не меняется
+  if (typeof content === "string") return content.trim() ? [{ type: "text", text: content, cache_control: cc }] : null;
+  if (!Array.isArray(content)) return null;
+  for (let j = content.length - 1; j >= 0; j--) {
+    const b = content[j];
+    if (!b || typeof b !== "object") continue;
+    if (b.type === "text" && !String(b.text || "").trim()) continue; // на пустой текст метку ставить нельзя
+    if (!["text", "image", "document", "tool_result"].includes(b.type)) continue;
+    const out = content.slice(); out[j] = { ...b, cache_control: cc };
+    return out;
+  }
+  return null;
+}
+// Убирает все cache_control. Возвращает true, если было что убирать (для повтора после 400)
+function stripCache(payload) {
+  let found = false;
+  const clean = (arr) => arr.map((b) => {
+    if (b && typeof b === "object" && "cache_control" in b) { found = true; const { cache_control: _, ...r } = b; return r; }
+    return b;
+  });
+  if (Array.isArray(payload.system)) payload.system = clean(payload.system);
+  if (Array.isArray(payload.messages)) {
+    payload.messages = payload.messages.map((m) => Array.isArray(m?.content) && m.content.some((b) => b && b.cache_control) ? { ...m, content: clean(m.content) } : m);
+  }
+  return found;
+}
+
 async function jobRun(kv, id, owner, key, payload, selfUrl) {
   let text = "", stop = null, err = null, saved = 0, last = 0;
   const flush = async (done) => {
@@ -256,6 +305,7 @@ async function jobRun(kv, id, owner, key, payload, selfUrl) {
       res = await callAnthropic(key, payload);
       if (res.ok) break;
       const t = await res.text();
+      if (res.status === 400 && /cache_control|cache|ttl/i.test(t) && stripCache(payload)) continue;
       if (res.status === 400 && payload.tools && /tool/i.test(t)) { delete payload.tools; continue; }
       if (res.status === 400 && payload.output_config && /effort|output_config/i.test(t)) { delete payload.output_config; continue; }
       if ([429, 500, 502, 503, 529].includes(res.status) && a < 3) { await new Promise((r) => setTimeout(r, 6000 * (a + 1))); continue; }
@@ -1007,6 +1057,9 @@ export async function handler(req, info) {
     }];
   }
 
+  // кэш промптов: ролик живёт дольше 5 минут (генерация + просмотр + правки), поэтому для него TTL 1 час.
+  // В LIVE кэшируем только system: кадры каждый раз новые, запись истории была бы переплатой
+  addCache(payload, body.purpose === "video" ? "1h" : null, isLive);
   // творческий ролик: пишем на сервере, телефону сразу отдаём номер задания
   if (body.purpose === "video" && body.bg) {
     const kv = await kvOpen();
@@ -1019,8 +1072,9 @@ export async function handler(req, info) {
   }
   let res = await callAnthropic(key, payload);
   // Если что-то из дополнительных настроек не принято — повторяем без него
-  for (let i = 0; i < 2 && res.status === 400; i++) {
+  for (let i = 0; i < 3 && res.status === 400; i++) {
     const text = await res.text();
+    if (/cache_control|cache|ttl/i.test(text) && stripCache(payload)) { res = await callAnthropic(key, payload); continue; }
     if (payload.thinking && /thinking|effort|output_config/i.test(text)) { delete payload.thinking; delete payload.output_config; }
     else if (payload.output_config && /effort|output_config/i.test(text)) delete payload.output_config;
     else if (payload.tools && /tool/i.test(text)) delete payload.tools;
