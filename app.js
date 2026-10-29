@@ -2191,26 +2191,6 @@ function openSettings() {
     const cr = $("#set-creative");
     cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
-    const stBox = document.getElementById("creative-style");
-    if (stBox) {
-      const drawStyles = (list) => {
-        stBox.innerHTML = "";
-        [{ id: "", name: T("Авто") }, ...(Array.isArray(list) ? list : [])].forEach((s) => {
-          const id = String(s.id || "");
-          const b = document.createElement("button");
-          b.type = "button";
-          b.dataset.style = id;
-          b.textContent = id ? T(String(s.name || id)) : s.name;
-          b.onclick = () => setCreativeStyle(id);
-          stBox.appendChild(b);
-        });
-        refreshStyleMarks();
-      };
-      drawStyles(STYLE_LIST_CACHE);
-      loadStylesCached().then(drawStyles);
-    }
-    const demoBtn = document.getElementById("btn-style-demo");
-    if (demoBtn) demoBtn.onclick = openStyleDemo;
   }
   document.querySelectorAll("#rate-seg button").forEach((b) => {
     b.classList.toggle("on", Number(b.dataset.rate) === RATE);
@@ -3758,15 +3738,17 @@ function setCreativeStyle(id) {
 }
 function refreshStyleMarks() {
   const cur = creativeStyle() || "";
-  const stBox = document.getElementById("creative-style");
-  if (stBox) {
-    let any = false;
-    stBox.querySelectorAll("button").forEach((b) => {
-      const on = (b.dataset.style || "") === cur;
+  const menu = document.getElementById("chat-menu");
+  if (menu) {
+    const items = Array.from(menu.querySelectorAll(".chat-menu-item[data-style]"));
+    const found = items.some((b) => (b.dataset.style || "") === cur);
+    items.forEach((b) => {
+      const id = b.dataset.style || "";
+      const on = found ? id === cur : id === "";
       b.classList.toggle("on", on);
-      if (on) any = true;
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      b.textContent = (on ? "✓ " : "") + (b.dataset.label || "");
     });
-    if (!any && stBox.firstElementChild) stBox.firstElementChild.classList.add("on");
   }
   const list = document.getElementById("style-demo-list");
   if (list) {
@@ -3787,6 +3769,47 @@ function refreshStyleMarks() {
   }
   const nm = document.getElementById("chat-menu-style-name");
   if (nm) nm.textContent = styleDisplayName(cur);
+}
+function buildChatMenu() {
+  const menu = document.getElementById("chat-menu");
+  if (!menu) return;
+  menu.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "chat-menu-title";
+  head.append("🎨 " + T("Стиль ролика") + ": ");
+  const nm = document.createElement("span");
+  nm.id = "chat-menu-style-name";
+  head.appendChild(nm);
+  menu.appendChild(head);
+  const list = [{ id: "", name: "Авто" }, ...(Array.isArray(STYLE_LIST_CACHE) ? STYLE_LIST_CACHE : [])];
+  list.forEach((s) => {
+    const id = String(s.id || "");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chat-menu-item";
+    b.setAttribute("role", "menuitemradio");
+    b.dataset.style = id;
+    b.dataset.label = id ? T(String(s.name || id)) : T("Авто");
+    b.textContent = b.dataset.label;
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setCreativeStyle(id);
+      menu.hidden = true;
+    });
+    menu.appendChild(b);
+  });
+  const demo = document.createElement("button");
+  demo.type = "button";
+  demo.className = "chat-menu-item chat-menu-demo";
+  demo.setAttribute("role", "menuitem");
+  demo.textContent = "▶ " + T("Смотреть демо");
+  demo.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = true;
+    openStyleDemo();
+  });
+  menu.appendChild(demo);
+  refreshStyleMarks();
 }
 function stopStyleVideos() {
   document.querySelectorAll("#style-demo-list video").forEach((v) => { try { v.pause(); } catch (e) {} });
@@ -3858,15 +3881,18 @@ function initStyleUi() {
   if (menu && mb) {
     mb.addEventListener("click", (e) => {
       e.stopPropagation();
-      refreshStyleMarks();
-      menu.hidden = !menu.hidden;
+      if (!menu.hidden) { menu.hidden = true; return; }
+      buildChatMenu();
+      menu.hidden = false;
+      const before = JSON.stringify(STYLE_LIST_CACHE);
+      loadStylesCached().then((l) => {
+        if (!menu.hidden && JSON.stringify(l) !== before) buildChatMenu();
+      });
     });
     document.addEventListener("click", (e) => {
       if (!menu.hidden && !menu.contains(e.target) && !mb.contains(e.target)) menu.hidden = true;
     });
   }
-  const ms = document.getElementById("chat-menu-style");
-  if (ms) ms.addEventListener("click", () => { if (menu) menu.hidden = true; openStyleDemo(); });
   const cl = document.getElementById("style-demo-close");
   if (cl) cl.addEventListener("click", closeStyleDemo);
   const back = document.getElementById("style-demo");
