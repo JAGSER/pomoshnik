@@ -2198,23 +2198,28 @@ function openSettings() {
         document.querySelectorAll("#creative-model button").forEach((x) => x.classList.toggle("on", x === b));
       };
     });
-    const stSel = document.getElementById("set-style");
-    if (stSel) {
-      const curStyle = creativeStyle();
-      const fillStyles = (list) => {
-        stSel.innerHTML = "";
-        [{ id: "", name: T("Авто") }, ...list].forEach((s) => {
-          const o = document.createElement("option");
-          o.value = s.id;
-          o.textContent = s.id ? T(String(s.name || s.id)) : s.name;
-          stSel.appendChild(o);
+    const stBox = document.getElementById("creative-style");
+    if (stBox) {
+      const drawStyles = (list) => {
+        const cur = creativeStyle() || "";
+        stBox.innerHTML = "";
+        [{ id: "", name: T("Авто") }, ...(Array.isArray(list) ? list : [])].forEach((s) => {
+          const id = String(s.id || "");
+          const b = document.createElement("button");
+          b.type = "button";
+          b.dataset.style = id;
+          b.textContent = id ? T(String(s.name || id)) : s.name;
+          b.classList.toggle("on", id === cur);
+          b.onclick = () => {
+            store.set("creativeStyle:" + SESSION.user, id);
+            stBox.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+          };
+          stBox.appendChild(b);
         });
-        stSel.value = curStyle;
-        if (stSel.value !== curStyle) stSel.value = "";
+        if (!stBox.querySelector("button.on")) stBox.firstChild.classList.add("on");
       };
-      fillStyles([]);
-      loadStyleList().then(fillStyles).catch(() => fillStyles([]));
-      stSel.onchange = () => store.set("creativeStyle:" + SESSION.user, stSel.value || "");
+      drawStyles([]);
+      loadStyleList().then(drawStyles).catch(() => drawStyles([]));
     }
   }
   document.querySelectorAll("#rate-seg button").forEach((b) => {

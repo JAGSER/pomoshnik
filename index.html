@@ -93,7 +93,6 @@
     <h2 class="section-title">Видео</h2>
     <label class="set-row"><input type="checkbox" id="set-sfx"><span>Звуки в видео<small>Мягкие попы, ноты маримбы и калимбы, тики, «та-дам» в концовке</small></span></label>
     <div class="music-row"><span class="music-lbl">🎵 Музыка в видео</span><select id="set-music"></select><button type="button" id="music-play" class="icon-btn voice-play" aria-label="Послушать музыку">▶</button><label class="music-vol" for="set-music-vol"><span>Громкость музыки</span><input type="range" id="set-music-vol" min="0" max="200" step="10"><b id="music-vol-val">100%</b></label></div>
-    <div class="music-row"><span class="music-lbl">🎨 Стиль ролика</span><select id="set-style"><option value="">Авто</option></select></div>
     <label class="set-row"><input type="checkbox" id="set-outro"><span>Заставка в конце видео<small>Талисман и «Спросите о своём в «Помощник AI»», 3 секунды</small></span></label>
     <div id="creative-block" hidden>
       <label class="set-row"><input type="checkbox" id="set-creative"><span>Творческие видео<small>Claude сам придумывает и рисует анимацию под каждый ответ. Дольше — 1–3 минуты</small></span></label>
@@ -101,6 +100,7 @@
         <button type="button" data-model="claude-sonnet-5-5">Sonnet</button>
         <button type="button" data-model="claude-opus-5-5">Opus</button>
       </div>
+      <div class="seg seg-wrap" id="creative-style"></div>
       <pre id="creative-log" class="creative-log"></pre>
     </div>
     <button id="btn-logout" class="btn btn-ghost btn-wide logout">Выйти</button>
@@ -228,6 +228,6 @@
 </div>
 
 <script src="i18n.js?v=115"></script>
-<script src="app.js?v=116"></script>
+<script src="app.js?v=117"></script>
 </body>
 </html>
