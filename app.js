@@ -2187,21 +2187,13 @@ function openSettings() {
     $("#creative-log").textContent = lg ? `Последний творческий ролик (${new Date(lg.at).toLocaleString(LOCALE())}, ${lg.model.includes("opus") ? "Opus" : "Sonnet"}):\n` + lg.steps.join("\n") : "";
     // выбор модели и журнал — только тем, кто разбирается (администратор и Vie)
     const adv = !!(me().admin || me().creative);
-    $("#creative-model").hidden = !adv; $("#creative-log").hidden = !adv;
+    $("#creative-log").hidden = !adv;
     const cr = $("#set-creative");
     cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
-    document.querySelectorAll("#creative-model button").forEach((b) => {
-      b.classList.toggle("on", b.dataset.model === creativeModel());
-      b.onclick = () => {
-        store.set("creativeModel:" + SESSION.user, b.dataset.model);
-        document.querySelectorAll("#creative-model button").forEach((x) => x.classList.toggle("on", x === b));
-      };
-    });
     const stBox = document.getElementById("creative-style");
     if (stBox) {
       const drawStyles = (list) => {
-        const cur = creativeStyle() || "";
         stBox.innerHTML = "";
         [{ id: "", name: T("Авто") }, ...(Array.isArray(list) ? list : [])].forEach((s) => {
           const id = String(s.id || "");
@@ -2209,18 +2201,16 @@ function openSettings() {
           b.type = "button";
           b.dataset.style = id;
           b.textContent = id ? T(String(s.name || id)) : s.name;
-          b.classList.toggle("on", id === cur);
-          b.onclick = () => {
-            store.set("creativeStyle:" + SESSION.user, id);
-            stBox.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
-          };
+          b.onclick = () => setCreativeStyle(id);
           stBox.appendChild(b);
         });
-        if (!stBox.querySelector("button.on")) stBox.firstChild.classList.add("on");
+        refreshStyleMarks();
       };
-      drawStyles([]);
-      loadStyleList().then(drawStyles).catch(() => drawStyles([]));
+      drawStyles(STYLE_LIST_CACHE);
+      loadStylesCached().then(drawStyles);
     }
+    const demoBtn = document.getElementById("btn-style-demo");
+    if (demoBtn) demoBtn.onclick = openStyleDemo;
   }
   document.querySelectorAll("#rate-seg button").forEach((b) => {
     b.classList.toggle("on", Number(b.dataset.rate) === RATE);
@@ -3750,7 +3740,147 @@ function creativeAllowed() { return true; }
 // творческий режим включён у всех по умолчанию; простое видео — если человек сам выключит
 function creativePref() { const v = store.get("creative:" + SESSION.user); return v === null || v === undefined ? true : v !== false; }
 function creativeOn() { return !!(creativeAllowed() && creativePref() && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
-function creativeModel() { return store.get("creativeModel:" + SESSION.user) || "claude-opus-5-5"; }
+var STYLE_LIST_CACHE = [];
+function loadStylesCached() {
+  return Promise.resolve().then(() => loadStyleList()).then((l) => {
+    if (Array.isArray(l)) STYLE_LIST_CACHE = l;
+    return STYLE_LIST_CACHE;
+  }).catch(() => STYLE_LIST_CACHE);
+}
+function styleDisplayName(id) {
+  if (!id) return T("Авто");
+  const s = STYLE_LIST_CACHE.find((x) => String(x.id || "") === id);
+  return s ? T(String(s.name || id)) : id;
+}
+function setCreativeStyle(id) {
+  store.set("creativeStyle:" + SESSION.user, id);
+  refreshStyleMarks();
+}
+function refreshStyleMarks() {
+  const cur = creativeStyle() || "";
+  const stBox = document.getElementById("creative-style");
+  if (stBox) {
+    let any = false;
+    stBox.querySelectorAll("button").forEach((b) => {
+      const on = (b.dataset.style || "") === cur;
+      b.classList.toggle("on", on);
+      if (on) any = true;
+    });
+    if (!any && stBox.firstElementChild) stBox.firstElementChild.classList.add("on");
+  }
+  const list = document.getElementById("style-demo-list");
+  if (list) {
+    const cards = Array.from(list.querySelectorAll(".style-card"));
+    let curFound = cards.some((c) => (c.dataset.style || "") === cur);
+    cards.forEach((c) => {
+      const id = c.dataset.style || "";
+      const on = curFound ? id === cur : id === "";
+      c.classList.toggle("on", on);
+      const mark = c.querySelector(".style-mark");
+      if (mark) mark.hidden = !on;
+      const btn = c.querySelector(".style-pick");
+      if (btn) {
+        btn.textContent = on ? "✓ " + T("Выбрано") : T("Выбрать");
+        btn.classList.toggle("on", on);
+      }
+    });
+  }
+  const nm = document.getElementById("chat-menu-style-name");
+  if (nm) nm.textContent = styleDisplayName(cur);
+}
+function stopStyleVideos() {
+  document.querySelectorAll("#style-demo-list video").forEach((v) => { try { v.pause(); } catch (e) {} });
+}
+function closeStyleDemo() {
+  stopStyleVideos();
+  const back = document.getElementById("style-demo");
+  if (back) back.hidden = true;
+}
+function openStyleDemo() {
+  const back = document.getElementById("style-demo");
+  const box = document.getElementById("style-demo-list");
+  if (!back || !box) return;
+  const menu = document.getElementById("chat-menu");
+  if (menu) menu.hidden = true;
+  const draw = (list) => {
+    stopStyleVideos();
+    box.innerHTML = "";
+    [{ id: "", name: "Авто" }, ...(Array.isArray(list) ? list : [])].forEach((s) => {
+      const id = String(s.id || "");
+      const card = document.createElement("div");
+      card.className = "style-card";
+      card.dataset.style = id;
+      const head = document.createElement("div");
+      head.className = "style-card-head";
+      const title = document.createElement("b");
+      title.textContent = id ? T(String(s.name || id)) : T("Авто");
+      const mark = document.createElement("span");
+      mark.className = "style-mark";
+      mark.textContent = T("Выбрано");
+      mark.hidden = true;
+      head.append(title, mark);
+      card.appendChild(head);
+      if (id) {
+        const v = document.createElement("video");
+        v.src = "styles/" + encodeURIComponent(id) + "/demo.mp4";
+        v.controls = true;
+        v.playsInline = true;
+        v.setAttribute("playsinline", "");
+        v.preload = "none";
+        v.setAttribute("width", "100%");
+        v.addEventListener("play", () => {
+          box.querySelectorAll("video").forEach((o) => { if (o !== v) o.pause(); });
+        });
+        card.appendChild(v);
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "set-link style-pick";
+      btn.onclick = () => { setCreativeStyle(id); closeStyleDemo(); };
+      card.appendChild(btn);
+      box.appendChild(card);
+    });
+    refreshStyleMarks();
+  };
+  if (STYLE_LIST_CACHE.length) {
+    draw(STYLE_LIST_CACHE);
+  } else {
+    draw([]);
+    loadStylesCached().then((l) => { if (!back.hidden && l.length) draw(l); });
+  }
+  back.hidden = false;
+  const cl = document.getElementById("style-demo-close");
+  if (cl) cl.focus();
+}
+function initStyleUi() {
+  const menu = document.getElementById("chat-menu");
+  const mb = document.getElementById("btn-chat-menu");
+  if (menu && mb) {
+    mb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      refreshStyleMarks();
+      menu.hidden = !menu.hidden;
+    });
+    document.addEventListener("click", (e) => {
+      if (!menu.hidden && !menu.contains(e.target) && !mb.contains(e.target)) menu.hidden = true;
+    });
+  }
+  const ms = document.getElementById("chat-menu-style");
+  if (ms) ms.addEventListener("click", () => { if (menu) menu.hidden = true; openStyleDemo(); });
+  const cl = document.getElementById("style-demo-close");
+  if (cl) cl.addEventListener("click", closeStyleDemo);
+  const back = document.getElementById("style-demo");
+  if (back) back.addEventListener("click", (e) => { if (e.target === back) closeStyleDemo(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (back && !back.hidden) closeStyleDemo();
+    else if (menu && !menu.hidden) menu.hidden = true;
+  });
+  loadStylesCached().then(() => { try { refreshStyleMarks(); } catch (e) {} });
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initStyleUi);
+else setTimeout(initStyleUi, 0);
+function creativeModel() { return "claude-opus-5-5"; return store.get("creativeModel:" + SESSION.user) || "claude-opus-5-5"; }
 
 // Талисман и заставка — обычные функции без внешних зависимостей: их же получает песочница
 function mascotDraw(g, cx, cy, size, t, talk) {
