@@ -4362,12 +4362,20 @@ async function makeCreativeScene(v, label) {
   if (styleId) {
     try {
       const getF = async (f) => { const r = await fetch(`styles/${encodeURIComponent(styleId)}/${f}`); if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.text(); };
-      const [libText, docText] = await Promise.all([getF("lib.js"), getF("doc.md")]);
+      let exErr = null;
+      const [libText, docText, exText] = await Promise.all([getF("lib.js"), getF("doc.md"), getF("example.js").catch((e) => { exErr = e; return null; })]);
       const m = libText.match(/(?:^|\n)\s*(?:const|var|let)\s+([A-Za-z_$][\w$]*)\s*=/);
       const konst = m ? m[1] : "стиля";
-      style = { id: styleId, lib: libText, konst, sys: DIRECTOR_PROMPT + "\n\nСТИЛЬ РОЛИКА (обязательно, рисуй через его библиотеку " + konst + "):\n" + docText };
+      const styleRules = "СТИЛЬ РОЛИКА: «" + konst + "» (обязательно, рисуй через его библиотеку " + konst + ").\n" +
+        "Ты рисуешь ТОЛЬКО в стиле «" + konst + "». Всё: фон, персонажи, предметы, переходы, текст, звук, в визуальном языке стиля из правил и примера. " +
+        "Не вводи элементы другого стиля (например, плоского персонажа в изометрии, фотографию, объём, если стиль плоский). " +
+        "Персонажи и предметы строй теми же функциями библиотеки " + konst + ", что в примере, по тому же приёму. " +
+        "Если нужно новое, делай его в том же приёме, не придумывай свой. " +
+        "Прежде чем ответить, проверь себя: всё ли в стиле.\n\nПРАВИЛА СТИЛЯ (полностью):\n";
+      style = { id: styleId, lib: libText, konst, sys: DIRECTOR_PROMPT + "\n\n" + styleRules + docText, example: exText && exText.trim() ? exText : null };
       STYLE_RUN = style;
       note(`стиль: ${styleId} (библиотека ${konst})`);
+      if (!style.example) note("пример не загрузился" + (exErr ? ": " + ((exErr && exErr.message) || exErr) : ""));
     } catch (e) { style = null; STYLE_RUN = null; note("стиль не загрузился: " + ((e && e.message) || e)); }
   } else note("стиль: авто");
   // библиотека стиля в начале кода: draw и её функции в одной области видимости, до sb.load и тестов
@@ -4386,7 +4394,9 @@ async function makeCreativeScene(v, label) {
       thumbs.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: btoa(s) } });
     } catch (_) {}
   }
-  const msgs = [{ role: "user", content: thumbs.length ? [...thumbs, { type: "text", text: ask }] : ask }];
+  const FENCE = "`".repeat(3);
+  const exIntro = style && style.example ? "ПРИМЕР ЭТОГО СТИЛЯ (полный ролик в этом стиле, на другой теме; изучи язык стиля и пиши так же):\n" + FENCE + "js\n" + style.example + "\n" + FENCE + "\n\nА теперь ролик на тему пользователя:\n" : "";
+  const msgs = [{ role: "user", content: thumbs.length ? [...(exIntro ? [{ type: "text", text: exIntro }] : []), ...thumbs, { type: "text", text: ask }] : exIntro + ask }];
   // фото в песочницу (копии — оригиналы нужны для обычного видео, если творческое не выйдет)
   const sendPhotos = async (box) => {
     if (!photos.length) return;
@@ -4452,16 +4462,24 @@ async function makeCreativeScene(v, label) {
     // взгляд арт-директора на кадры
     label("✨ Кадры…");
     const shotTimes = [0.8, v.speech * 0.2, v.speech * 0.4, v.speech * 0.6, v.speech * 0.8, Math.max(0, v.speech - 0.4)].map((t) => +t.toFixed(2));
-    const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotTimes }, 30000);
+    const shotT = style ? (() => {
+      const end = Math.max(...shotTimes.map(Number).filter(Number.isFinite));
+      if (!Number.isFinite(end) || end <= 0.8) return shotTimes;
+      const ts = [0.8];
+      for (let i = 1; i <= 8; i++) ts.push(+(end * i / 9).toFixed(1));
+      ts.push(end);
+      return [...new Set(ts)].sort((a, b) => a - b);
+    })() : shotTimes;
+    const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotT }, style ? 45000 : 30000);
     if (!sh.ok && sec() > BUDGET) note("просмотр кадров пропущен — время вышло");
     if (sh.ok) {
       if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + good + "\n```" });
       else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + good + "\n```" }, { role: "assistant", content: "Хорошо." });
       msgs.push({ role: "user", content: [
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
-        { type: "text", text: `Кадры ролика в моменты ${shotTimes.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
+        { type: "text", text: `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: ${style ? `1) Соответствует ли ролик стилю «${style.konst}»? Если на кадрах есть элементы другого стиля, или стиль нарушен в любом месте, это провал: перепиши весь ролик в стиле. 2) Затем: ` : ""}читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
-      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), "claude-sonnet-5-5");
+      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), style ? "claude-opus-5-5" : "claude-sonnet-5-5");
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
       const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
       if (better) {
