@@ -373,8 +373,9 @@ const ISO = (() => {
     g.save(); g.beginPath(); g.rect(x0 - 8, y - size * .95, tot + 16, size * 1.2); g.clip(); g.textBaseline = 'alphabetic'; g.textAlign = 'left'; let cx = x0;
     for (const c of cells) {
       if (c.ch != null) { g.font = font(size * (c.k || 1), o.w || 800); g.fillStyle = c.col || o.col || P.white; g.fillText(c.ch, cx + (c.k ? size * .06 : 0), y); cx += cw(g, c.ch) + (c.k ? size * .12 : 0); continue; }
-      g.font = font(size, o.w || 800); g.fillStyle = o.col || P.white; const r = cl(c.r || 0), w0 = cw(g, String(c.d));
-      g.fillText(String(c.d), cx + (dw - w0) / 2, y - r * lh); if (r > 0) g.fillText(String(c.n), cx + (dw - cw(g, String(c.n))) / 2, y - r * lh + lh); cx += dw;
+      g.font = font(size, o.w || 800); g.fillStyle = o.col || P.white; let r = cl(c.r || 0), dd = c.d;
+      if (r >= .97) { dd = c.n; r = 0; } if (r < .03) r = 0; // без сшивки двух цифр: в покое одна цифра, у конца прокрутки уже следующая
+      const w0 = cw(g, String(dd)); g.fillText(String(dd), cx + (dw - w0) / 2, y - r * lh); if (r > 0) g.fillText(String(c.n), cx + (dw - cw(g, String(c.n))) / 2, y - r * lh + lh); cx += dw;
     }
     g.restore(); return tot;
   }
@@ -614,4 +615,100 @@ const ISO = (() => {
     trace, along, pulses, arcPts, node, ripple, reticle, check, radial, dial, gauge, cursor, pin, barcode, laser, moon, dotMap,
     font, text, label, labelW, title, digits, odo, odoTime, rr, pill, card, stamp, callout, steps, pop, rise,
     shadow, beacon, parcel, robot, rack, cells, belt, truck, building, door, lamp, hud };
+})();
+
+// ===== Модуль человека (person): внутренние имена закрыты, наружу только person =====
+const person = (() => {
+// ===== ЧЕЛОВЕК С СУСТАВАМИ: person(g, pass, x, y, z, ang, H, lt, o) =====
+// Пропорции в долях роста H, руки по IK к цели. Если рука не достаёт до цели больше чем на 0.02 H, бросает ошибку (проверка).
+const CL = { head: .13, hat: .07, shW: .27, torso: .31, pelvis: .07, upper: .17, fore: .15, hand: .07, thigh: .23, shin: .22 };
+const CC = { coat: '#E8EBF2', pants: '#353B5C', skin: '#D99A72', shoe: '#1C2034', hat: '#F6F8FC', apron: '#C3CCDD', hair: '#3A2A22' };
+const vA = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], vS = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const vM = (a, k) => [a[0] * k, a[1] * k, a[2] * k], vD = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const vL = a => Math.hypot(a[0], a[1], a[2]), vN = a => vM(a, 1 / (vL(a) || 1));
+const vX = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const HIPZ = CL.shin + CL.thigh + .03, WAISTZ = HIPZ + CL.pelvis;
+
+// поза в локальных координатах (x вперёд, y вбок, z вверх, всё в долях H)
+// o.pose: 'knead' (o.tx: вылет теста от стоп, o.tz: высота верха теста), 'idle', 'rest' (кисти на столе: o.tx, o.tz)
+function chefPose(lt, o) {
+  const pose = o.pose || 'idle', w = Math.PI * 2 * 1.2, s = pose === 'knead' ? Math.sin(w * lt) : 0;
+  const leanDeg = pose === 'knead' ? 12 + 3 * s : pose === 'rest' ? 7 : pose === 'reach' ? (o.lean ?? 0) : 2 + .6 * Math.sin(lt * 1.7);
+  const ln = leanDeg * Math.PI / 180, ax = [Math.sin(ln), 0, Math.cos(ln)];
+  const sway = pose === 'idle' ? .008 * Math.sin(lt * 1.7) : 0;
+  const waist = [0, sway, WAISTZ], neck = vA(waist, vM(ax, CL.torso)), crown = vA(neck, vM(ax, CL.head)), top = vA(crown, vM(ax, CL.hat));
+  const J = { waist, neck, crown, top, arms: {}, legs: {}, ax };
+  for (const sd of [-1, 1]) {
+    const sh = vA(vA(waist, vM(ax, CL.torso - .025)), [0, sd * CL.shW / 2, 0]);
+    let tg, pole;
+    if (pose === 'knead') { tg = [o.tx + .035 * s * (sd > 0 ? 1 : -1) * 0 + .035 * s, sd * .065, o.tz + .01 - .01 * (.5 + .5 * s)]; pole = [-.5, sd * .9, .25]; }
+    else if (pose === 'rest') { tg = [o.tx, sd * .12, o.tz + .01]; pole = [-.4, sd * 1, .1]; }
+    else if (pose === 'reach' && (!o.hand || o.hand === sd)) { tg = [o.t[0], o.t[1] + (o.hand ? 0 : sd * .08), o.t[2]]; pole = [-.3, sd * 1, -.4]; }
+    else if (pose === 'hold') { tg = [.2, sd * .07, .62]; pole = [-.3, sd * 1, -.5]; }
+    else { tg = [sh[0] + .02, sd * (CL.shW / 2 + .035), sh[2] - CL.upper - CL.fore + .015]; pole = [.6, sd * .25, 0]; }
+    const D = vS(tg, sh), u = vN(D), d = Math.min(vL(D), CL.upper + CL.fore - 1e-3);
+    const a = (CL.upper ** 2 - CL.fore ** 2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, CL.upper ** 2 - a * a));
+    let p = vN(vS(pole, vM(u, vD(pole, u))));
+    const el = vA(vA(sh, vM(u, a)), vM(p, h)), wr = vA(sh, vM(u, d));
+    const hd = pose === 'idle' || (pose === 'reach' && o.hand && o.hand !== sd) ? [0, 0, -1] : pose === 'reach' ? vN(vS(tg, sh)) : vN([1, 0, -1.1]);
+    J.arms[sd] = { sh, el, wr, tip: vA(wr, vM(hd, CL.hand)), miss: vL(D) - d };
+    if (J.arms[sd].miss > .02) throw new Error('person: рука не достаёт до цели на ' + J.arms[sd].miss.toFixed(3) + ' H (поза ' + pose + '). Подвинь человека ближе или цель ниже.');
+  }
+  for (const sd of [-1, 1]) {
+    const hip = [0, sd * .065, HIPZ + sway * .5], knee = vA(hip, vM(vN([.05, 0, -1]), CL.thigh));
+    J.legs[sd] = { hip, knee, ank: vA(knee, vM(vN([-.05, 0, -1]), CL.shin)) };
+  }
+  return J;
+}
+// призма вдоль A→B (мировые единицы), сечение w×d, три тона по нормали к взгляду (1,1,1)
+function ch_box(g, A, B, w, d, col, ext, ref, caps = true) {
+  const a = vN(vS(B, A)), e1 = vN(vS(ref, vM(a, vD(ref, a)))), e2 = vX(a, e1);
+  const A2 = vS(A, vM(a, ext)), B2 = vA(B, vM(a, ext));
+  const c = (i, j, k) => ISO.pt(...vA(vA(k ? B2 : A2, vM(e1, i * w / 2)), vM(e2, j * d / 2)));
+  const F = [];
+  for (const s of [-1, 1]) { const k = s > 0 ? 1 : 0;
+    F.push([vM(e1, s), [[s, -1, 0], [s, 1, 0], [s, 1, 1], [s, -1, 1]]], [vM(e2, s), [[-1, s, 0], [1, s, 0], [1, s, 1], [-1, s, 1]]],
+      ...(caps ? [[vM(a, s), [[-1, -1, k], [1, -1, k], [1, 1, k], [-1, 1, k]]]] : [])); }
+  for (const [n, f] of F) { if (n[0] + n[1] + n[2] <= 1e-3) continue;
+    g.beginPath(); f.forEach((v, i) => { const p = c(...v); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.closePath();
+    g.fillStyle = n[2] > .55 ? ISO.shade(col, .22) : n[1] >= n[0] ? col : ISO.shade(col, -.28); g.fill();
+    g.strokeStyle = 'rgba(8,10,20,.3)'; g.lineWidth = 1; g.stroke(); }
+}
+// pass: 'low' (тень, ноги, таз), 'up' (корпус, голова, руки), 'all'. ang: куда смотрит (0 = +x, PI/4 = к зрителю)
+// o.pose: 'idle' | 'knead' (o.tx, o.tz) | 'rest' (o.tx, o.tz) | 'reach' (o.t=[x,y,z], o.hand) | 'hold' (держит предмет перед собой)
+// o.look: { coat, pants, skin, hair, hat: 'chef' | 'cap' | 'none', hatCol, apron: true/false, apronCol }
+function person(g, pass, x, y, z, ang, H, lt, o = {}) {
+  const L0 = o.look || {}, hat = L0.hat || 'none', apron = !!L0.apron;
+  const C = Object.assign({}, CC); for (const k of ['coat', 'pants', 'skin', 'hair', 'shoe']) if (typeof L0[k] === 'string') C[k] = L0[k];
+  if (typeof L0.hatCol === 'string') C.hat = L0.hatCol; if (typeof L0.apronCol === 'string') C.apron = L0.apronCol;
+  const J = chefPose(lt, o), ca = Math.cos(ang), sa = Math.sin(ang);
+  const W = v => [x + (v[0] * ca - v[1] * sa) * H, y + (v[0] * sa + v[1] * ca) * H, z + v[2] * H];
+  const side = W([0, 1, 0]), ref = vN(vS(side, W([0, 0, 0]))), up = [0, 0, 1];
+  const near = sd => { const p = W([0, sd, 0]); return p[0] + p[1]; };
+  const ord = near(-1) < near(1) ? [-1, 1] : [1, -1]; // дальняя сторона первой
+  if (pass !== 'up') {
+    ISO.shadow(g, x, y, z, .17 * H, .42);
+    for (const sd of ord) { const L = J.legs[sd];
+      ch_box(g, W(L.hip), W(L.knee), .09 * H, .095 * H, C.pants, .01 * H, ref, false);
+      ch_box(g, W(L.knee), W(L.ank), .075 * H, .08 * H, C.pants, .01 * H, ref, false);
+      ch_box(g, W([-.03, sd * .065, .02]), W([.1, sd * .065, .02]), .07 * H, .04 * H, C.shoe, 0, ref); }
+    ch_box(g, W([0, J.waist[1], HIPZ - .01]), W(J.waist), .2 * H, .14 * H, C.pants, 0, ref);
+  }
+  if (pass !== 'low') {
+    const arm = A => { ch_box(g, W(A.sh), W(A.el), .072 * H, .072 * H, C.coat, .02 * H, ref, false);
+      ch_box(g, W(A.el), W(A.wr), .058 * H, .058 * H, C.skin, .012 * H, ref, false);
+      ch_box(g, W(A.wr), W(A.tip), .052 * H, .026 * H, ISO.shade(C.skin, -.06), .006 * H, ref); };
+    arm(J.arms[ord[0]]);
+    ch_box(g, W(J.waist), W(J.neck), CL.shW * H, .15 * H, C.coat, 0, ref);
+    if (apron) ch_box(g, W(vA(J.waist, [.076, 0, 0])), W(vA(J.waist, vA(vM(J.ax, CL.torso * .62), [.076, 0, 0]))), .17 * H, .006 * H, C.apron, 0, ref);
+    ch_box(g, W(J.neck), W(J.crown), .11 * H, .12 * H, C.skin, 0, ref);
+    if (hat === 'chef') ch_box(g, W(J.crown), W(J.top), .13 * H, .13 * H, C.hat, .004 * H, ref);
+    else if (hat === 'cap') ch_box(g, W(J.crown), W(vA(J.crown, vM(J.ax, .03))), .125 * H, .13 * H, C.hat, .004 * H, ref);
+    else ch_box(g, W(vA(J.crown, vM(J.ax, -.03))), W(vA(J.crown, vM(J.ax, .015))), .118 * H, .128 * H, C.hair, .002 * H, ref);
+    arm(J.arms[ord[1]]);
+  }
+  return J;
+}
+
+return person;
 })();

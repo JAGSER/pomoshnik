@@ -4335,6 +4335,21 @@ function extractCode(s) {
   return i >= 0 && /function\s+draw\s*\(/.test(s.slice(i)) ? s.slice(i).trim() : null;
 }
 
+// точечные замены от арт-директора: блоки <<< старое === новое >>>; старый фрагмент должен встречаться в коде ровно один раз
+function applyPatches(code, txt) {
+  let out = code, applied = 0, failed = 0;
+  const re = /<<<[ \t]*\r?\n([\s\S]*?)\r?\n===[ \t]*\r?\n([\s\S]*?)\r?\n?>>>/g;
+  let m;
+  while ((m = re.exec(String(txt || "")))) {
+    const from = m[1], to = m[2];
+    const i = from ? out.indexOf(from) : -1;
+    if (i < 0 || out.indexOf(from, i + 1) >= 0) { failed++; continue; }
+    out = out.slice(0, i) + to + out.slice(i + from.length);
+    applied++;
+  }
+  return { code: out, applied, failed };
+}
+
 async function makeCreativeScene(v, label) {
   const brief = {
     title: v.title, emojiMain: v.emoji, speech: v.speech, app: appName(), o1: T("Спросите о своём"), o2: T(`в «${appName()}»`),
@@ -4473,15 +4488,39 @@ async function makeCreativeScene(v, label) {
     const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotT }, style ? 45000 : 30000);
     if (!sh.ok && sec() > BUDGET) note("просмотр кадров пропущен — время вышло");
     if (sh.ok) {
-      if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + good + "\n```" });
-      else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + good + "\n```" }, { role: "assistant", content: "Хорошо." });
+      // в переписку идёт код без библиотеки стиля (она большая и неизменная)
+      const shown = style && good.startsWith(style.lib) ? good.slice(style.lib.length).replace(/^\n+/, "") : good;
+      if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + shown + "\n```" });
+      else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + shown + "\n```" }, { role: "assistant", content: "Хорошо." });
+      // для стилей: один круг проверки и точечные замены строк, без перезаписи всего ролика (перезапись ломала то, что было хорошо)
+      const askStyle = style ? `Кадры ролика в моменты ${shotT.join(", ")} с. Проверь как арт-директор по списку:
+1) всё в стиле «${style.konst}», нет элементов другого стиля;
+2) люди: руки идут от плеч и касаются предмета, ничего не оторвано, человек целиком в кадре;
+3) текст не обрезан, не выходит за край, не налезает на сцену и на трекер, нет одиночных слов в строке;
+4) объекты не обрезаны краем кадра (сдвигай сцену view(x, …), масштаб не уменьшай);
+5) подписи читаются и не лежат на объектах (иначе тёмная плашка или пустое место);
+6) трекер hud на месте, маячки и выноски не закрывают людей.
+Если всё хорошо — ответь одним словом OK.
+Если есть дефекты — НЕ переписывай код целиком. Пришли только точечные замены, не больше 6, каждая строго в таком виде:
+<<<
+точный фрагмент текущего кода, целые строки
+===
+новый фрагмент
+>>>` : null;
       msgs.push({ role: "user", content: [
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
-        { type: "text", text: `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: ${style ? `1) Соответствует ли ролик стилю «${style.konst}»? Если на кадрах есть элементы другого стиля, или стиль нарушен в любом месте, это провал: перепиши весь ролик в стиле. 2) Затем: ` : ""}читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
+        { type: "text", text: askStyle || `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
       const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), style ? "claude-opus-5-5" : "claude-sonnet-5-5");
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
-      const better = /^\s*OK\b/i.test(txt) ? null : extractCode(txt);
+      let better = null;
+      if (!/^\s*OK\b/i.test(txt)) {
+        if (style) {
+          const p = applyPatches(good, txt);
+          note(`замены: применено ${p.applied}, не найдено ${p.failed}`);
+          better = p.applied ? p.code : null;
+        } else better = extractCode(txt);
+      }
       if (better) {
         const r = await test(better);
         if (r.n != null && r.n <= best.n) good = better;
