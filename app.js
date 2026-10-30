@@ -811,6 +811,10 @@ async function send() {
   const text = $("#input").value.trim();
   if (!text && !PENDING.length) return;
   track("Вопрос", { preset: CHAT.preset, think: $("#think").checked, files: PENDING.length });
+  // админ: «сделай ролик …» → после ответа ролик делается сам
+  if (text && (me().admin || (PLAN && PLAN.admin)) && /^\s*(сделай|создай|сними|нужен|нужна|нужно)\s+(мне\s+|нам\s+)?(творческ\S*\s+)?(ролик|видео)/i.test(text)) {
+    CHAT.autoVideo = true; CHAT._vidAsk = true;
+  }
 
   const content = [...PENDING.map((p) => p.block)];
   if (text) content.push({ type: "text", text });
@@ -835,7 +839,10 @@ async function ask() {
   const today = new Date().toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric", weekday: "long" });
   const hp = activeHelper();
   const FOLLOW = LIVE ? "" : "В самом конце ответа добавь одну строку вида [[кнопки: вариант | вариант | вариант]] — 2-4 коротких варианта (до 6 слов каждый), которые человек может просто нажать вместо того, чтобы печатать: от его лица, на языке разговора. Если ты задаёшь вопрос — варианты это готовые ответы на него. Если вопроса нет — что логично спросить или сделать дальше. Эту строку не упоминай в тексте.";
-  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}${CHAT.helper === "birthdays" ? "\n" + bdSystem() : ""}` : "", FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : ""].filter(Boolean).join("\n\n");
+  // просьба о ролике действует только на этот ответ
+  const vidAsk = !!CHAT._vidAsk; delete CHAT._vidAsk;
+  const VID_SYS = vidAsk ? "Пользователь просит ролик. Напиши текст для озвучки ролика на 30–50 секунд: живо, без списков и разметки, без вступлений про ролик; не добавляй строку [[кнопки: …]]." : "";
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}${CHAT.helper === "birthdays" ? "\n" + bdSystem() : ""}` : "", vidAsk ? "" : FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : "", VID_SYS].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -3770,6 +3777,97 @@ function refreshStyleMarks() {
   const nm = document.getElementById("chat-menu-style-name");
   if (nm) nm.textContent = styleDisplayName(cur);
 }
+/* ===== Навыки (SKILL.md), только админ ===== */
+async function skillsApi(path, data = {}) {
+  const r = await fetch(CFG.proxy + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, ...data }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || "HTTP " + r.status);
+  return d;
+}
+// name/description из YAML-шапки, иначе заголовок # или имя файла
+function skillsParse(fname, raw) {
+  const text = String(raw || "").replace(/^\uFEFF/, "");
+  const s = { name: fname.replace(/\.md$/i, ""), description: "", text: text.slice(0, 60000) };
+  const m = /^---\s*\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  const get = (k) => {
+    const v = m && (new RegExp("^" + k + "\\s*:\\s*(.+)$", "mi").exec(m[1]) || [])[1];
+    return v ? v.trim().replace(/^["']|["']$/g, "") : "";
+  };
+  if (get("name")) s.name = get("name");
+  else { const h = /^#\s+(.+)$/m.exec(text); if (h && /^skill$/i.test(s.name)) s.name = h[1].trim(); }
+  s.description = get("description");
+  s.name = s.name.slice(0, 100); s.description = s.description.slice(0, 500);
+  return s;
+}
+function openSkillsSheet() {
+  document.getElementById("skills-sheet")?.remove();
+  const back = el("div", "style-sheet-back"); back.id = "skills-sheet";
+  back.style.cssText = "position:fixed;inset:0;z-index:1000";
+  const sheet = el("div", "style-sheet"); sheet.style.cssText = "max-height:85vh;overflow:auto";
+  const head = el("div", "style-sheet-head");
+  const h = document.createElement("b"); h.textContent = "🧩 " + T("Навыки Claude");
+  const close = () => back.remove();
+  const x = el("button", "btn btn-ghost"); x.type = "button"; x.textContent = "✕"; x.onclick = close;
+  head.append(h, x);
+  const list = document.createElement("div");
+  const file = document.createElement("input");
+  file.type = "file"; file.accept = ".md,text/markdown"; file.multiple = true; file.hidden = true;
+  const up = el("button", "btn btn-wide"); up.type = "button"; up.textContent = "📄 " + T("Загрузить SKILL.md");
+  up.onclick = () => file.click();
+  const draw = async () => {
+    list.textContent = T("Загружаю…");
+    try {
+      const { skills = [] } = await skillsApi("/skills-list");
+      list.innerHTML = "";
+      if (!skills.length) { list.textContent = T("Навыков пока нет."); return; }
+      skills.forEach((s) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.2)";
+        const lab = document.createElement("label");
+        lab.style.cssText = "flex:1;display:flex;gap:8px;align-items:flex-start;cursor:pointer;min-width:0";
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!s.on;
+        cb.onchange = async () => {
+          cb.disabled = true;
+          try { await skillsApi("/skills-toggle", { id: s.id, on: cb.checked }); }
+          catch (e) { cb.checked = !cb.checked; toast(T("Не получилось") + ": " + e.message); }
+          cb.disabled = false;
+        };
+        const info = document.createElement("span"); info.style.cssText = "min-width:0;overflow-wrap:anywhere";
+        info.innerHTML = `<b>${esc(s.name || "")}</b>${s.description ? `<br><small>${esc(s.description)}</small>` : ""}<br><small class="hint">${(s.size || 0).toLocaleString()} ${LL("симв.", "chars")}</small>`;
+        lab.append(cb, info);
+        const del = el("button", "btn btn-ghost"); del.type = "button"; del.textContent = "🗑"; del.title = T("Удалить");
+        del.onclick = async () => {
+          if (!confirm(LL(`Удалить навык «${s.name}»?`, `Delete skill “${s.name}”?`))) return;
+          del.disabled = true;
+          try { await skillsApi("/skills-del", { id: s.id }); draw(); }
+          catch (e) { del.disabled = false; toast(T("Не получилось") + ": " + e.message); }
+        };
+        row.append(lab, del); list.append(row);
+      });
+    } catch (e) { list.textContent = T("Не удалось загрузить навыки") + ": " + e.message; }
+  };
+  file.onchange = async () => {
+    const files = [...file.files].filter((f) => /\.md$/i.test(f.name)); file.value = "";
+    if (!files.length) return;
+    up.disabled = true;
+    try {
+      const skills = await Promise.all(files.map(async (f) => skillsParse(f.name, await f.text())));
+      if (files.some((f) => f.size > 60000)) toast(LL("Длинные навыки обрезаны до 60 000 символов", "Long skills trimmed to 60,000 chars"));
+      await skillsApi("/skills-save", { skills });
+      toast(LL("Навыки загружены: ", "Skills uploaded: ") + skills.length);
+      draw();
+    } catch (e) { toast(T("Не удалось загрузить") + ": " + e.message); }
+    up.disabled = false;
+  };
+  sheet.append(head, list, up, file); back.append(sheet);
+  back.onclick = (e) => { if (e.target === back) close(); };
+  document.body.append(back);
+  draw();
+}
 function buildChatMenu() {
   const menu = document.getElementById("chat-menu");
   if (!menu) return;
@@ -3809,6 +3907,20 @@ function buildChatMenu() {
     openStyleDemo();
   });
   menu.appendChild(demo);
+  // навыки Claude: только админ
+  if (me().admin || (PLAN && PLAN.admin)) {
+    const sk = document.createElement("button");
+    sk.type = "button";
+    sk.className = "chat-menu-item";
+    sk.setAttribute("role", "menuitem");
+    sk.textContent = "🧩 " + T("Навыки…");
+    sk.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.hidden = true;
+      openSkillsSheet();
+    });
+    menu.appendChild(sk);
+  }
   refreshStyleMarks();
 }
 function stopStyleVideos() {

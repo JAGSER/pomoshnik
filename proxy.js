@@ -646,6 +646,103 @@ export async function handler(req, info) {
   if (url.pathname === "/login") {
     return json({ ok: true, user: user.id, models, webSearch: !!user.webSearch, plan: plan || "owner" }, 200, h);
   }
+  // только админ: навыки Claude (KV) и задачи для программы на ноутбуке
+  if (/^\/(skills-(list|save|toggle|del)|pc-(task|status|poll|report))$/.test(url.pathname)) {
+    if (user.acct || !ADMINS().includes(user.id)) return json({ error: "Нет доступа" }, 403, h);
+    const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 503, h);
+    const p = url.pathname, now = Date.now(), uid = user.id;
+    // запись с проверкой версии: параллельные запросы не затирают друг друга; fn вернул undefined = без изменений
+    const upd = async (k, fn, opt) => {
+      for (let i = 0; i < 6; i++) {
+        const r = await kv.get(k), v = fn(r.value);
+        if (v === undefined) return r.value;
+        if ((await kv.atomic().check(r).set(k, v, opt).commit()).ok) return v;
+      }
+      throw new Error("Хранилище занято, повторите");
+    };
+    try {
+      if (p.startsWith("/skills-")) {
+        // мета в ["skills", uid], текст кусками в ["skillt", uid, id, n]: значение в KV не больше 64 КБ
+        const key = ["skills", uid], CH = 20000;
+        const out = (l) => json({ ok: true, skills: (l || []).map((s) => ({ id: s.id, name: s.name, description: s.description, on: !!s.on, size: s.size })) }, 200, h);
+        if (p === "/skills-list") return out((await kv.get(key)).value);
+        if (p === "/skills-save") {
+          const inc = (Array.isArray(body.skills) ? body.skills : []).map((s) => ({
+            name: String((s && s.name) || "").trim().slice(0, 100) || "Навык",
+            description: String((s && s.description) || "").trim().slice(0, 300),
+            text: String((s && s.text) || ""),
+          })).filter((s) => s.text.trim());
+          const big = inc.find((s) => s.text.length > 60000);
+          if (big) return json({ error: `Навык «${big.name}» длиннее 60000 символов` }, 400, h);
+          const cur = (await kv.get(key)).value || [];
+          const fresh = new Set(inc.filter((s) => !cur.some((x) => x.name === s.name)).map((s) => s.name));
+          if (cur.length + fresh.size > 30) return json({ error: "Не больше 30 навыков" }, 400, h);
+          for (const s of inc) {
+            const old = cur.find((x) => x.name === s.name), id = old ? old.id : crypto.randomUUID().slice(0, 12);
+            const parts = Math.ceil(s.text.length / CH);
+            for (let n = 0; n < parts; n++) await kv.set(["skillt", uid, id, n], s.text.slice(n * CH, (n + 1) * CH));
+            for (let n = parts; n < (old ? old.parts || 0 : 0); n++) await kv.delete(["skillt", uid, id, n]);
+            const m = { id, name: s.name, description: s.description, on: old ? !!old.on : true, size: s.text.length, parts };
+            if (old) cur[cur.indexOf(old)] = m; else cur.push(m);
+          }
+          await kv.set(key, cur);
+          return out(cur);
+        }
+        if (p === "/skills-toggle") return out(await upd(key, (l) => (l || []).map((s) => (s.id === body.id ? { ...s, on: !!body.on } : s))));
+        // /skills-del
+        const cur = (await kv.get(key)).value || [], s = cur.find((x) => x.id === body.id);
+        if (s) for (let n = 0; n < (s.parts || 0); n++) await kv.delete(["skillt", uid, s.id, n]);
+        return out(await upd(key, (l) => (l || []).filter((x) => x.id !== body.id)));
+      }
+      // задачи ноутбука
+      const TTL = 7 * 864e5, OLD = 36e5, qk = ["pcq", uid];
+      const clip = (l) => (Array.isArray(l) ? l : []).map((x) => String(x).slice(0, 300)).slice(-40);
+      if (p === "/pc-task") {
+        const text = String(body.text || "").trim().slice(0, 2000);
+        if (!text) return json({ error: "Пустая задача" }, 400, h);
+        const id = crypto.randomUUID();
+        await kv.set(["pc", uid, id], { id, text, status: "queued", log: [], answer: "", created: now, updated: now }, { expireIn: TTL });
+        await upd(qk, (q) => [...(q || []), id].slice(-50));
+        return json({ ok: true, id }, 200, h);
+      }
+      const tk = ["pc", uid, String(body.id || "")];
+      if (p === "/pc-status") {
+        let t = (await kv.get(tk)).value;
+        if (!t) return json({ error: "Задача не найдена" }, 404, h);
+        if (t.status === "queued" && now - t.created > OLD) {
+          t = (await upd(tk, (v) => (v && v.status === "queued" ? { ...v, status: "error", answer: "Задача устарела: ноутбук не забрал её за час", updated: now } : undefined), { expireIn: TTL })) || t;
+        }
+        return json({ ok: true, status: t.status, log: t.log || [], answer: t.answer || "" }, 200, h);
+      }
+      if (p === "/pc-poll") {
+        for (let i = 0; i < 20; i++) {
+          let id = null, took = false;
+          await upd(qk, (q) => { id = q && q.length ? q[0] : null; return id ? q.slice(1) : undefined; });
+          if (!id) break;
+          const t = await upd(["pc", uid, id], (v) => {
+            took = false;
+            if (!v || v.status !== "queued") return undefined;
+            if (now - v.created > OLD) return { ...v, status: "error", answer: "Задача устарела", updated: now };
+            took = true;
+            return { ...v, status: "running", updated: now };
+          }, { expireIn: TTL });
+          if (took && t) return json({ id: t.id, text: t.text }, 200, h);
+        }
+        return json({ id: null }, 200, h);
+      }
+      // /pc-report
+      const st = ["queued", "running", "done", "error"].includes(body.status) ? body.status : "running";
+      const t = await upd(tk, (v) => (v ? {
+        ...v, status: st,
+        log: body.log !== undefined ? clip(body.log) : v.log,
+        answer: body.answer !== undefined ? String(body.answer || "").slice(0, 6000) : v.answer,
+        updated: now,
+      } : undefined), { expireIn: TTL });
+      return t ? json({ ok: true }, 200, h) : json({ error: "Задача не найдена" }, 404, h);
+    } catch (e) {
+      return json({ error: String((e && e.message) || e) }, 500, h);
+    }
+  }
   // автор сделал ролик: считаем творческие и простые, запоминаем, откуда он и с какого устройства
   if (url.pathname === "/video-made") {
     const kv = await kvOpen(); if (!kv) return json({ ok: false }, 200, h);
@@ -1048,7 +1145,25 @@ export async function handler(req, info) {
     payload.thinking = { type: "adaptive" };
     payload.output_config = { effort: "high" };
   }
-  if (body.system) payload.system = String(body.system).slice(0, 20000);
+  // system: админу лимит 120000 и включённые навыки в конце
+  {
+    const adm = !user.acct && ADMINS().includes(user.id);
+    let sys = body.system ? String(body.system).slice(0, adm ? 120000 : 20000) : "";
+    if (adm) {
+      try {
+        const kv = await kvOpen();
+        const on = kv ? ((await kv.get(["skills", user.id])).value || []).filter((s) => s && s.on) : [];
+        const blocks = [];
+        for (const s of on) {
+          const r = await kv.getMany(Array.from({ length: s.parts || 0 }, (_, n) => ["skillt", user.id, s.id, n]));
+          const text = r.map((x) => x.value || "").join("");
+          if (text.trim()) blocks.push(`## Навык: ${s.name} — ${s.description || ""}\n${text}`);
+        }
+        if (blocks.length) sys += (sys ? "\n\n" : "") + "НАВЫКИ (применяй тот, что подходит к задаче):\n\n" + blocks.join("\n\n");
+      } catch (_) { /* без навыков, если KV недоступно */ }
+    }
+    if (sys) payload.system = sys;
+  }
   if (user.webSearch && body.web !== false && !isLive) {
     payload.tools = [{
       type: env("WEB_SEARCH_TOOL", "web_search_20250305"),
