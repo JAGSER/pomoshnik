@@ -876,3 +876,117 @@ const BOOK = (() => {
     hero, face, bounce, hop, hand, handW, write, title, story, caps, note,
     icon, journey, pageNo, thermo, tape, bird, scrap, band, shadow, arrow, ring, pebble, sfx };
 })();
+
+// ===== Персонажи книжки: BOOK.critter(g, x, y, s, o) =====
+// Животные и ребёнок в технике стиля: акварельная заливка с объёмом, тонкая тушь, лицо BOOK.face.
+// (x, y) — точка между стопами на земле; s = 1 → рост 300 px (с ушами до ~330).
+// Пропорции в долях роста H: голова r 0.25 (центр на 0.66), тело 0.40×0.40 (центр на 0.32), бедро на 0.16,
+// плечо на краю тела (0.17 вбок, 0.44 вверх), рука 0.20, кисть r 0.04. Руки и ноги растут из контура тела по построению.
+BOOK.critter = (() => {
+  const B = BOOK, TAU = Math.PI * 2;
+  const KINDS = {
+    hedgehog: { col: '#8A5A3C', muzzle: '#F3D9B8', ears: 'small', spikes: true },
+    bunny: { col: '#E9E3DC', muzzle: '#FFFFFF', ears: 'long', inner: '#F2B8C6' },
+    bear: { col: '#A86F45', muzzle: '#E8C9A4', ears: 'round' },
+    cat: { col: '#F2A65A', muzzle: '#FFF1DF', ears: 'pointy', inner: '#F6C3B5', tail: 'thin', whiskers: true },
+    fox: { col: '#E07B39', muzzle: '#FFF6EA', ears: 'pointy', inner: '#3B2A24', tail: 'bushy', chest: '#FFF6EA' },
+    mouse: { col: '#B8B4C9', muzzle: '#E6E3EF', ears: 'big', inner: '#F2B8C6', tail: 'string' },
+    child: { col: '#6FA8DC', skin: '#F2C9A5', hair: '#6B4A33', ears: 'none' },
+  };
+  const POSES = ['stand', 'walk', 'wave', 'up', 'hold', 'sit'];
+  const shapeFill = (g, pts, c, H) => {
+    const b = B.bbox(pts), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, r = Math.max(b.x1 - b.x0, b.y1 - b.y0);
+    const gr = g.createRadialGradient(cx - r * .2, cy - r * .25, r * .05, cx - r * .05, cy, r * .8);
+    gr.addColorStop(0, B.mix(c, '#FFFFFF', .42)); gr.addColorStop(.55, c); gr.addColorStop(1, B.shade(c, -.26));
+    B.path(g, pts, true, true); g.fillStyle = gr; g.fill();
+    g.lineWidth = Math.max(1.5, H * .011); g.strokeStyle = B.rgba(B.P.ink, .55); g.stroke();
+  };
+  const ell = (cx, cy, rx, ry, rot = 0, n = 40) => { const o = [], c = Math.cos(rot), s = Math.sin(rot);
+    for (let i = 0; i < n; i++) { const a = i / n * TAU, x = Math.cos(a) * rx, y = Math.sin(a) * ry; o.push(cx + x * c - y * s, cy + x * s + y * c); } return o; };
+  const tri = (pts) => pts;
+  function critter(g, x, y, s = 1, o = {}) {
+    const kind = o.kind || 'bunny', K = KINDS[kind];
+    if (!K) throw new Error('BOOK.critter: неизвестный kind «' + kind + '». Есть: ' + Object.keys(KINDS).join(', '));
+    const pose = o.pose || 'stand';
+    if (!POSES.includes(pose)) throw new Error('BOOK.critter: неизвестная поза «' + pose + '». Есть: ' + POSES.join(', '));
+    if (!(s >= .3 && s <= 3)) throw new Error('BOOK.critter: масштаб s=' + s + ' вне 0.3…3 (рост 300·s px).');
+    const H = 300 * s, lt = o.lt || 0, dir = o.dir === -1 ? -1 : 1, col = o.col || K.col, ink = B.P.ink;
+    const walk = pose === 'walk', ph = walk ? (o.run ?? lt * 1.6) : 0, sit = pose === 'sit';
+    const bob = walk ? Math.abs(Math.sin(ph * TAU)) * H * .02 : Math.sin(lt * 2.2) * H * .006;
+    const sq = o.sq || 0, sx = 1 + sq, sy = 1 / (1 + sq);
+    const hipY = -H * (sit ? .07 : .16), bodyY = -H * (sit ? .23 : .32) - bob, headY = -H * (sit ? .57 : .66) - bob;
+    const bodyR = H * .2, headR = H * (kind === 'child' ? .22 : .25);
+    const J = { head: null, hands: [], top: 0, feet: [] };
+    g.save(); g.translate(x, y); g.scale(dir * sx, sy); if (o.a != null) g.globalAlpha *= o.a;
+    if (o.shadow !== false) B.shadow(g, 0, 0, H * .5, H * .08, .9);
+    // хвост (за телом)
+    if (K.tail === 'bushy') { const p = []; for (let i = 0; i <= 16; i++) { const f = i / 16, a = (-30 - f * 120) * Math.PI / 180, r = H * (.3 + .06 * Math.sin(f * Math.PI)); p.push(-H * .08 + Math.cos(a) * r * .6 - H * .1, bodyY + H * .12 + Math.sin(a) * r * .5); }
+      const tl = B.blob(-H * .3, bodyY - H * .02 + Math.sin(lt * 3) * H * .01, H * .14, H * .08, 3, .12); shapeFill(g, tl, col, H);
+      g.save(); B.path(g, tl, true, true); g.clip(); g.fillStyle = K.chest || '#FFF'; g.beginPath(); g.arc(-H * .43, bodyY - H * .02, H * .07, 0, TAU); g.fill(); g.restore(); }
+    else if (K.tail === 'thin' || K.tail === 'string') { const w = Math.sin(lt * 2.5) * H * .04, pts = [-H * .15, bodyY + H * .12, -H * .3, bodyY + H * .05, -H * .34 + w, bodyY - H * .12, -H * .26 + w, bodyY - H * .22];
+      B.ink(g, B.spline(pts, 16), { w: K.tail === 'thin' ? H * .035 : H * .012, col: K.tail === 'thin' ? B.shade(col, -.1) : ink, taper: .4, jit: 0 }); }
+    // ноги
+    for (const sd of [-1, 1]) {
+      const a = walk ? Math.sin(ph * TAU + (sd > 0 ? Math.PI : 0)) * .45 : 0, hx = sd * H * .08, L = H * .16;
+      let fx, fy; if (sit) { fx = hx + H * .04 + sd * H * .02; fy = -H * .01; } else { fx = hx + Math.sin(a) * L; fy = hipY + Math.cos(a) * L - Math.max(0, Math.sin(a * sd)) * 0; }
+      const legC = kind === 'child' ? '#3E4A6B' : B.shade(col, -.12);
+      B.ink(g, [hx, hipY, fx, fy], { w: H * .066, col: B.rgba(ink, .55), taper: 0, jit: 0, rs: false });
+      B.ink(g, [hx, hipY, fx, fy], { w: H * .05, col: legC, taper: 0, jit: 0, rs: false });
+      g.fillStyle = kind === 'child' ? '#2F2A2A' : B.shade(col, -.2); g.beginPath(); g.ellipse(fx + H * .02, fy, H * .055, H * .03, 0, 0, TAU); g.fill();
+      J.feet.push([x + dir * fx, y + fy]);
+    }
+    // иголки ежа: веер за телом и головой
+    if (K.spikes) { const cx = 0, cy = headY + headR * .1, n = 22; g.fillStyle = B.shade(col, -.35);
+      for (let i = 0; i < n; i++) { const a = (-188 + i / (n - 1) * 196) * Math.PI / 180, r0 = headR * .9, r1 = headR * (1.32 + .08 * Math.sin(i * 2.3));
+        const bx = cx + Math.cos(a) * r0, by = cy + Math.sin(a) * r0, tx = cx + Math.cos(a) * r1, ty = cy + Math.sin(a) * r1, nx = -Math.sin(a) * H * .03, ny = Math.cos(a) * H * .03;
+        g.beginPath(); g.moveTo(bx - nx, by - ny); g.lineTo(tx, ty); g.lineTo(bx + nx, by + ny); g.closePath(); g.fill(); } }
+    // тело
+    const body = B.blob(0, bodyY, bodyR * .95, bodyR, 7, .03); shapeFill(g, body, kind === 'child' ? col : col, H);
+    if (K.chest || K.muzzle && kind !== 'child' && kind !== 'hedgehog') { g.save(); B.path(g, body, true, true); g.clip(); g.fillStyle = B.rgba(K.chest || K.muzzle, .85); g.beginPath(); g.ellipse(0, bodyY + H * .05, bodyR * .55, bodyR * .6, 0, 0, TAU); g.fill(); g.restore(); }
+    if (kind === 'child') { g.fillStyle = B.shade(col, -.15); g.fillRect(-bodyR * .9, bodyY + bodyR * .35, bodyR * 1.8, H * .012); }
+    // уши (за головой)
+    const ear = (sd) => {
+      if (K.ears === 'long') { const p = ell(sd * H * .1, headY - headR - H * .1, H * .055, H * .15, sd * .18 + Math.sin(lt * 2 + sd) * .04); shapeFill(g, p, col, H);
+        g.fillStyle = B.rgba(K.inner, .9); B.path(g, ell(sd * H * .1, headY - headR - H * .08, H * .028, H * .1, sd * .18), true, true); g.fill(); }
+      else if (K.ears === 'round' || K.ears === 'small' || K.ears === 'big') { const r = H * (K.ears === 'big' ? .1 : K.ears === 'round' ? .07 : .045), ex = sd * headR * .78, ey = headY - headR * .72;
+        shapeFill(g, ell(ex, ey, r, r), col, H); if (K.inner || K.ears === 'round') { g.fillStyle = B.rgba(K.inner || K.muzzle, .9); g.beginPath(); g.arc(ex, ey, r * .55, 0, TAU); g.fill(); } }
+      else if (K.ears === 'pointy') { const bx = sd * headR * .62, by = headY - headR * .62, p = [bx - sd * H * .07, by + H * .03, bx + sd * H * .02, by - H * .14, bx + sd * H * .08, by + H * .02];
+        g.save(); B.path(g, p, true, false); g.fillStyle = col; g.fill(); g.lineWidth = Math.max(1.5, H * .011); g.strokeStyle = B.rgba(ink, .55); g.stroke();
+        g.fillStyle = B.rgba(K.inner, .85); B.path(g, [bx - sd * H * .035, by + H * .01, bx + sd * H * .015, by - H * .09, bx + sd * H * .05, by + H * .005], true, false); g.fill(); g.restore(); }
+    };
+    ear(-1); ear(1);
+    // голова
+    const skin = kind === 'child' ? K.skin : col, head = ell(0, headY, headR, headR * .94);
+    shapeFill(g, head, skin, H);
+    if (kind === 'child') { const hair = o.hair || K.hair; g.save(); B.path(g, head, true, true); g.clip(); g.fillStyle = hair;
+      g.beginPath(); g.ellipse(0, headY - headR * .55, headR * 1.15, headR * .62, 0, 0, TAU); g.fill(); g.restore(); }
+    else { g.fillStyle = B.rgba(K.muzzle, .95); g.beginPath(); g.ellipse(0, headY + headR * .32, headR * .48, headR * .34, 0, 0, TAU); g.fill();
+      g.fillStyle = kind === 'hedgehog' ? '#2E2522' : B.shade(col, -.45); g.beginPath(); g.ellipse(0, headY + headR * .2, headR * .1, headR * .07, 0, 0, TAU); g.fill(); }
+    if (K.whiskers) for (const sd of [-1, 1]) for (const k of [-1, 1]) B.ink(g, [sd * headR * .32, headY + headR * .3, sd * headR * .78, headY + headR * (.24 + k * .08)], { w: H * .006, col: B.rgba(ink, .7), taper: .4, jit: 0, rs: false });
+    g.save(); g.translate(0, headY - headR * .05); B.face(g, 0, 0, headR * .92, { mood: o.mood || 'happy', look: o.look || 0, lookY: o.lookY || 0, seed: o.seed || 0, cheeks: true }); g.restore();
+    // руки: из контура тела, длина 0.20H, кисть на конце (не могут оторваться)
+    const sh = (sd) => [sd * bodyR * .85, bodyY - bodyR * .45];
+    const armDir = (sd) => {
+      if (pose === 'up') return [sd * .45, -.9];
+      if (pose === 'wave') return sd > 0 ? [Math.sin(lt * 9) * .35 + .3, -.95] : [sd * .3, .95];
+      if (pose === 'hold') return [-sd * .55, .65];
+      if (walk) { const a = Math.sin(ph * TAU + (sd > 0 ? 0 : Math.PI)) * .5; return [sd * .25 + a * .4, .95]; }
+      return [sd * .35, .94];
+    };
+    for (const sd of [-1, 1]) { const [sx0, sy0] = sh(sd), [dx, dy] = armDir(sd), l = Math.hypot(dx, dy), L = H * .2, hx = sx0 + dx / l * L, hy = sy0 + dy / l * L;
+      const armC = kind === 'child' ? col : B.shade(col, -.06);
+      const ap = B.spline([sx0, sy0, (sx0 + hx) / 2 + sd * H * .02, (sy0 + hy) / 2, hx, hy], 10);
+      B.ink(g, ap, { w: H * .071, col: B.rgba(ink, .55), taper: 0, jit: 0 });
+      B.ink(g, ap, { w: H * .055, col: armC, taper: 0, jit: 0 });
+      g.fillStyle = B.rgba(ink, .55); g.beginPath(); g.arc(hx, hy, H * .048, 0, TAU); g.fill();
+      g.fillStyle = kind === 'child' ? K.skin : B.shade(col, -.15); g.beginPath(); g.arc(hx, hy, H * .04, 0, TAU); g.fill();
+      J.hands.push([x + dir * sx * hx, y + sy * hy]); }
+    g.restore();
+    J.head = { x, y: y + sy * headY, r: headR };
+    J.top = y + sy * (headY - headR - (K.ears === 'long' ? H * .25 : K.ears === 'pointy' ? H * .14 : H * .06));
+    J.hold = [(J.hands[0][0] + J.hands[1][0]) / 2, (J.hands[0][1] + J.hands[1][1]) / 2];
+    return J;
+  }
+  critter.kinds = Object.keys(KINDS); critter.poses = POSES;
+  return critter;
+})();
