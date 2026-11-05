@@ -842,7 +842,7 @@ async function ask() {
   // просьба о ролике действует только на этот ответ
   const vidAsk = !!CHAT._vidAsk; delete CHAT._vidAsk;
   const VID_SYS = vidAsk ? "Пользователь просит ролик. Напиши текст для озвучки ролика на 30–50 секунд: живо, без списков и разметки, без вступлений про ролик; не добавляй строку [[кнопки: …]]." : "";
-  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}${CHAT.helper === "birthdays" ? "\n" + bdSystem() : ""}` : "", vidAsk ? "" : FOLLOW, LIVE ? LIVE_SYSTEM + (LIVE.fw ? `\nРазмер кадра: ${LIVE.fw}×${LIVE.fh} пикселей.` : "") : "", VID_SYS].filter(Boolean).join("\n\n");
+  const system = [CFG.baseSystem, LANG === "en" ? EN_SYSTEM : "", `Сегодня ${today}.`, personalSystem(), p.system, hp ? `Сейчас включён помощник «${hTitle(hp)}». ${hp.system}${CHAT.helper === "birthdays" ? "\n" + bdSystem() : ""}` : "", vidAsk ? "" : FOLLOW, LIVE ? LIVE_SYSTEM : "", VID_SYS].filter(Boolean).join("\n\n");
 
   const bubble = el("div", "msg assistant");
   const body = el("div", "md typing");
@@ -859,6 +859,7 @@ async function ask() {
   const autoRead = LIVE ? true : $("#autoread").checked;
   const live = LIVE ? new LiveSpeaker() : autoRead && dialogGemini() ? new Speaker() : null;
   let pre = null;
+  let nMarks = 0; // сколько меток уже показано во время потока
   try {
     const r = await fetch(CFG.proxy + "/chat", {
       method: "POST",
@@ -895,6 +896,8 @@ async function ask() {
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (!started) { started = true; body.classList.remove("typing"); if (LIVE && LIVE.t0) liveTime(); }
           full += ev.delta.text;
+          // метки показываем сразу, как только очередная пришла целиком
+          if (LIVE && full.includes("]]")) { const pm = liveParseMarks(full); if (pm.length > nMarks) { nMarks = pm.length; liveShowMarks(pm); } }
           const shown = LIVE ? liveClean(full) : optClean(full).replace(/\[\[\s*др[+-][^\]]*\]\]/gi, "");
           body.innerHTML = md(shown);
           if (live) live.push(shown);
@@ -910,7 +913,13 @@ async function ask() {
     if (!full) throw new Error("Пришёл пустой ответ, попробуйте ещё раз");
     let rawMarks = null, opts = [];
     if (!LIVE) { opts = optParse(full); full = bdApply(optClean(full)); body.innerHTML = md(full); }
-    if (LIVE) { rawMarks = [...full.matchAll(MARK_RE)].map((m) => m[0]); if (rawMarks.length) rawMarks.push(`кадр ${LIVE.fw}×${LIVE.fh}`); liveShowMarks(liveParseMarks(full)); full = liveClean(full); body.innerHTML = md(full); }
+    if (LIVE) {
+      rawMarks = [...full.matchAll(MARK_RE)].map((m) => m[0]).slice(0, 8);
+      // координаты 0–1000, размер кадра больше не нужен
+      const pm = liveParseMarks(full);
+      if (!pm.length || pm.length !== nMarks) liveShowMarks(pm);
+      full = liveClean(full); body.innerHTML = md(full);
+    }
     const msg = { role: "assistant", content: [{ type: "text", text: full }] };
     if (rawMarks && rawMarks.length) msg.marks = rawMarks;
     if (opts.length) msg.options = opts;
@@ -1224,9 +1233,15 @@ async function transcribeVideo(file) {
 
 /* ===== Живой режим: камера + голос, ответы сразу вслух ===== */
 const LIVE_SYSTEM = `Сейчас живой режим: человек говорит с тобой голосом и показывает камеру телефона. К каждой реплике приложен кадр — это то, что камера видит прямо сейчас. Отвечай как в живом разговоре: коротко (1–3 предложения), просто, без списков и разметки. Если на кадре не видно того, о чём спрашивают, попроси показать поближе или повернуть камеру.
-Ты можешь показывать предметы прямо на экране. Когда речь о конкретном предмете в кадре (что это, где он, куда нажать, что взять), добавь в самом конце ответа для каждого такого предмета отдельную строку:
-[[метка: короткое название; x, y, w, h]]
-где x, y — левый верхний угол рамки предмета, w, h — её ширина и высота, в пикселях приложенного кадра (размер кадра указан ниже). Рамку подбирай плотно по предмету, внимательно сверяясь с кадром. Приложение нарисует её на экране и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» вместо координат. Не больше 4 меток.`;
+Ты можешь показывать прямо на экране. Когда речь о конкретном предмете или месте в кадре (что это, где он, куда нажать, что взять), в САМОМ НАЧАЛЕ ответа, до текста, напиши метки, каждую отдельной строкой:
+[[рамка: короткое название; ymin, xmin, ymax, xmax]] — рамка вокруг предмета;
+[[точка: короткое название; y, x]] — точка, когда нужно показать место нажатия, кнопку, отверстие, провод, деталь.
+Координаты — целые числа по шкале 0–1000 от размера кадра (0 — верх или левый край, 1000 — низ или правый край), сначала y, потом x. Рамку подбирай плотно по предмету, внимательно сверяясь с кадром. Не больше 8 меток. Приложение нарисует их и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» или «я показал точкой» вместо координат.
+Подсчёт предметов: рамка на каждый, названия «1», «2», «3»…, голосом назови итог.
+Перевод текста в кадре (меню, вывеска, этикетка, инструкция): рамка на каждую строку или блок, название — короткий перевод на русский (до 5 слов); голосом — только общий смысл, не зачитывай всё.
+«Это мошенники?»: прочитай SMS, письмо или экран, скажи вердикт простыми словами, обведи рамкой опасную ссылку или номер; посоветуй не переводить деньги и никому не диктовать коды.
+Магазин: сравни цену за кг или литр, переведи рупии в рубли (примерно), подскажи по составу, скажи, что выгоднее, и обведи рамкой лучший вариант.
+Ответ голосом всегда 1–3 предложения.`;
 // голос телефона в живом режиме: начинает говорить с первой же законченной фразы, без задержки на запись
 class LiveSpeaker {
   constructor() { this.spoken = 0; this.text = ""; this.left = 0; this.ended = false; this.owner = null; this.stopped = false; SPEAKER = this; speechSynthesis.cancel(); }
@@ -1257,12 +1272,38 @@ class LiveSpeaker {
 }
 // крупный текст ответа: показываем только последние слова, чтобы помещались
 function liveTail(t) { t = t.trim(); if (t.length <= 110) return t; const cut = t.slice(-110); return "…" + cut.slice(cut.indexOf(" ") + 1); }
-const MARK_RE = /\[\[\s*метка\s*:\s*([^;\]]+?)\s*;\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\]/gi;
+// [[рамка: название; ymin, xmin, ymax, xmax]] и [[точка: название; y, x]], шкала 0–1000
+const MARK_RE = /\[\[\s*(рамка|точка)\s*:\s*([^;|\]]+?)\s*[;|]\s*([\d.,;\s]+?)\s*\]\]/gi;
 function liveParseMarks(s) {
-  const W = (LIVE && LIVE.fw) || 1000, H = (LIVE && LIVE.fh) || 1000;
-  return [...s.matchAll(MARK_RE)].slice(0, 4).map((m) => ({ label: m[1], x: +m[2] / W, y: +m[3] / H, w: Math.max(0.03, +m[4] / W), h: Math.max(0.03, +m[5] / H) }));
+  const c = (v) => Math.min(1, Math.max(0, v / 1000));
+  const out = [];
+  for (const m of s.matchAll(MARK_RE)) {
+    const n = m[3].split(/[\s,;]+/).filter(Boolean).map(Number);
+    if (n.some((v) => isNaN(v))) continue;
+    const label = m[2].trim();
+    if (!label) continue;
+    if (/^т/i.test(m[1])) {
+      if (n.length < 2) continue;
+      // маленькая рамка вокруг точки — чтобы было за чем следить
+      const y = c(n[0]), x = c(n[1]);
+      out.push({ label, kind: "point", x: Math.min(0.94, Math.max(0, x - 0.03)), y: Math.min(0.94, Math.max(0, y - 0.03)), w: 0.06, h: 0.06 });
+    } else {
+      if (n.length < 4) continue;
+      let y0 = c(n[0]), x0 = c(n[1]), y1 = c(n[2]), x1 = c(n[3]);
+      if (y1 < y0) [y0, y1] = [y1, y0];
+      if (x1 < x0) [x0, x1] = [x1, x0];
+      out.push({ label, kind: "box", x: x0, y: y0, w: Math.max(0.03, x1 - x0), h: Math.max(0.03, y1 - y0) });
+    }
+    if (out.length >= 8) break;
+  }
+  return out;
 }
-function liveClean(s) { return s.replace(MARK_RE, "").replace(/\[\[[^\]]*$/, "").replace(/\[$/, "").trimEnd(); }
+function liveClean(s) {
+  return s.replace(MARK_RE, "")
+    .replace(/\[\[\s*(?:рамка|точка|метка)[^\]]*\]\]/gi, "") // кривые метки тоже убираем
+    .replace(/\[\[[^\]]*\]?$/, "").replace(/\[$/, "") // незаконченная метка в конце
+    .replace(/^\s+/, "").replace(/\n{3,}/g, "\n\n").trimEnd();
+}
 
 /* Трекинг меток: маленькая серая копия кадра, поиск шаблона рядом с прошлым местом */
 const TW = 192;
@@ -1304,7 +1345,7 @@ function liveShowMarks(marks) {
   if (!marks.length || !LIVE || !LIVE.capture) return;
   const cap = LIVE.capture;
   LIVE.marks = marks.map((m) => {
-    const mk = { label: m.label, bx: m.x * cap.w, by: m.y * cap.h, bw: m.w * cap.w, bh: m.h * cap.h, ok: 1, born: performance.now() };
+    const mk = { label: m.label, kind: m.kind || "box", bx: m.x * cap.w, by: m.y * cap.h, bw: m.w * cap.w, bh: m.h * cap.h, ok: 1, born: performance.now() };
     // следим не только за самим предметом, но и за его окружением — так не перепутать с похожим узором рядом
     const ex = Math.max(mk.bw, 14) * 0.6, ey = Math.max(mk.bh, 14) * 0.6;
     mk.tx = -ex; mk.ty = -ey; mk.tw = mk.bw + ex * 2; mk.th = mk.bh + ey * 2;
@@ -1361,20 +1402,42 @@ function liveDraw() {
   const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const vw = v.videoWidth || 1, vh = v.videoHeight || 1, s = Math.max(W / vw, H / vh), ox = (W - vw * s) / 2, oy = (H - vh * s) / 2;
   const cw = LIVE.capture.w, ch = LIVE.capture.h, t = performance.now() / 1000;
+  // при многих метках подписи мельче, чтобы не налезали
+  const many = LIVE.marks.length >= 5, fs = many ? 22 : 30, lh = many ? 38 : 50;
+  const plate = (txt, cx, top, bottom) => {
+    g.font = `800 ${fs}px ${VFONT}`;
+    const lw = g.measureText(txt).width + fs + 2, lx = Math.min(W - lw - 8, Math.max(8, cx - lw / 2)), ly = top - lh - 10 < 70 ? bottom + 10 : top - lh - 10;
+    g.fillStyle = "#FFD23F"; g.beginPath(); g.roundRect(lx, ly, lw, lh, lh / 2); g.fill();
+    g.fillStyle = "#1b1b1b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, lx + lw / 2, ly + lh / 2 + 1);
+  };
   LIVE.marks.forEach((mk) => {
     // плавное движение рамки на экране
     mk.sx = mk.sx == null ? mk.bx : mk.sx + (mk.bx - mk.sx) * 0.35; mk.sy = mk.sy == null ? mk.by : mk.sy + (mk.by - mk.sy) * 0.35;
     let x = ox + mk.sx / cw * vw * s, y = oy + mk.sy / ch * vh * s, w = mk.bw / cw * vw * s, h = mk.bh / ch * vh * s;
-    if (w < 64) { x -= (64 - w) / 2; w = 64; } if (h < 64) { y -= (64 - h) / 2; h = 64; }
-    const pad = 6 + 3 * Math.sin(t * 5);
     g.globalAlpha = mk.ok;
-    g.lineWidth = 6; g.strokeStyle = "#FFD23F"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
-    g.beginPath(); g.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 18); g.stroke();
-    g.shadowBlur = 0;
-    g.font = `800 30px ${VFONT}`;
-    const lw = g.measureText(mk.label).width + 32, lx = Math.min(W - lw - 8, Math.max(8, x + w / 2 - lw / 2)), ly = y - pad - 60 < 70 ? y + h + pad + 10 : y - pad - 60;
-    g.fillStyle = "#FFD23F"; g.beginPath(); g.roundRect(lx, ly, lw, 50, 25); g.fill();
-    g.fillStyle = "#1b1b1b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(mk.label, lx + lw / 2, ly + 26);
+    if (mk.kind === "point") {
+      // точка: пульсирующий круг, кольцо, стрелка сверху
+      const cx = x + w / 2, cy = y + h / 2, ph = Math.sin(t * 5), r = 22 + 5 * ph;
+      g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
+      g.fillStyle = "rgba(255,210,63,.35)"; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 5; g.strokeStyle = "#FFD23F"; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = mk.ok * (0.55 - 0.35 * ph); g.lineWidth = 3;
+      g.beginPath(); g.arc(cx, cy, r + 12 + 4 * ph, 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = mk.ok;
+      g.fillStyle = "#FFD23F"; g.beginPath(); g.arc(cx, cy, 5, 0, Math.PI * 2); g.fill();
+      const ay = cy - r - 8;
+      g.beginPath(); g.moveTo(cx, ay); g.lineTo(cx - 13, ay - 18); g.lineTo(cx - 5, ay - 18); g.lineTo(cx - 5, ay - 40);
+      g.lineTo(cx + 5, ay - 40); g.lineTo(cx + 5, ay - 18); g.lineTo(cx + 13, ay - 18); g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      plate(mk.label, cx, ay - 40, cy + r + 16);
+    } else {
+      if (w < 64) { x -= (64 - w) / 2; w = 64; } if (h < 64) { y -= (64 - h) / 2; h = 64; }
+      const pad = 6 + 3 * Math.sin(t * 5);
+      g.lineWidth = 6; g.strokeStyle = "#FFD23F"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
+      g.beginPath(); g.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 18); g.stroke();
+      g.shadowBlur = 0;
+      plate(mk.label, x + w / 2, y - pad, y + h + pad);
+    }
     g.globalAlpha = 1;
   });
   LIVE.raf = requestAnimationFrame(liveDraw);
@@ -1435,13 +1498,14 @@ function liveListen() {
 function liveFrame() {
   const v = $("#live-video");
   if (!v.videoWidth) return null;
-  const k = Math.min(1, 512 / Math.max(v.videoWidth, v.videoHeight));
+  // 768 по длинной стороне: лучше читается текст и мелкие детали
+  const k = Math.min(1, 768 / Math.max(v.videoWidth, v.videoHeight));
   const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
   LIVE.fw = c.width; LIVE.fh = c.height;
   const g = c.getContext("2d");
   if (LIVE.facing === "user") { g.translate(c.width, 0); g.scale(-1, 1); }
   g.drawImage(v, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.6).split(",")[1];
+  return c.toDataURL("image/jpeg", 0.72).split(",")[1];
 }
 async function liveAsk(text) {
   LIVE.busy = true;

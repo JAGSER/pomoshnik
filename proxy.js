@@ -461,16 +461,38 @@ async function geminiLiveStream(payload) {
   if (!gkey) return null;
   const sys = Array.isArray(payload.system) ? payload.system.map((x) => x.text || "").join("\n") : String(payload.system || "");
   const models = [env("GEMINI_LIVE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash"];
+  // Текст последней реплики пользователя
+  const msgs = Array.isArray(payload.messages) ? payload.messages : [];
+  const lastU = [...msgs].reverse().find((x) => x && x.role === "user");
+  const lastText = !lastU ? "" : typeof lastU.content === "string" ? lastU.content
+    : (Array.isArray(lastU.content) ? lastU.content.filter((b) => b && b.type === "text").map((b) => b.text || "").join(" ") : "");
+  // Нужен ли поиск Google
+  const wantSearch = /мошен|развод|скам|scam|цен|курс|отзыв|марк|что это за|сколько стоит|где купить|рупи|доставк/i.test(lastText);
+  // Попытки [поиск, высокое разрешение]: со всем → без mediaResolution → без поиска → как раньше
+  const variants = wantSearch ? [[true, true], [true, false], [false, true], [false, false]] : [[false, true], [false, false]];
   for (const m of models) {
     for (const lvl of ["minimal", null]) {
-      const gen = { maxOutputTokens: 600, temperature: 0.4 };
-      if (lvl) gen.thinkingConfig = { thinkingLevel: lvl };
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`, {
-        method: "POST", headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
-        body: JSON.stringify({ contents: toGemini(payload.messages), ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}), generationConfig: gen }),
-      }).catch(() => null);
-      if (!r) return null;
-      if (r.status === 400 && lvl) continue;
+      let r = null;
+      for (let vi = 0; vi < variants.length; vi++) {
+        const [srch, hi] = variants[vi];
+        const gen = { maxOutputTokens: 900, temperature: 1.0 };
+        if (lvl) gen.thinkingConfig = { thinkingLevel: lvl };
+        if (hi) gen.mediaResolution = "MEDIA_RESOLUTION_HIGH";
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`, {
+          method: "POST", headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+          body: JSON.stringify({
+            contents: toGemini(payload.messages),
+            ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}),
+            ...(srch ? { tools: [{ google_search: {} }] } : {}),
+            generationConfig: gen,
+          }),
+        }).catch(() => null);
+        if (!r) return null;
+        if (r.status !== 400) break;
+        // 400: освобождаем тело и пробуем следующий вариант
+        if (vi < variants.length - 1) { try { await r.body?.cancel(); } catch (_) { /* пусто */ } }
+      }
+      if (r.status === 400 && lvl) { try { await r.body?.cancel(); } catch (_) { /* пусто */ } continue; }
       if (!r.ok) break;
       const enc = new TextEncoder(), dec = new TextDecoder();
       const ev = (o) => enc.encode(`event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`);
@@ -1254,7 +1276,7 @@ export async function handler(req, info) {
   {
     const adm = !user.acct && ADMINS().includes(user.id);
     let sys = body.system ? String(body.system).slice(0, adm ? 120000 : 20000) : "";
-    if (adm) {
+    if (adm && !isLive && body.purpose !== "video") {
       try {
         const kv = await kvOpen();
         const on = kv ? ((await kv.get(["skills", user.id])).value || []).filter((s) => s && s.on) : [];
