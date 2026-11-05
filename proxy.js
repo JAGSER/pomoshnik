@@ -448,6 +448,102 @@ function pcmToWav(pcm, rate) {
   return buf;
 }
 
+// Живой режим с камерой через Gemini: ответ отдаём в том же потоковом формате, что у Claude,
+// поэтому приложение ничего не замечает. Если Gemini не ответил, вызывающий код уйдёт в Claude.
+function toGemini(messages) {
+  return messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: (Array.isArray(m.content) ? m.content : [{ type: "text", text: String(m.content || "") }]).map((b) => {
+    if (b.type === "image" && b.source?.data) return { inline_data: { mime_type: b.source.media_type || "image/jpeg", data: b.source.data } };
+    return { text: b.type === "text" ? (b.text || " ") : " " };
+  }) }));
+}
+async function geminiLiveStream(payload) {
+  const gkey = env("GEMINI_KEY");
+  if (!gkey) return null;
+  const sys = Array.isArray(payload.system) ? payload.system.map((x) => x.text || "").join("\n") : String(payload.system || "");
+  const models = [env("GEMINI_LIVE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash"];
+  for (const m of models) {
+    for (const lvl of ["minimal", null]) {
+      const gen = { maxOutputTokens: 600, temperature: 0.4 };
+      if (lvl) gen.thinkingConfig = { thinkingLevel: lvl };
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`, {
+        method: "POST", headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+        body: JSON.stringify({ contents: toGemini(payload.messages), ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}), generationConfig: gen }),
+      }).catch(() => null);
+      if (!r) return null;
+      if (r.status === 400 && lvl) continue;
+      if (!r.ok) break;
+      const enc = new TextEncoder(), dec = new TextDecoder();
+      const ev = (o) => enc.encode(`event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`);
+      const reader = r.body.getReader();
+      const stream = new ReadableStream({
+        async start(c) {
+          c.enqueue(ev({ type: "message_start", message: { id: "gemini", type: "message", role: "assistant", model: m, content: [], usage: { input_tokens: 0, output_tokens: 0 } } }));
+          c.enqueue(ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }));
+          let buf = "";
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += dec.decode(value, { stream: true });
+              let i;
+              while ((i = buf.indexOf("\n")) >= 0) {
+                const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+                if (!line.startsWith("data:")) continue;
+                let d; try { d = JSON.parse(line.slice(5)); } catch (_) { continue; }
+                const t = (d.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || "").join("");
+                if (t) c.enqueue(ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } }));
+              }
+            }
+          } catch (_) { /* обрыв: отдаём, что успели */ }
+          c.enqueue(ev({ type: "content_block_stop", index: 0 }));
+          c.enqueue(ev({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 0 } }));
+          c.enqueue(ev({ type: "message_stop" }));
+          c.close();
+        },
+      });
+      return stream;
+    }
+  }
+  return null;
+}
+
+// Разбор видео, звука и картинок через Gemini для администратора (задачи Claude для Юрия).
+// Файл приходит телом запроса, задание и тип — в заголовке X-Meta. Большие файлы идут через File API.
+async function geminiAnalyze(bytes, mime, prompt) {
+  const gkey = env("GEMINI_KEY");
+  if (!gkey) return { error: "Нет ключа Gemini" };
+  let part;
+  if (bytes.length > 15_000_000) {
+    const st = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", { method: "POST",
+      headers: { "x-goog-api-key": gkey, "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(bytes.length), "X-Goog-Upload-Header-Content-Type": mime, "content-type": "application/json" },
+      body: JSON.stringify({ file: { display_name: "analyze" } }) });
+    const up = st.headers.get("x-goog-upload-url");
+    if (!up) return { error: "Не удалось начать загрузку: " + st.status };
+    const fr = await fetch(up, { method: "POST", headers: { "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize" }, body: bytes });
+    let f = (await fr.json().catch(() => ({}))).file;
+    if (!f?.uri) return { error: "Файл не загрузился" };
+    for (let i = 0; i < 60 && f.state === "PROCESSING"; i++) {
+      await new Promise((s) => setTimeout(s, 3000));
+      f = await (await fetch(`https://generativelanguage.googleapis.com/v1beta/${f.name}`, { headers: { "x-goog-api-key": gkey } })).json();
+    }
+    part = { file_data: { mime_type: mime, file_uri: f.uri } };
+  } else {
+    let bin = ""; for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    part = { inline_data: { mime_type: mime, data: btoa(bin) } };
+  }
+  let last = "";
+  for (const m of [env("GEMINI_ANALYZE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash", "gemini-2.5-flash"]) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST",
+      headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [part, { text: prompt }] }], generationConfig: { temperature: 0.2 } }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { last = d.error?.message || ("Gemini " + r.status); continue; }
+    return { text: (d.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || "").join("").trim(), model: m, usage: d.usageMetadata };
+  }
+  return { error: last };
+}
+
 export async function handler(req, info) {
   const ip = info?.remoteAddr?.hostname || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "anon";
   const origin = req.headers.get("Origin") || "";
@@ -564,6 +660,15 @@ export async function handler(req, info) {
     return json({ ok: true, ...(await vidCounts(kv, id)) }, 200, h);
   }
   // загрузка ролика: тело — сам файл, пароль в заголовках
+  if (req.method === "POST" && url.pathname === "/analyze") {
+    const user = await headerAuth(req, ip);
+    if (!user || user.acct || !ADMINS().includes(user.id)) return json({ error: "Нет доступа" }, 403, h);
+    let meta = {}; try { meta = JSON.parse(decodeURIComponent(req.headers.get("X-Meta") || "{}")); } catch (_) {}
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (!bytes.length) return json({ error: "Пустой файл" }, 400, h);
+    const out = await geminiAnalyze(bytes, String(meta.mime || req.headers.get("Content-Type") || "video/mp4"), String(meta.prompt || "Подробно опиши с таймкодами: речь (дословно), музыку и доли, звуки, что происходит в кадре."));
+    return json(out, out.error ? 502 : 200, h);
+  }
   if (req.method === "POST" && (url.pathname === "/video-upload" || url.pathname === "/video-poster")) {
     const user = await headerAuth(req, ip);
     if (user.err) return json({ error: user.err }, user.status, h);
@@ -1184,6 +1289,10 @@ export async function handler(req, info) {
       jobRun(kv, id, user.id, key, payload, url.origin).catch((e) => console.log("job", String(e)));
       return json({ job: id }, 200, h);
     }
+  }
+  if (isLive) {
+    const gs = await geminiLiveStream(payload).catch(() => null);
+    if (gs) return new Response(gs, { status: 200, headers: { ...h, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
   }
   let res = await callAnthropic(key, payload);
   // Если что-то из дополнительных настроек не принято — повторяем без него
