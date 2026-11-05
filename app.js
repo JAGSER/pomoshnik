@@ -1240,7 +1240,7 @@ const LIVE_SYSTEM = `Сейчас живой режим: человек гово
 Подсчёт предметов: рамка на каждый, названия «1», «2», «3»…, голосом назови итог.
 Перевод текста в кадре (меню, вывеска, этикетка, инструкция): рамка на каждую строку или блок, название — короткий перевод на русский (до 5 слов); голосом — только общий смысл, не зачитывай всё.
 Магазин: сравни цену за кг или литр, переведи рупии в рубли (примерно), подскажи по составу, скажи, что выгоднее, и обведи рамкой лучший вариант.
-Рейтинг товара: прочитай на упаковке марку и точное название (объём, вес, вкус, если видно). Через поиск найди рейтинг и число отзывов на маркетплейсах: для Индонезии Shopee, Tokopedia, Lazada; для России Ozon, Wildberries, Яндекс Маркет; можно Google-рейтинг товара. Выбери одну площадку с самым большим числом отзывов и обведи товар рамкой с названием вида «★4.8 · Shopee · 12 тыс. отз.». Если в кадре несколько товаров, рамка с рейтингом на каждом (до 4; к названию можно добавить коротко марку) и голосом скажи, какой лучше по оценкам. Голосом: оценка, сколько отзывов и на что чаще всего жалуются (одной фразой). Если товар не найден или название не читается, честно скажи об этом и попроси повернуть упаковку названием к камере. Рейтинг и число отзывов никогда не выдумывай, называй только найденное.
+Рейтинг товара: прочитай на упаковке марку и точное название (объём, вес, вкус, если видно). Через поиск найди рейтинг и число отзывов на маркетплейсах: для Индонезии Shopee, Tokopedia, Lazada; для России Ozon, Wildberries, Яндекс Маркет; можно Google-рейтинг товара. Выбери одну площадку с самым большим числом отзывов и обведи товар рамкой с названием вида «★4.8 · Shopee · 12 тыс. отз.». В названии рамки рейтинг всегда идёт первым и строго в виде «★4.8» (звёздочка и число), ничего перед ним не пиши. Если в кадре несколько товаров, рамка с рейтингом на каждом (до 4; марку можно коротко добавить в конце названия). Голосом сразу дай рекомендацию по трём уровням: если рейтинг от 4.8 до 5, скажи «хороший рейтинг, можно брать»; если от 4.0 до 4.7, скажи «средний рейтинг, есть замечания» и назови главное замечание; если ниже 4.0, скажи «не рекомендую». При нескольких товарах советуй тот, у которого рейтинг выше, особенно если он 4.8 и выше. Затем голосом: оценка, сколько отзывов и на что чаще всего жалуются (одной фразой). Если товар не найден или название не читается, честно скажи об этом и попроси повернуть упаковку названием к камере. Рейтинг и число отзывов никогда не выдумывай, называй только найденное.
 «Покажи точкой: …»: найди названное в кадре и поставь [[точка]] прямо на него (для крупного предмета можно рамку); если не видно, скажи, куда повернуть камеру.
 «Прочитай вслух»: обведи рамкой читаемый блок и прочитай текст дословно, простыми фразами, до 15 предложений (здесь можно длиннее 1–3); если текст длиннее, прочитай главное и спроси, читать ли дальше. Мелкий или размытый текст: попроси поднести ближе.
 Лекарство: обведи рамкой название на упаковке, скажи действующее вещество и для чего его обычно применяют; дозировку не назначай. Последней фразой всегда говори: «Перед приёмом уточните у врача или фармацевта.» Если название не читается, попроси повернуть упаковку.
@@ -1420,39 +1420,55 @@ function liveDraw() {
   const cw = LIVE.capture.w, ch = LIVE.capture.h, t = performance.now() / 1000;
   // при многих метках подписи мельче, чтобы не налезали
   const many = LIVE.marks.length >= 5, fs = many ? 22 : 30, lh = many ? 38 : 50;
-  const plate = (txt, cx, top, bottom) => {
+  const plate = (txt, cx, top, bottom, bg = "#FFD23F", fg = "#1b1b1b") => {
     g.font = `800 ${fs}px ${VFONT}`;
     const lw = g.measureText(txt).width + fs + 2, lx = Math.min(W - lw - 8, Math.max(8, cx - lw / 2)), ly = top - lh - 10 < 70 ? bottom + 10 : top - lh - 10;
-    g.fillStyle = "#FFD23F"; g.beginPath(); g.roundRect(lx, ly, lw, lh, lh / 2); g.fill();
-    g.fillStyle = "#1b1b1b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, lx + lw / 2, ly + lh / 2 + 1);
+    g.fillStyle = bg; g.beginPath(); g.roundRect(lx, ly, lw, lh, lh / 2); g.fill();
+    g.fillStyle = fg; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, lx + lw / 2, ly + lh / 2 + 1);
+  };
+  // рекомендация по рейтингу: решает приложение по числу после первого «★»
+  const recOf = (lbl) => {
+    const s0 = String(lbl || ""), i = s0.indexOf("★");
+    if (i < 0) return null;
+    const m = /^\s*(\d+(?:[.,]\d+)?)/.exec(s0.slice(i + 1));
+    if (!m) return null;
+    const r = parseFloat(m[1].replace(",", "."));
+    if (!isFinite(r)) return null;
+    if (r >= 4.8) return { yes: true, col: "#2ECC71", soft: "rgba(46,204,113,.35)", fg: "#0f2a19", pre: "✅ Хороший · " };
+    if (r >= 4.0) return { yes: false, col: "#F39C12", soft: "rgba(243,156,18,.35)", fg: "#2a1a00", pre: "🟠 Средний · " };
+    return { yes: false, col: "#E74C3C", soft: "rgba(231,76,60,.35)", fg: "#ffffff", pre: "❌ Не рекомендую · " };
   };
   LIVE.marks.forEach((mk) => {
     // плавное движение рамки на экране
     mk.sx = mk.sx == null ? mk.bx : mk.sx + (mk.bx - mk.sx) * 0.35; mk.sy = mk.sy == null ? mk.by : mk.sy + (mk.by - mk.sy) * 0.35;
     let x = ox + mk.sx / cw * vw * s, y = oy + mk.sy / ch * vh * s, w = mk.bw / cw * vw * s, h = mk.bh / ch * vh * s;
     g.globalAlpha = mk.ok;
+    const rc = recOf(mk.label);
+    const col = rc ? rc.col : "#FFD23F", soft = rc ? rc.soft : "rgba(255,210,63,.35)", fg = rc ? rc.fg : "#1b1b1b";
+    const txt = rc ? rc.pre + mk.label : mk.label;
     if (mk.kind === "point") {
       // точка: пульсирующий круг, кольцо, стрелка сверху
       const cx = x + w / 2, cy = y + h / 2, ph = Math.sin(t * 5), r = 22 + 5 * ph;
-      g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
-      g.fillStyle = "rgba(255,210,63,.35)"; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-      g.lineWidth = 5; g.strokeStyle = "#FFD23F"; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      g.shadowColor = rc && rc.yes ? "rgba(46,204,113,.85)" : "rgba(0,0,0,.6)"; g.shadowBlur = rc && rc.yes ? 20 : 10;
+      g.fillStyle = soft; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 5; g.strokeStyle = col; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
       g.globalAlpha = mk.ok * (0.55 - 0.35 * ph); g.lineWidth = 3;
       g.beginPath(); g.arc(cx, cy, r + 12 + 4 * ph, 0, Math.PI * 2); g.stroke();
       g.globalAlpha = mk.ok;
-      g.fillStyle = "#FFD23F"; g.beginPath(); g.arc(cx, cy, 5, 0, Math.PI * 2); g.fill();
+      g.fillStyle = col; g.beginPath(); g.arc(cx, cy, 5, 0, Math.PI * 2); g.fill();
       const ay = cy - r - 8;
       g.beginPath(); g.moveTo(cx, ay); g.lineTo(cx - 13, ay - 18); g.lineTo(cx - 5, ay - 18); g.lineTo(cx - 5, ay - 40);
       g.lineTo(cx + 5, ay - 40); g.lineTo(cx + 5, ay - 18); g.lineTo(cx + 13, ay - 18); g.closePath(); g.fill();
       g.shadowBlur = 0;
-      plate(mk.label, cx, ay - 40, cy + r + 16);
+      plate(txt, cx, ay - 40, cy + r + 16, col, fg);
     } else {
       if (w < 64) { x -= (64 - w) / 2; w = 64; } if (h < 64) { y -= (64 - h) / 2; h = 64; }
       const pad = 6 + 3 * Math.sin(t * 5);
-      g.lineWidth = 6; g.strokeStyle = "#FFD23F"; g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 10;
+      g.lineWidth = rc && rc.yes ? 8 : 6; g.strokeStyle = col;
+      g.shadowColor = rc && rc.yes ? "rgba(46,204,113,.85)" : "rgba(0,0,0,.6)"; g.shadowBlur = rc && rc.yes ? 22 : 10;
       g.beginPath(); g.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 18); g.stroke();
       g.shadowBlur = 0;
-      plate(mk.label, x + w / 2, y - pad, y + h + pad);
+      plate(txt, x + w / 2, y - pad, y + h + pad, col, fg);
     }
     g.globalAlpha = 1;
   });
