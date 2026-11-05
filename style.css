@@ -294,8 +294,17 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .live-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 16px max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px;
   background: linear-gradient(transparent, rgba(0,0,0,.75) 35%); }
 .live-heard { font-size: 1.35em; font-weight: 600; opacity: .85; min-height: 1.3em; text-align: center; line-height: 1.25; }
-.live-answer { font-size: 2.1em; font-weight: 800; line-height: 1.2; text-align: center; max-height: 46vh; overflow: hidden; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.live-answer { align-self: center; max-width: min(92vw, 640px); max-height: 18vh; font-size: 1.25em; font-weight: 700; line-height: 1.3; text-align: center;
+  padding: 8px 14px; border-radius: 14px; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; transition: opacity .6s; }
+.live-answer.fade { opacity: 0; }
 .live-answer:empty { display: none; }
+.live-chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; transition: opacity .3s; }
+.live-chips::-webkit-scrollbar { display: none; }
+.live-chips button { flex: none; min-height: 50px; padding: 0 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.42);
+  color: #fff; font: inherit; font-weight: 700; font-size: 1.05em; white-space: nowrap; backdrop-filter: blur(6px); cursor: pointer; scroll-snap-align: start; }
+.live-chips button:active { background: rgba(255,255,255,.3); }
+.live.busy .live-chips { opacity: .35; pointer-events: none; }
 #live-marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .live-state { min-height: 76px; border-radius: 999px; border: 0; font: inherit; font-weight: 800; font-size: 1.35em; background: rgba(255,255,255,.18); color: #fff; cursor: pointer; backdrop-filter: blur(6px); }
 .live-state.listening { background: var(--accent); animation: pulse 1.4s infinite; }

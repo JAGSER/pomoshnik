@@ -244,6 +244,19 @@ const JOB_PART = 20000, JOB_TTL = { expireIn: 86400_000 };
 // Точки кэша: system + два последних сообщения пользователя (текущее и предыдущее), итого не больше 3 из 4.
 // Точка на предыдущем вопросе гарантирует, что следующий запрос найдёт запись прошлого шага,
 // даже если ответы длинные (веб-поиск и т. п.). Короткие префиксы API просто не кэширует, это не ошибка.
+// Тексты навыков держим в памяти процесса минуту: не читаем KV на каждом вопросе.
+// getMany в Deno KV берёт не больше 10 ключей, поэтому читаем пачками по 10 параллельно
+const SKILL_TXT = new Map(); // `${user}:${id}:${parts}` → { text, t }
+async function skillText(kv, uid, s) {
+  const k = `${uid}:${s.id}:${s.parts || 0}`, hit = SKILL_TXT.get(k);
+  if (hit && Date.now() - hit.t < 60000) return hit.text;
+  const keys = Array.from({ length: s.parts || 0 }, (_, n) => ["skillt", uid, s.id, n]);
+  const packs = [];
+  for (let i = 0; i < keys.length; i += 10) packs.push(kv.getMany(keys.slice(i, i + 10)));
+  const text = (await Promise.all(packs)).flat().map((x) => x.value || "").join("");
+  SKILL_TXT.set(k, { text, t: Date.now() });
+  return text;
+}
 function addCache(payload, ttl, onlySystem) {
   stripCache(payload); // вдруг клиент сам прислал cache_control: не превысим лимит 4
   const cc = ttl ? { type: "ephemeral", ttl } : { type: "ephemeral" };
@@ -456,44 +469,66 @@ function toGemini(messages) {
     return { text: b.type === "text" ? (b.text || " ") : " " };
   }) }));
 }
+// Что приняла каждая модель Gemini (в памяти процесса): варианты перебираем один раз, а не на каждой реплике
+const GEM_CAP = new Map(); // модель → { lvl, res, search, t }
+const GEM_BAD = new Map(); // модель → до какого времени её не пробовать (404, нет такой модели)
+const GEM_CAP_TTL = 6 * 3600000; // раз в 6 часов перепроверяем: вдруг модель начала принимать minimal
+// Поиск Google только по целым словам (\b в JS не понимает кириллицу, поэтому \p{L} и флаг u)
+const LIVE_SEARCH_RE = /(?<![\p{L}\d])(?:цен(?:а|ы|у|е|ой|ам|ами|ах|ник\p{L}*)?|стоимост\p{L}*|почём|почем|сколько\s+(?:стоит|стоят|стоил\p{L}*|будет\s+стоить)|курс(?:а|е|ы)?\s+(?:валют\p{L}*|рубл\p{L}*|доллар\p{L}*|евро|рупи\p{L}*|бат\p{L}*|юан\p{L}*)|отзыв(?:ы|ов|а|ам|ах)?|марк(?:а|и|у|ой)|что\s+это\s+за|где\s+(?:купить|продаётся|продается|продают|достать)|рупи(?:я|и|ю|й|ям|ях)|доставк\p{L}*|price[sd]?|how\s+much|where\s+to\s+buy|reviews?|exchange\s+rate)(?![\p{L}\d])/iu;
+// Высокое разрешение кадра только когда просят прочитать или перевести текст
+const LIVE_TEXT_RE = /(?<![\p{L}\d])(?:прочит\p{L}*|прочт\p{L}*|прочесть|читай\p{L}*|написан\p{L}*|перевед\p{L}*|перевест\p{L}*|перевод\p{L}*|надпис\p{L}*|мелк\p{L}*\s+шрифт\p{L}*|read|translat\p{L}*|what\s+does\s+it\s+say)(?![\p{L}\d])/iu;
 async function geminiLiveStream(payload) {
   const gkey = env("GEMINI_KEY");
   if (!gkey) return null;
   const sys = Array.isArray(payload.system) ? payload.system.map((x) => x.text || "").join("\n") : String(payload.system || "");
-  const models = [env("GEMINI_LIVE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash"];
+  const models = [...new Set([env("GEMINI_LIVE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash"])];
   // Текст последней реплики пользователя
   const msgs = Array.isArray(payload.messages) ? payload.messages : [];
   const lastU = [...msgs].reverse().find((x) => x && x.role === "user");
   const lastText = !lastU ? "" : typeof lastU.content === "string" ? lastU.content
     : (Array.isArray(lastU.content) ? lastU.content.filter((b) => b && b.type === "text").map((b) => b.text || "").join(" ") : "");
-  // Нужен ли поиск Google
-  const wantSearch = /мошен|развод|скам|scam|цен|курс|отзыв|марк|что это за|сколько стоит|где купить|рупи|доставк/i.test(lastText);
-  // Попытки [поиск, высокое разрешение]: со всем → без mediaResolution → без поиска → как раньше
-  const variants = wantSearch ? [[true, true], [true, false], [false, true], [false, false]] : [[false, true], [false, false]];
+  const wantSearch = LIVE_SEARCH_RE.test(lastText);
+  const wantHi = LIVE_TEXT_RE.test(lastText);
+  const contents = toGemini(payload.messages);
   for (const m of models) {
-    for (const lvl of ["minimal", null]) {
-      let r = null;
-      for (let vi = 0; vi < variants.length; vi++) {
-        const [srch, hi] = variants[vi];
-        const gen = { maxOutputTokens: 900, temperature: 1.0 };
-        if (lvl) gen.thinkingConfig = { thinkingLevel: lvl };
-        if (hi) gen.mediaResolution = "MEDIA_RESOLUTION_HIGH";
-        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`, {
-          method: "POST", headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: toGemini(payload.messages),
-            ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}),
-            ...(srch ? { tools: [{ google_search: {} }] } : {}),
-            generationConfig: gen,
-          }),
-        }).catch(() => null);
-        if (!r) return null;
-        if (r.status !== 400) break;
-        // 400: освобождаем тело и пробуем следующий вариант
-        if (vi < variants.length - 1) { try { await r.body?.cancel(); } catch (_) { /* пусто */ } }
-      }
-      if (r.status === 400 && lvl) { try { await r.body?.cancel(); } catch (_) { /* пусто */ } continue; }
-      if (!r.ok) break;
+    if ((GEM_BAD.get(m) || 0) > Date.now()) continue;
+    const known = GEM_CAP.get(m);
+    const fresh = !!known && Date.now() - known.t < GEM_CAP_TTL;
+    // по умолчанию: размышления minimal, разрешение задаём явно, поиск по надобности
+    const cap = fresh ? { ...known } : { lvl: "minimal", res: true, search: true };
+    let r = null, changed = false;
+    for (let tries = 0; tries < 4; tries++) {
+      const srch = wantSearch && cap.search;
+      const gen = { maxOutputTokens: 900, temperature: 1.0 };
+      if (cap.lvl) gen.thinkingConfig = { thinkingLevel: cap.lvl };
+      if (cap.res) gen.mediaResolution = wantHi ? "MEDIA_RESOLUTION_HIGH" : "MEDIA_RESOLUTION_MEDIUM";
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`, {
+        method: "POST", headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}),
+          ...(srch ? { tools: [{ google_search: {} }] } : {}),
+          generationConfig: gen,
+        }),
+      }).catch(() => null);
+      if (!r) return null;
+      if (r.ok) break;
+      const err = await r.text().catch(() => ""); // тело освобождаем всегда
+      if (r.status === 404) GEM_BAD.set(m, Date.now() + 3600000);
+      if (r.status !== 400) break;
+      // 400: убираем то, на что ругается Gemini; если по тексту не понять, по очереди.
+      // Без thinkingLevel модель думает на уровне high, поэтому minimal → low, а не «по умолчанию»
+      changed = true;
+      if (/thinking/i.test(err) && cap.lvl) cap.lvl = cap.lvl === "minimal" ? "low" : null;
+      else if (/media.?resolution/i.test(err) && cap.res) cap.res = false;
+      else if (srch && /tool|search|ground/i.test(err)) cap.search = false;
+      else if (cap.lvl === "minimal") cap.lvl = "low";
+      else if (cap.res) cap.res = false;
+      else if (srch) cap.search = false;
+      else break;
+    }
+    if (r && r.ok) {
+      if (changed || !fresh) GEM_CAP.set(m, { ...cap, t: Date.now() });
       const enc = new TextEncoder(), dec = new TextDecoder();
       const ev = (o) => enc.encode(`event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`);
       const reader = r.body.getReader();
@@ -1247,11 +1282,11 @@ export async function handler(req, info) {
       } else if (calls >= 6) return json({ error: "Слишком много правок одного ролика", code: "creative_calls" }, 429, h);
       await kvInc(kv, callsKey, 1, 2);
     } else {
-      const u = await usageOf(user, plan);
+      // проверки и счётчики параллельно: на каждом вопросе минус несколько обращений к KV подряд
+      const [u, all] = await Promise.all([usageOf(user, plan), kvNum(kv, ["q", "_guests", DAY()])]);
       if (u.chatToday >= P.chatDay) return json({ error: plan === "free" ? `На бесплатном тарифе ${P.chatDay} вопросов в день. Завтра снова можно, а без ограничений на тарифе «Семья».` : "На сегодня вопросы закончились, завтра снова можно.", code: "chat_limit" }, 402, h);
-      const all = await kvNum(kv, ["q", "_guests", DAY()]);
       if (all >= Number(env("GUEST_DAILY", "500"))) return json({ error: "Сейчас очень много желающих. Попробуйте чуть позже.", code: "busy" }, 503, h);
-      await kvInc(kv, ["q", user.id, DAY()], 1, 3); await kvInc(kv, ["q", "_guests", DAY()], 1, 3);
+      await Promise.all([kvInc(kv, ["q", user.id, DAY()], 1, 3), kvInc(kv, ["q", "_guests", DAY()], 1, 3)]);
     }
     if (isLive && !P.models.includes(body.model)) body.model = P.models[0];
   }
@@ -1272,7 +1307,9 @@ export async function handler(req, info) {
     payload.thinking = { type: "adaptive" };
     payload.output_config = { effort: "high" };
   }
-  // system: админу лимит 120000 и включённые навыки в конце
+  // system: админу лимит 120000; включённые навыки идут отдельным блоком в начале system
+  // (см. после addCache), чтобы смена даты, пресета или помощника не сбрасывала их кэш
+  let skillsSys = "";
   {
     const adm = !user.acct && ADMINS().includes(user.id);
     let sys = body.system ? String(body.system).slice(0, adm ? 120000 : 20000) : "";
@@ -1280,13 +1317,9 @@ export async function handler(req, info) {
       try {
         const kv = await kvOpen();
         const on = kv ? ((await kv.get(["skills", user.id])).value || []).filter((s) => s && s.on) : [];
-        const blocks = [];
-        for (const s of on) {
-          const r = await kv.getMany(Array.from({ length: s.parts || 0 }, (_, n) => ["skillt", user.id, s.id, n]));
-          const text = r.map((x) => x.value || "").join("");
-          if (text.trim()) blocks.push(`## Навык: ${s.name} — ${s.description || ""}\n${text}`);
-        }
-        if (blocks.length) sys += (sys ? "\n\n" : "") + "НАВЫКИ (применяй тот, что подходит к задаче):\n\n" + blocks.join("\n\n");
+        const texts = await Promise.all(on.map((s) => skillText(kv, user.id, s)));
+        const blocks = on.map((s, i) => texts[i].trim() ? `## Навык: ${s.name}${s.description ? ". " + s.description : ""}\n${texts[i]}` : "").filter(Boolean);
+        if (blocks.length) skillsSys = "НАВЫКИ (применяй тот, что подходит к задаче):\n\n" + blocks.join("\n\n");
       } catch (_) { /* без навыков, если KV недоступно */ }
     }
     if (sys) payload.system = sys;
@@ -1302,6 +1335,12 @@ export async function handler(req, info) {
   // кэш промптов: ролик живёт дольше 5 минут (генерация + просмотр + правки), поэтому для него TTL 1 час.
   // В LIVE кэшируем только system: кадры каждый раз новые, запись истории была бы переплатой
   addCache(payload, body.purpose === "video" ? "1h" : null, isLive);
+  // навыки: свой блок с кэшем на 1 час впереди остального system
+  // (блоки с 1h обязаны идти раньше 5-минутных). Меток кэша 4: навыки + system + 2 последние реплики
+  if (skillsSys) {
+    const rest = Array.isArray(payload.system) ? payload.system : payload.system ? [{ type: "text", text: String(payload.system) }] : [];
+    payload.system = [{ type: "text", text: skillsSys, cache_control: { type: "ephemeral", ttl: "1h" } }, ...rest];
+  }
   // творческий ролик: пишем на сервере, телефону сразу отдаём номер задания
   if (body.purpose === "video" && body.bg) {
     const kv = await kvOpen();

@@ -1239,9 +1239,13 @@ const LIVE_SYSTEM = `Сейчас живой режим: человек гово
 Координаты — целые числа по шкале 0–1000 от размера кадра (0 — верх или левый край, 1000 — низ или правый край), сначала y, потом x. Рамку подбирай плотно по предмету, внимательно сверяясь с кадром. Не больше 8 меток. Приложение нарисует их и будет вести за предметом, когда камера двигается. Метки не читаются вслух, поэтому в тексте говори «вот здесь, я обвёл» или «я показал точкой» вместо координат.
 Подсчёт предметов: рамка на каждый, названия «1», «2», «3»…, голосом назови итог.
 Перевод текста в кадре (меню, вывеска, этикетка, инструкция): рамка на каждую строку или блок, название — короткий перевод на русский (до 5 слов); голосом — только общий смысл, не зачитывай всё.
-«Это мошенники?»: прочитай SMS, письмо или экран, скажи вердикт простыми словами, обведи рамкой опасную ссылку или номер; посоветуй не переводить деньги и никому не диктовать коды.
 Магазин: сравни цену за кг или литр, переведи рупии в рубли (примерно), подскажи по составу, скажи, что выгоднее, и обведи рамкой лучший вариант.
-Ответ голосом всегда 1–3 предложения.`;
+«Покажи точкой: …»: найди названное в кадре и поставь [[точка]] прямо на него (для крупного предмета можно рамку); если не видно, скажи, куда повернуть камеру.
+«Прочитай вслух»: обведи рамкой читаемый блок и прочитай текст дословно, простыми фразами, до 15 предложений (здесь можно длиннее 1–3); если текст длиннее, прочитай главное и спроси, читать ли дальше. Мелкий или размытый текст: попроси поднести ближе.
+Лекарство: обведи рамкой название на упаковке, скажи действующее вещество и для чего его обычно применяют; дозировку не назначай. Последней фразой всегда говори: «Перед приёмом уточните у врача или фармацевта.» Если название не читается, попроси повернуть упаковку.
+Поломка: поставь точку или рамку на вероятное место неисправности, назови причину и первый безопасный шаг. Если электричество, газ или вода под давлением, сначала скажи отключить и при сомнении вызвать мастера.
+Растение или животное: обведи рамкой, назови вид и скажи, опасно ли оно (ядовито, кусается, колется). Грибы и ягоды по фото есть не советуй.
+Ответ голосом всегда 1–3 предложения, кроме «Прочитай вслух».`;
 // голос телефона в живом режиме: начинает говорить с первой же законченной фразы, без задержки на запись
 class LiveSpeaker {
   constructor() { this.spoken = 0; this.text = ""; this.left = 0; this.ended = false; this.owner = null; this.stopped = false; SPEAKER = this; speechSynthesis.cancel(); }
@@ -1271,7 +1275,18 @@ class LiveSpeaker {
   stop() { this.stopped = true; speechSynthesis.cancel(); if (SPEAKER === this) SPEAKER = null; }
 }
 // крупный текст ответа: показываем только последние слова, чтобы помещались
-function liveTail(t) { t = t.trim(); if (t.length <= 110) return t; const cut = t.slice(-110); return "…" + cut.slice(cut.indexOf(" ") + 1); }
+// субтитры: пока звучит голос, показываем фразу, которую говорят сейчас; иначе последнее законченное предложение
+function liveSentences(t) {
+  const out = [], re = /[^.!?…]+(?:[.!?…]+["»)]*|$)/g; let m;
+  while ((m = re.exec(t))) { const s = m[0].replace(/\s+/g, " ").trim(); if (s) out.push({ s, i: m.index, end: m.index + m[0].length, done: /[.!?…]["»)]*$/.test(s) }); }
+  return out;
+}
+function liveTail(t) {
+  if (LIVE && LIVE.cap) return LIVE.cap;
+  t = String(t || "").replace(/\[\[[^\]]*\]\]/g, " ").replace(/\[\[[^\]]*$/, "");
+  const done = liveSentences(t).filter((p) => p.done);
+  return done.length ? done[done.length - 1].s : "";
+}
 // [[рамка: название; ymin, xmin, ymax, xmax]] и [[точка: название; y, x]], шкала 0–1000
 const MARK_RE = /\[\[\s*(рамка|точка)\s*:\s*([^;|\]]+?)\s*[;|]\s*([\d.,;\s]+?)\s*\]\]/gi;
 function liveParseMarks(s) {
@@ -1464,7 +1479,8 @@ async function startLive() {
   LIVE = { facing: "environment", stream: null, rec: null, busy: false, closed: false, marks: [] };
   pushNav();
   $("#live").hidden = false;
-  $("#live-heard").textContent = ""; $("#live-answer").textContent = "";
+  $("#live-heard").textContent = ""; $("#live-answer").textContent = ""; $("#live-answer").classList.remove("fade");
+  $("#live").classList.remove("busy");
   try { await liveCamera(); } catch (e) { stopLive(); alert("Нет доступа к камере. Разрешите камеру для сайта в настройках браузера."); return; }
   liveListen();
 }
@@ -1508,10 +1524,11 @@ function liveFrame() {
   return c.toDataURL("image/jpeg", 0.72).split(",")[1];
 }
 async function liveAsk(text) {
-  LIVE.busy = true;
+  LIVE.busy = true; LIVE.cap = ""; clearTimeout(LIVE.capTimer);
+  $("#live").classList.add("busy");
   liveClearMarks();
   liveState("💭 Думаю…", "thinking");
-  $("#live-answer").textContent = "";
+  $("#live-answer").textContent = ""; $("#live-answer").classList.remove("fade");
   const frame = liveFrame();
   const v = $("#live-video");
   LIVE.capture = v.videoWidth ? liveGray(v, v.videoWidth, v.videoHeight, LIVE.facing === "user") : null;
@@ -1530,9 +1547,32 @@ async function liveAsk(text) {
   while (LIVE && !LIVE.closed && (SPEAKER || ("speechSynthesis" in window && speechSynthesis.speaking))) await new Promise((r) => setTimeout(r, 250));
   clearInterval(watch);
   if (!LIVE || LIVE.closed) return;
-  LIVE.busy = false;
+  LIVE.busy = false; LIVE.cap = "";
+  $("#live").classList.remove("busy");
+  liveFadeLater();
   $("#live-heard").textContent = "";
   liveListen();
+}
+function liveCaption(s) {
+  if (!LIVE || LIVE.closed || !s) return;
+  LIVE.cap = s; clearTimeout(LIVE.capTimer);
+  const a = $("#live-answer"); a.classList.remove("fade"); a.textContent = s;
+}
+function liveFadeLater() {
+  if (!LIVE) return;
+  clearTimeout(LIVE.capTimer);
+  LIVE.capTimer = setTimeout(() => { if (LIVE && !LIVE.busy) $("#live-answer").classList.add("fade"); }, 3000);
+}
+// синхронизация субтитров с голосом: ловим каждую фразу, которую LiveSpeaker отдаёт телефону
+function liveHookUtter(u) {
+  const parts = liveSentences(u.text);
+  if (!parts.length) return;
+  u.addEventListener("start", () => liveCaption(parts[0].s));
+  u.addEventListener("boundary", (e) => { const p = parts.find((x) => e.charIndex >= x.i && e.charIndex < x.end); if (p) liveCaption(p.s); });
+}
+if ("speechSynthesis" in window) {
+  const nativeSpeak = speechSynthesis.speak.bind(speechSynthesis);
+  speechSynthesis.speak = (u) => { if (LIVE && u && u.text) liveHookUtter(u); return nativeSpeak(u); };
 }
 function stopLive() {
   if (!LIVE) return;
@@ -1556,6 +1596,36 @@ $("#live-state").onclick = () => {
   else if (LIVE.rec) { try { LIVE.rec.stop(); } catch (_) {} }
   else liveListen();
 };
+function liveStopRec() { if (LIVE && LIVE.rec) { const r = LIVE.rec; LIVE.rec = null; try { r.abort(); } catch (_) {} } }
+// чипы: готовый вопрос по текущему кадру без голоса
+$("#live-chips").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || !LIVE || LIVE.closed || LIVE.busy) return;
+  if (b.dataset.where) { liveWhere(); return; }
+  liveStopRec(); stopSpeaking();
+  $("#live-heard").textContent = b.textContent.trim();
+  LIVE.t0 = performance.now();
+  liveAsk(b.dataset.q);
+};
+// «👉 Где?»: спрашиваем голосом, что показать, и просим модель поставить точку
+function liveWhere() {
+  liveStopRec(); stopSpeaking();
+  liveState("👉 Что показать? Скажите", "listening");
+  $("#live-heard").textContent = "👉 …";
+  const r = new SR(); LIVE.rec = r;
+  r.lang = SR_LANG(); r.interimResults = true; r.continuous = false;
+  let said = "", hush = 0;
+  r.onresult = (e) => {
+    said = [...e.results].map((x) => x[0].transcript).join(" ").trim(); $("#live-heard").textContent = "👉 " + said;
+    clearTimeout(hush); hush = setTimeout(() => { try { r.stop(); } catch (_) {} }, 800);
+  };
+  r.onend = () => {
+    if (!LIVE || LIVE.closed || LIVE.rec !== r) return;
+    LIVE.rec = null; clearTimeout(hush);
+    if (said) { LIVE.t0 = performance.now(); liveAsk("Покажи точкой: " + said); } else liveListen();
+  };
+  setTimeout(() => { if (!LIVE || LIVE.rec !== r) return; try { r.start(); } catch (_) { LIVE.rec = null; liveListen(); } }, 200);
+}
 
 async function save() {
   CHAT.updated = Date.now();
