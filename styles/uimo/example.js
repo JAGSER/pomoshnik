@@ -1,191 +1,204 @@
-// UIM: «Как записать маму к врачу». 120 BPM, склейки на долях: 3.5, 7.5, 11.5, 15.5, 19.5.
-const U = UIM, C = U.C;
-const CUTS = [0, 3.5, 7.5, 11.5, 15.5, 19.5, 999];
-const MODE = ['dark', 'light', 'dark', 'light', 'dark', 'brand'];
-const STEPS = [5, 9, 13, 16];                      // профиль, врач, время, подтверждение
-const CLK = [2.5, 5, 6, 9, 13, 14, 16, 20.5];
-const SANS = '"Inter Display","Inter",Roboto,"Helvetica Neue",Arial,system-ui,sans-serif';
-const MONO = '"DejaVu Sans Mono",ui-monospace,Menlo,"Roboto Mono",monospace';
-const GREEN = '#1FAF6A';
+// «Окошко»: онлайн-запись к мастеру. Кинетика «одно слово на сцену», склейки на долях, 22 с.
+const U = UIM, C = U.C, TH = U.TH;
+const CUTS = [0, 1.5, 2.5, 3.5, 4.6, 5.6, 7.2, 9.6, 10.6, 11.8, 15.0, 16.2, 17.4, 22];
+const THEMES = ['light', 'ink', 'blue', 'light', 'blue', null, 'light', 'ink', 'blue', 'paper', 'blue', 'ink', 'light'];
+const CAPS = [
+  ['ОНЛАЙН-ЗАПИСЬ · КЛИК', 'cursor'], ['НАПОМИНАНИЯ · ЗА 2 ЧАСА', 'bell'], ['ПЕРЕНОС · БЕЗ ЗВОНКОВ', 'swap'],
+  ['ОПЛАТА · ПО ССЫЛКЕ', 'card'], ['ОТЗЫВЫ · ПОСЛЕ ВИЗИТА', 'star'], ['ВСЁ В ОДНОМ · ТЕМЫ', 'brush'],
+  ['КАБИНЕТ МАСТЕРА', 'chart'], null, ['ПОМОЩНИК · ЧАТ', 'chat'], ['ПОМОЩНИК · ОНЛАЙН', 'chat'],
+  ['ПОМОЩНИК · ОТВЕТЫ', 'chat'], ['ПОМОЩНИК · ЗАПИСЬ', 'cal'], ['ОКОШКО · 24/7', 'clock']
+];
+const CYC = ['blue', 'teal', 'orange', 'lime'];           // смена фона в «и всё в одном»
+const WY = 840, UY = 1160;                                 // центр слова и строки интерфейса
 
-function press(t, a) { const c = U.clickPh(t, CLK); return t >= a - 0.05 && t < a + 0.45 && c >= 0 ? 1 - c : 0; }
-function F(g, x, y, w, h, r, c) { g.fillStyle = c; U.rr(g, x, y, w, h, r); g.fill(); }
-function tx(g, s, x, y, sz, col, o) {
-  o = o || {}; const fam = o.m ? MONO : SANS, w = o.w || 700, mx = o.max || 900; let f = sz;
-  g.font = w + ' ' + f + 'px ' + fam;
-  while (f > 30 && g.measureText(s).width > mx) { f -= 2; g.font = w + ' ' + f + 'px ' + fam; }
-  g.fillStyle = col; g.textAlign = o.a || 'left'; g.textBaseline = 'middle'; g.fillText(s, x, y);
-}
+function themeAt(S) { return S.i === 5 ? CYC[U.cycle(S.u, 0.4, 4)] : THEMES[S.i]; }
 
-// Сквозная героиня: мама в очках и сиреневой кофте, дышит и моргает
-function mom(g, cx, cy, s, t) {
-  const b = 1 + 0.015 * Math.sin(t * 3.1);
-  g.save(); g.translate(cx, cy); g.scale(s, s * b);
-  F(g, -95, 40, 190, 150, 75, C.vi); F(g, -28, 38, 56, 34, 17, '#fff');
-  F(g, -78, -112, 156, 170, 78, '#CFC8DD'); F(g, -30, -152, 60, 60, 30, '#CFC8DD');
-  F(g, -60, -92, 120, 134, 60, '#F3CDB0'); F(g, -62, -104, 124, 46, 23, '#CFC8DD');
-  const bl = (t % 3.7) < 0.12 ? 0.15 : 1;
-  F(g, -36, -22 + 9 * (1 - bl), 14, 18 * bl, 7, C.ink); F(g, 22, -22 + 9 * (1 - bl), 14, 18 * bl, 7, C.ink);
-  g.strokeStyle = C.ink; g.lineWidth = 5;
-  U.rr(g, -52, -34, 44, 36, 14); g.stroke(); U.rr(g, 8, -34, 44, 36, 14); g.stroke();
-  g.beginPath(); g.moveTo(-8, -18); g.lineTo(8, -18); g.stroke();
-  F(g, -46, 8, 22, 12, 6, '#F4A3A8'); F(g, 24, 8, 22, 12, 6, '#F4A3A8');
-  g.beginPath(); g.arc(0, 8, 16, 0.2, Math.PI - 0.2); g.stroke();
-  g.restore();
+// 0. запись: время-пилюли, курсор кликает 11:30, подсказка «1 из 4»
+function s0(g, u, th) {
+  U.word(g, 'запись', 540, WY, { u, color: th.ink, dot: th.dot });
+  const sel = u >= 0.8 ? 1 : -1;
+  U.chips(g, 540, UY, ['10:00', '11:30', '14:00'], sel, u - 0.15);
+  U.tip(g, 300, UY + 90, 520, 'Вы записаны на 11:30', '1 из 4', u - 0.92);
+  const q = U.path(u, [[0.25, 960, 1560], [0.7, 560, 1110], [1.5, 575, 1125]]);
+  U.ring(g, 552, 1100, U.prog(u, 0.8, 1.25), 'rgba(66,74,229,0.8)');
+  if (u > 0.25) U.cursor(g, q[0], q[1], U.press(u, 0.8));
 }
-// Врач: белый халат, фонендоскоп
-function doc(g, cx, cy, s) {
-  g.save(); g.translate(cx, cy); g.scale(s, s);
-  F(g, -90, 40, 180, 140, 70, '#fff'); g.strokeStyle = C.vl; g.lineWidth = 5; U.rr(g, -90, 40, 180, 140, 70); g.stroke();
-  F(g, -24, 40, 48, 60, 14, C.vi);
-  F(g, -58, -90, 116, 130, 58, '#E8B896'); F(g, -62, -104, 124, 50, 25, '#3A2E5C');
-  F(g, -32, -24, 14, 18, 7, C.ink); F(g, 18, -24, 14, 18, 7, C.ink);
-  g.strokeStyle = C.ink; g.beginPath(); g.arc(0, 6, 14, 0.3, Math.PI - 0.3); g.stroke();
-  g.strokeStyle = C.vi; g.lineWidth = 6; g.beginPath(); g.arc(0, 70, 40, 0.2, Math.PI - 0.2); g.stroke();
-  g.restore();
-}
-function cnt(g, t, dark, a0) { U.counter(g, 540, 1590, 'шаг', U.countAt(t, STEPS), { dark, p: U.eo((t - a0) / 0.25), bump: U.bumpAt(t, STEPS) }); }
-
-// 1. Хук: заголовок, карточка мамы влетает, курсор жмёт «Записать к врачу»
-function s1(g, t, S) {
-  U.head(g, 'Запишите маму|к врачу', { y: 330, t0: -0.1, t, t1: S.t1, key: 'маму', col: '#fff', kc: C.vl, size: 120 });
-  const p = U.spr(t - 0.3, 11), wy = 600 + (1 - p) * 1300;
-  g.save(); g.translate(540, wy + 400); g.rotate((1 - p) * 0.1); g.translate(-540, -wy - 400);
-  U.card(g, 190, wy, 700, 800, 36, '#fff');
-  mom(g, 540, wy + 250, 1.3, t);
-  tx(g, 'Мама, 67 лет', 540, wy + 560, 56, C.ink, { a: 'center', w: 800, max: 600 });
-  U.button(g, 540, wy + 690, 'Записать к врачу', { size: 42, h: 96, press: press(t, 2.5) });
-  g.restore();
-  U.tip(g, 400, wy + 840, 'Займёт минуту', U.spr(t - 2.65), 70, 1010);
-  const q = U.path(t, [[0.4, 1080, 1800], [2.1, 640, 1300], [2.5, 640, 1300], [3.5, 660, 1320]]);
-  U.cursor(g, q[0], q[1], t, CLK);
-}
-
-// 2. Профиль: выбор «Мама» в семье, карточка с полисом, «Далее»
-function s2(g, t, S) {
-  U.head(g, 'Профиль мамы', { y: 300, t0: 3.5, t, t1: S.t1, key: 'мамы', col: C.ink, kc: C.vi, size: 116 });
-  const y0 = 470 + U.slideY(t, 3.6, 160), NM = ['Я', 'Мама', 'Сын'];
-  for (let j = 0; j < 3; j++) {
-    const a = U.eo((t - 3.7 - j * 0.1) / 0.25); if (a <= 0) continue;
-    const x = 150 + j * 270, on = t >= 5 && j === 1;
-    g.globalAlpha = a; F(g, x, y0, 240, 96, 48, on ? C.vi : '#fff');
-    if (!on) { g.strokeStyle = C.vl; g.lineWidth = 4; U.rr(g, x, y0, 240, 96, 48); g.stroke(); }
-    tx(g, NM[j], x + 120, y0 + 48, 46, on ? '#fff' : C.ink, { a: 'center', w: 800, max: 200 }); g.globalAlpha = 1;
-  }
-  if (t >= 5.05) {
-    const cy = 620 + U.slideY(t, 5.05, 300);
-    g.globalAlpha = U.cl((t - 5.05) / 0.2, 0, 1);
-    U.card(g, 120, cy, 840, 700, 36, '#fff'); mom(g, 290, cy + 220, 1, t);
-    tx(g, 'Ирина Петровна', 420, cy + 170, 52, C.ink, { w: 800, max: 500 });
-    tx(g, '67 лет', 420, cy + 245, 46, C.vi);
-    tx(g, 'полис 7714 0291', 180, cy + 430, 44, C.ink, { m: 1, max: 720 });
-    U.button(g, 540, cy + 580, 'Далее', { size: 42, h: 96, press: press(t, 6) });
-    g.globalAlpha = 1;
-  } else { g.globalAlpha = U.eo((t - 3.9) / 0.3); U.slot(g, 120, 620, 840, 700); g.globalAlpha = 1; }
-  const q = U.path(t, [[3.5, 1000, 1700], [4.6, 560, 530], [5, 560, 530], [5.6, 580, 1210], [6, 580, 1210], [7.5, 720, 1400]]);
-  U.cursor(g, q[0], q[1], t, CLK); cnt(g, t, false, 4.85);
-}
-
-// 3. ИИ: жалоба печатается, кнопка «Подобрать», появляется врач
-function s3(g, t, S) {
-  U.head(g, 'Врач от ИИ', { y: 300, t0: 7.5, t, t1: S.t1, key: 'ИИ', col: '#fff', kc: C.vl, size: 116 });
-  const y0 = 500 + U.slideY(t, 7.5, 140);
-  U.card(g, 90, y0, 900, 800, 36, '#fff');
-  U.aiBadge(g, 210, y0 + 74, 'ИИ', 1);
-  U.button(g, 760, y0 + 74, 'Подобрать', { icon: true, size: 36, h: 72, press: press(t, 9) });
-  g.fillStyle = C.paper; U.rr(g, 130, y0 + 140, 820, 260, 24); g.fill();
-  U.typeText(g, 'Колено болит неделю, маме 67 лет', 170, y0 + 215, 740, { t, t0: 7.9, size: 48 });
-  if (t >= 9.1) {
-    const a = U.spr(t - 9.1), s = 0.6 + 0.4 * a;
-    g.save(); g.translate(540, y0 + 590); g.scale(s, s); g.translate(-540, -y0 - 590); g.globalAlpha = U.cl((t - 9.1) / 0.2, 0, 1);
-    doc(g, 250, y0 + 570, 0.9);
-    tx(g, 'Ортопед', 380, y0 + 540, 60, C.ink, { w: 800, max: 560 });
-    tx(g, '900 м от дома', 380, y0 + 620, 44, C.vi, { m: 1, max: 560 });
-    g.restore(); g.globalAlpha = 1;
-  } else U.slot(g, 130, y0 + 440, 820, 300);
-  const q = U.path(t, [[7.5, 980, 1700], [8.6, 780, 585], [9, 780, 585], [9.8, 880, 1420], [11.5, 860, 1440]]);
-  U.cursor(g, q[0], q[1], t, CLK); cnt(g, t, true, 7.5);
-}
-
-// 4. Время: день и слот приёма, занятые слоты пунктиром
-function s4(g, t, S) {
-  U.head(g, 'Удобное время', { y: 300, t0: 11.5, t, t1: S.t1, key: 'время', col: C.ink, kc: C.vi, size: 116 });
-  const y0 = 470 + U.slideY(t, 11.5, 160);
-  U.card(g, 90, y0, 900, 820, 36, '#fff');
-  tx(g, 'Май', 150, y0 + 80, 46, C.ink, { w: 800 });
-  const DW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
-  for (let j = 0; j < 5; j++) {
-    const x = 129 + j * 168, on = t >= 13 && j === 2, a = U.eo((t - 11.7 - j * 0.06) / 0.25);
-    g.globalAlpha = a; F(g, x, y0 + 140, 150, 130, 28, on ? C.vi : C.paper);
-    tx(g, DW[j], x + 75, y0 + 180, 36, on ? '#fff' : C.ink, { a: 'center', max: 130 });
-    tx(g, String(12 + j), x + 75, y0 + 230, 48, on ? '#fff' : C.ink, { a: 'center', w: 800, max: 130 }); g.globalAlpha = 1;
-  }
-  const TM = ['09:00', '10:30', '12:00', '14:30', '16:00', '17:30'], BUSY = [0, 3];
-  if (t < 13.05) for (let j = 0; j < 6; j++) U.slot(g, 135 + (j % 3) * 280, y0 + 340 + Math.floor(j / 3) * 130, 250, 100);
-  if (t < 14.2) U.slot(g, 150, y0 + 650, 780, 100);
-  if (t >= 13.05) for (let j = 0; j < 6; j++) {
-    const x = 135 + (j % 3) * 280, y = y0 + 340 + Math.floor(j / 3) * 130, a = U.spr(t - 13.05 - j * 0.05);
-    g.save(); g.translate(x + 125, y + 50); g.scale(a, a); g.translate(-x - 125, -y - 50);
-    if (BUSY.includes(j)) { U.slot(g, x, y, 250, 100); tx(g, TM[j], x + 125, y + 50, 44, '#A9A3BF', { m: 1, a: 'center' }); }
-    else { const on = t >= 14 && j === 1; F(g, x, y, 250, 100, 50, on ? C.vi : '#fff'); g.strokeStyle = C.vl; g.lineWidth = 4; U.rr(g, x, y, 250, 100, 50); g.stroke(); tx(g, TM[j], x + 125, y + 50, 44, on ? '#fff' : C.ink, { m: 1, a: 'center' }); }
+// 1. напомнит: синяя карточка-напоминание въезжает справа
+function s1(g, u, th) {
+  U.word(g, 'напомнит', 540, WY, { u, color: th.ink, dot: th.dot, from: 1 });
+  const p = U.spr(u - 0.2, 10);
+  if (p > 0) {
+    g.save(); g.translate((1 - p) * 300, 0);
+    U.tip(g, 150, UY - 60, 780, 'Завтра в 11:30, маникюр у Анны', '2 из 4', u - 0.2, { btn: 'Приду' });
     g.restore();
   }
-  if (t >= 14.2) { g.globalAlpha = U.eo((t - 14.2) / 0.25); tx(g, 'Ортопед, ср 14, 10:30', 540, y0 + 700, 44, C.vi, { m: 1, a: 'center', max: 780 }); g.globalAlpha = 1; }
-  const q = U.path(t, [[11.5, 980, 1700], [12.6, 560, 690], [13, 560, 690], [13.6, 560, 880], [14, 560, 880], [15.5, 800, 1150]]);
-  U.cursor(g, q[0], q[1], t, CLK); cnt(g, t, false, 11.5);
 }
-
-// 5. Талон: подтверждение, зелёное «Готово», уведомление маме
-function s5(g, t, S) {
-  U.head(g, 'Запись готова', { y: 300, t0: 15.5, t, t1: S.t1, key: 'готова', col: '#fff', kc: GREEN, size: 116 });
-  const y0 = 480 + U.slideY(t, 15.5, 160);
-  U.card(g, 140, y0, 800, 720, 36, '#fff');
-  doc(g, 280, y0 + 190, 0.8);
-  tx(g, 'Ортопед', 400, y0 + 150, 60, C.ink, { w: 800, max: 500 });
-  tx(g, 'для мамы', 400, y0 + 225, 46, C.vi, { max: 500 });
-  tx(g, 'ср 14 мая, 10:30', 200, y0 + 390, 44, C.ink, { m: 1, max: 680 });
-  tx(g, 'ул. Садовая, 12', 200, y0 + 460, 44, C.ink, { m: 1, max: 680 });
-  if (t < 16.05) U.button(g, 540, y0 + 610, 'Подтвердить', { size: 42, h: 96, press: press(t, 16) });
-  else {
-    const a = U.spr(t - 16.05); g.save(); g.translate(540, y0 + 610); g.scale(a, a);
-    F(g, -200, -48, 400, 96, 48, GREEN); tx(g, 'Готово', 0, 0, 46, '#fff', { a: 'center', w: 800 }); g.restore();
+// 2. перенесёт: кнопка с датой, клик, время меняется через размытие
+function s2(g, u, th) {
+  U.word(g, 'перенесёт', 540, WY, { u, color: th.ink, dot: th.dot });
+  const p = U.prog(u, 0.45, 0.7), pin = U.spr(u - 0.12, 11);
+  if (pin > 0) {
+    const sz = 44, cx = 540, cy = UY;
+    const wA = U.tw('пт, 14:00', sz, 600), wB = U.tw('сб, 12:00', sz, 600), w = U.lerp(wA, wB, U.eo(p)) + 170;
+    g.save(); g.globalAlpha = U.cl((u - 0.12) / 0.12, 0, 1); g.translate(0, (1 - pin) * 50);
+    U.card(g, cx - w / 2, cy - 52, w, 104, 18, '#FFFFFF', { sa: 0.7 });
+    U.icon(g, 'cal', cx - w / 2 + 58, cy, 40, C.blue, 4);
+    const bx = cx - w / 2 + 100;
+    [['пт, 14:00', 1 - p], ['сб, 12:00', p]].forEach(([s, a], k) => {
+      if (a <= 0.01) return; const b = (1 - a) * 14;
+      for (let j = 0; j < (b > 1 ? 5 : 1); j++) { g.globalAlpha = a * (b > 1 ? 0.3 : 1); U.txt(g, s, bx + (j - 2) * b * 0.6, cy + 2, sz, k ? C.blue : C.ink, { w: 700 }); }
+    });
+    g.restore();
   }
-  U.toast(g, 1330, 'М', 'Маме придёт напоминание', 16.8, t);
-  const q = U.path(t, [[15.5, 980, 1700], [15.9, 560, 1100], [16, 560, 1100], [16.8, 920, 1050], [19.5, 930, 1060]]);
-  U.cursor(g, q[0], q[1], t, CLK); cnt(g, t, true, 15.5);
+  const q = U.path(u, [[0.1, 980, 1500], [0.4, 600, 1110], [1, 610, 1120]]);
+  U.ring(g, 585, 1095, U.prog(u, 0.42, 0.85), 'rgba(255,255,255,0.85)');
+  if (u > 0.1) U.cursor(g, q[0], q[1], U.press(u, 0.42));
 }
-
-// 6. Финал: бренд, строка, карточка мамы с временем, штамп, адрес
-function s6(g, t, S) {
-  const wy = 690 + (1 - U.eo((t - 19.8) / 0.45)) * 1300;
-  if (t >= 19.8) {
-    U.card(g, 190, wy, 700, 540, 36, '#fff'); mom(g, 360, wy + 280, 1, t);
-    tx(g, 'Ср 14 мая', 500, wy + 230, 56, C.ink, { w: 800, max: 360 });
-    tx(g, '10:30', 500, wy + 310, 52, C.vi, { m: 1, max: 360 });
+// 3. оплата: поле с суммой, клик «Оплатить» -> «Оплачено», затем наезд в точку
+function s3(g, u, th, S) {
+  const L = U.layout('оплата', 540, WY, { dot: 1 });
+  g.save();
+  U.zoomInto(g, U.prog(u, 0.74, S.len - 0.07), L.dot.x, L.dot.y);
+  U.word(g, 'оплата', 540, WY, { u, color: th.ink, dot: th.dot, from: 1 });
+  const done = u >= 0.5;
+  const f = U.field(g, 540, UY, 940, 'Маникюр · 2 500 ₽', done ? 'Оплачено' : 'Оплатить', u - 0.12, { icon: 'card', done });
+  if (f) U.ring(g, f.bx, f.by, U.prog(u, 0.5, 0.9), 'rgba(255,255,255,0.9)');
+  const q = U.path(u, [[0.15, 1000, 1500], [0.45, 900, UY + 15], [1.2, 905, UY + 20]]);
+  if (u > 0.15) U.cursor(g, q[0], q[1], U.press(u, 0.5));
+  g.restore();
+}
+// 4. отзыв: звёзды заполняются, слово «садится» в белую карточку
+function s4(g, u, th) {
+  const lift = U.spr(u - 0.55, 10), L = U.layout('отзыв', 540, WY, { dot: 1 });
+  if (lift > 0) {
+    const pad = 60, x = L.l - pad, y = L.top - pad * 0.6, w = L.r - L.l + pad * 2, h = L.bot - L.top + pad * 1.2;
+    g.save(); g.translate(540, WY); g.scale(0.9 + 0.1 * lift, 0.9 + 0.1 * lift); g.translate(-540, -WY);
+    g.globalAlpha = U.cl((u - 0.55) / 0.1, 0, 1); U.card(g, x, y, w, h, 26, '#FFFFFF', { sa: 1 }); g.restore();
   }
-  U.endCard(g, t, 19.55, { brand: 'Помощник AI', line: 'Мама записана', key: 'записана', stamp: 'ЗАПИСАНО', st: 1.45 });
-  const q = U.path(t, [[19.5, 1000, 1750], [20.3, 620, 1000], [20.5, 620, 1000], [21.2, 720, 1160], [26, 730, 1170]]);
-  U.cursor(g, q[0], q[1], t, CLK);
+  const on = u > 0.6;
+  U.word(g, 'отзыв', 540, WY, { u, color: on ? C.ink : th.ink, dot: on ? C.blue : th.dot });
+  const p = U.spr(u - 0.15, 11);
+  if (p > 0) {
+    g.save(); g.globalAlpha = U.cl((u - 0.15) / 0.12, 0, 1); g.translate(0, (1 - p) * 50);
+    U.card(g, 230, UY + 60, 620, 110, 55, '#FFFFFF', { sa: 0.6 });
+    U.stars(g, 445, UY + 115, 30, (u - 0.25) * 9);
+    U.txt(g, '5,0', 680, UY + 116, 48, C.ink, { w: 700 });
+    g.restore();
+  }
 }
+// 5. и всё в одном: фон и шрифт меняются на каждой доле (гротеск, антиква, гротеск, узкий)
+function s5(g, u, th) {
+  const k = U.cycle(u, 0.4, 4), name = CYC[k];
+  U.word(g, 'и всё\nв одном', 540, WY - 40, { u, enter: k === 0 ? 'smear' : 'none', kind: th.font, color: th.ink, dot: th.dot, size: th.font === 'cond' ? 300 : 230, lh: th.font === 'cond' ? 0.9 : 0.98 });
+  const p = U.spr(u - 0.15, 11);
+  if (p > 0) U.btn(g, 540, UY + 70, 'Попробовать', { fill: th.btn, color: '#FFFFFF', s: 0.9 + 0.1 * p, a: U.cl((u - 0.15) / 0.12, 0, 1), shadow: false, size: 38, h: 100 });
+}
+// 6. выручка: окно кабинета, цифры считают, линия растёт, курсор на точке графика
+function s6(g, u, th) {
+  U.word(g, 'выручка', 540, 300, { u, color: th.ink, dot: th.dot, size: 175 });
+  const p = U.spr(u - 0.1, 9); if (p <= 0) return;
+  g.save(); g.globalAlpha = U.cl((u - 0.1) / 0.15, 0, 1);
+  g.translate(540, 1000); const s = 0.93 + 0.07 * p; g.scale(s, s); g.translate(-540, -1000 - (1 - p) * 140);
+  const R = U.windowFrame(g, 70, 440, 940, 1070, 'Окошко · кабинет мастера');
+  const v = U.countUp(u - 0.3, 0, 286400, 0.9), n = U.countUp(u - 0.4, 0, 412, 0.9);
+  const D = U.dash(g, R, {
+    u: u - 0.15, nav: ['Главная', 'Записи', 'Клиенты', 'Оплаты', 'Отзывы'], active: u > 1.25 ? 3 : 0,
+    title: 'Выручка, ноябрь', btn: '+ Запись', chartTitle: 'Выручка по дням',
+    stats: [{ l: 'Выручка за месяц', v: U.rub(v), d: '+12%' }, { l: 'Записи', v: String(Math.round(n)), d: '+31' }, { l: 'Рейтинг', v: '4,9' }],
+    series: [0.18, 0.3, 0.24, 0.42, 0.38, 0.55, 0.5, 0.68, 0.62, 0.8, 0.92], hover: 9, hoverU: u - 1.7, hoverLabel: 'сб: 18 400 ₽'
+  });
+  g.restore();
+  const ta = 1 - U.eo((u - 1.6) / 0.18);
+  if (ta > 0) { g.save(); g.globalAlpha = ta; U.tip(g, 330, 1010, 520, 'Вся выручка на одном экране', '1 из 3', u - 1.0); g.restore(); }
+  const q = U.path(u, [[0.6, 1000, 1600], [1.2, 175, 920], [1.3, 180, 925], [1.7, 860, 1240], [2.4, 870, 1250]]);
+  U.ring(g, 160, 905, U.prog(u, 1.25, 1.65), 'rgba(66,74,229,0.8)');
+  if (u > 0.6) U.cursor(g, q[0], q[1], U.press(u, 1.25));
+}
+// 7. знакомьтесь: печать с кареткой на чёрном
+function s7(g, u, th) { U.typeWord(g, 'знакомьтесь,', 540, 880, { u: u - 0.05, cps: 17, size: 150, color: '#FFFFFF' }); }
+// 8. помощник: слово с разлётом штрихов
+function s8(g, u, th) {
+  U.burst(g, 540, WY - 30, u, 'rgba(255,255,255,0.75)', { r: 420 });
+  U.word(g, 'помощник', 540, WY, { u, enter: 'pop', color: th.ink, dot: th.dot });
+  const p = U.spr(u - 0.3, 11);
+  if (p > 0) U.btn(g, 540, UY, 'Отвечает за 3 секунды', { icon: 'chat', color: C.ink, s: 0.9 + 0.1 * p, a: U.cl((u - 0.3) / 0.12, 0, 1), size: 38 });
+}
+// 9. чат-помощник крупно: камера отъезжает и следит за новым сообщением
+const MSG = [
+  { who: 'bot', at: 0.1, text: 'Здравствуйте! Я помощник студии. Подберу удобное время.' },
+  { who: 'me', at: 0.75, text: 'Можно завтра после 18?' },
+  { who: 'bot', at: 1.25, text: 'Да, свободно 18:30 и 19:15.', card: 'Записать на 18:30', cardAt: 1.6 },
+  { who: 'me', at: 2.35, text: '18:30, спасибо!' },
+  { who: 'bot', at: 2.7, segs: [{ t: 'Готово. ' }, { t: 'Напомню за 2 часа.', b: 1 }] }
+];
+function s9(g, u, th) {
+  const k = U.io(u / 3.2), s = U.lerp(1.16, 1.0, k);
+  g.save(); g.translate(540, 900); g.scale(s, s); g.translate(-540, U.lerp(-760, -900, k));
+  U.card(g, 40, 220, 1000, 1240, 32, '#FFFFFF', { border: '#E6E8EE', sa: 0.25 });
+  U.txt(g, 'Окошко', 90, 300, 44, C.ink, { w: 700 });
+  g.fillStyle = C.ok; g.beginPath(); g.arc(98, 360, 9, 0, 7); g.fill();
+  U.txt(g, 'помощник онлайн', 118, 361, 30, C.mut, { w: 500 });
+  g.fillStyle = '#ECEEF3'; g.fillRect(70, 410, 940, 2);
+  MSG[2].cardOn = u > 2.05;
+  U.chat(g, 90, 460, 900, MSG, u);
+  g.restore();
+  const c = MSG[2]._card, q = U.path(u, [[1.6, 1000, 1640], [2.0, 560, 1215], [3.2, 580, 1240]]);
+  if (u > 1.6) U.cursor(g, q[0], q[1], U.press(u, 2.05));
+  U.ring(g, 545, 1195, U.prog(u, 2.05, 2.45), 'rgba(66,74,229,0.8)');
+}
+// 10. отвечает: карточка «вопрос + ответ»
+function s10(g, u, th) {
+  U.word(g, 'отвечает', 540, WY - 60, { u, color: th.ink, dot: th.dot, from: 1 });
+  U.qa(g, 90, UY - 120, 900, 'Сколько стоит гель-лак?', [{ t: 'Гель-лак 2 500 ₽, ' }, { t: 'снятие бесплатно.', b: 1 }], u - 0.12, { at: 0.35, cps: 60 });
+}
+// 11. записывает: сетка 2×2 с полями записи
+function s11(g, u, th) {
+  U.word(g, 'записывает', 540, WY - 60, { u, color: th.ink, dot: th.dot });
+  U.miniCards(g, 90, UY - 120, 900, [
+    { l: 'Услуга', v: 'Маникюр' }, { l: 'Мастер', v: 'Анна' },
+    { l: 'Время', v: 'завтра, 18:30' }, { l: 'Статус', v: 'готово', ok: 1 }
+  ], u - 0.15, { cols: 2, h: 160, vs: 46 });
+}
+// 12. финал: всегда на связи + плашка «онлайн», время бежит и встаёт на 23:40
+function s12(g, u, th, S, t) {
+  U.word(g, 'всегда\nна связи', 540, WY - 30, { u, color: th.ink, dot: th.dot, size: 220 });
+  const tm = u < 0.8 ? '09:41' : u < 1.25 ? '18:05' : '23:40';
+  U.status(g, 540, UY + 50, 'Помощник онлайн · ' + tm, u - 0.3, t);
+  const a = U.eo((u - 1.9) / 0.3);
+  if (a > 0) { g.globalAlpha = a; U.txt(g, 'Окошко, онлайн-запись к мастеру', 540, UY + 190 - 16 * a, 42, C.mut, { w: 500, a: 'center', max: 900 }); g.globalAlpha = 1; }
+}
+const SC = [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12];
 
-const SC = [s1, s2, s3, s4, s5, s6];
-
+let READY = false;
+function warm() {
+  const L = TH.light.ink, D = '#FFFFFF';
+  U.prep([['запись', { color: L, dot: 1 }], ['напомнит', { color: D, dot: 1 }], ['перенесёт', { color: D, dot: 1 }], ['оплата', { color: L, dot: 1 }],
+    ['отзыв', { color: D, dot: 1 }], ['отзыв', { color: C.ink, dot: 1 }], ['выручка', { color: L, dot: 1, size: 175 }], ['помощник', { color: D, dot: 1 }],
+    ['отвечает', { color: D, dot: 1 }], ['записывает', { color: D, dot: 1 }], ['всегда\nна связи', { color: L, dot: 1, size: 220 }]]);
+  CYC.forEach(n => { const th = TH[n]; U.prep([['и всё\nв одном', { kind: th.font, color: th.ink, dot: 1, size: th.font === 'cond' ? 300 : 230, lh: th.font === 'cond' ? 0.9 : 0.98 }]]); });
+  READY = true;
+}
 function draw(t, k) {
-  const g = k.g; U.tex();
-  const S = U.scene(t, CUTS);
-  U.bg(g, t, MODE[S.i]);
-  g.save(); U.cam(g, S.u, t); SC[S.i](g, t, S); g.restore();
-  if (S.i > 0) U.flash(g, S.u);
+  const g = k.g; U.tex(); if (!READY) warm();
+  const S = U.scene(t, CUTS), th = TH[themeAt(S)];
+  U.bg(g, th);
+  g.save(); if (S.i !== 9 && S.i !== 3) U.cam(g, S.u); SC[S.i](g, S.u, th, S, t); g.restore();
+  const cap = CAPS[S.i];
+  const zoomed = S.i === 3 && S.u > 0.84;
+  if (cap && !zoomed) U.caption(g, cap[0], th, 9, cap[1]);
+  if (S.i !== 7 && S.i !== 9 && !zoomed) U.badge(g, th, t);
 }
 
 function sound(s) {
+  U.cutSounds(s, CUTS, { skip: [4, 6, 9, 10, 12] });
   U.sfx(s, [
-    [0, 'drop', 0.2], [0.3, 'pop_high', 0.14], [0.6, 'wood', 0.1], [2.5, 'click', 0.16, 1.0], [2.65, 'pop_soft', 0.12],
-    [3.5, 'marimba_run', 0.16], [3.8, 'bubble', 0.1], [5, 'click', 0.14, 1.1], [5.1, 'pop_soft', 0.12], [6, 'click', 0.14, 1.2],
-    [7.5, 'kalimba_run', 0.16], [7.9, 'type', 0.1], [9, 'click', 0.15, 1.3], [9.1, 'magic', 0.16], [9.4, 'sparkle', 0.12],
-    [11.5, 'marimba_run', 0.16], [11.8, 'pop_soft', 0.1], [13, 'click', 0.14, 1.4], [13.1, 'bubble', 0.1], [14, 'click', 0.14, 1.5], [14.25, 'kalimba', 0.1],
-    [15.5, 'kalimba_run', 0.16], [16, 'click', 0.15, 1.6], [16.08, 'success', 0.15], [16.8, 'notify', 0.13],
-    [19.5, 'fanfare_soft', 0.18], [19.8, 'pop_high', 0.12], [20.5, 'click', 0.14],
-    [21, 'woodblock', 0.18], [21.05, 'success3', 0.14], [21.5, 'pop_double', 0.12]
+    [0.05, 'pop_high', 0.16], [0.8, 'click', 0.16],     [1.72, 'notify', 0.14], [2.92, 'click', 0.15], [3.05, 'toggle_on', 0.12],
+    [4.0, 'click', 0.15], [4.05, 'success', 0.14], [4.4, 'bubble_down', 0.12],
+    [4.95, 'sparkle', 0.12], [5.15, 'pop_double', 0.12],
+    [6.0, 'pop_soft', 0.1, 1.1], [6.8, 'pop_soft', 0.1, 1.3],
+    [7.2, 'marimba_run', 0.15], [7.6, 'counter', 0.1], [8.45, 'click', 0.14], [8.95, 'tick', 0.12],
+    [9.65, 'type', 0.12], [10.6, 'magic', 0.16],
+    [11.8, 'kalimba_run', 0.14], [12.55, 'bubble', 0.11], [13.85, 'click', 0.15], [14.15, 'bubble', 0.11],     [15.15, 'bubble', 0.11], [16.75, 'success', 0.13],
+    [17.4, 'fanfare_soft', 0.15], [18.2, 'tick', 0.1], [19.3, 'success3', 0.13]
   ]);
 }

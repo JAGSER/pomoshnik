@@ -1,117 +1,118 @@
-// example.js: «Мозг на тысячу запросов» на библиотеке CHAOS.
-// Сквозной герой - капля-помощник с ростком, счётчик запросов в HUD, штампы на итогах сцен.
+// video.js: «Я твой будильник» на библиотеке CHAOS.
+// Монолог от первого лица, склейки по словам, сквозная строка интерфейса со счётчиком «отложено ×N» и часами.
 const L = CHAOS, C = L.C;
-const HERO = { body: 'drop', col: C.CREAM, top: 'sprout', acc: C.LIME, cheek: C.PINK };
-const hero = (g, x, y, s, t, o) => L.mascot(g, x, y, s, t, Object.assign({}, HERO, o));
-let SC = null;
+const CUTS = [0, 2.6, 4.6, 7.6, 9.4, 11.0, 15.4, 18.2, 20.2, 22.6, 23.4, 24.2, 25.0, 25.8, 26.8];
+const KIND = ['ink', 'ink', 'ink', 'storm', 'ink', 'ink', 'ink', 'ink', 'ink', 'coral', 'paper', 'blue', 'ink', 'coral', 'paper'];
+const SNOOZE = [5.3, 5.9, 6.5, 7.9, 8.4, 8.9, 9.5];
+const snoozed = t => SNOOZE.filter(x => t >= x).length;
 
-// 1. Сто запросов в минуту: герой в центре, вокруг кружат чаты
-function s1(g, u, t) {
-  L.rays(g, 540, 1170, t, C.YEL, 0.35);
-  const B = [];
-  for (let i = 0; i < 7; i++) { const an = t * 1.4 + i * 0.8976; B.push({ i, an, d: Math.sin(an) }); }
-  B.forEach(b => {
-    const a = L.spr(u - 0.45 - b.i * 0.06); if (a <= 0) return;
-    L.chat(g, 540 + Math.cos(b.an) * 390, 1170 + b.d * 130, 140, 90, t,
-      { s: (0.75 + 0.2 * b.d) * a, rot: Math.sin(t * 3 + b.i) * 0.1, seed: b.i, tail: b.i % 2 ? 'r' : 'l' });
-  });
-  hero(g, 540, 1170, 1.5 * L.spr(u - 0.12), t, { face: 'smile', arms: true, wave: u > 0.6 });
-}
-
-// 2. Читаю рецепт вслух: лист с подсветкой строк и сканером
-function s2(g, u, t) {
-  const a = L.spr(u - 0.05);
-  L.focus(g, 380, 1000, 580, 700, u - 0.3, C.INK, 70);
-  L.sheet(g, 380, 1000 + 700 * (1 - a), 1, t, { read: (u - 0.7) * 2.6, scan: u > 0.3 ? u - 0.3 : null, acc: C.PINK });
-  L.ripples(g, 745, 1475, u, C.INK, { a0: 2.5, a1: 3.8, r0: 30, dr: 95 });
-  hero(g, 830, 1440, 0.85 * L.spr(u - 0.2), t, { face: 'talk', look: -1 });
-}
-
-// 3. Магазин: три товара на полке, над каждым вердикт
-function s3(g, u, t) {
-  const X = [230, 540, 850], BT = [0.6, 1.3, 2.0], BC = [C.GRN, C.ORA, C.RED], BK = ['check', 'dash', 'cross'];
-  const IT = [['carton', C.CREAM, C.YEL], ['jar', C.ORA, C.CREAM], ['pot', C.PINK, C.CREAM]];
-  L.shelf(g, 70, 1010, 1250);
-  for (let i = 0; i < 3; i++) {
-    const a = L.spr(u - 0.05 - i * 0.1); if (a <= 0) continue;
-    L.item(g, X[i], 1250, a, IT[i][0], IT[i][1], IT[i][2]);
-    L.badge(g, X[i], 820 + Math.sin(t * 4 + i) * 6, 62, BK[i], BC[i], L.spr(u - BT[i]));
+const S = [
+  // 0. хук: Я ТВОЙ БУДИЛЬНИК
+  (g, u, t) => {
+    L.type(g, '06:00. ты спишь.', 540, 520, { u, at: 0.05, cps: 30, size: 40, align: 'center', col: '#8A8680' });
+    L.poster(g, u, [{ s: 'Я ТВОЙ', c: 'bone', at: 0.3, size: 250 }, { s: 'БУДИЛЬНИК.', c: 'coral', at: 0.85 }], { y: 1000, gap: 0.8 });
+    L.type(g, 'звоню уже ' + Math.max(0, u - 1.2).toFixed(2).replace('.', ',') + ' с.', 540, 1400, { u, at: 1.3, cps: 99, size: 40, align: 'center', col: '#8A8680' });
+  },
+  // 1. ни минутой раньше. ровно 06:00.
+  (g, u, t) => {
+    L.words(g, 'ни минутой раньше.', 540, 560, { kind: 'serif', size: 84, col: 'bone', u, at: 0.05, step: 0.09 });
+    L.words(g, 'ни минутой позже.', 540, 660, { kind: 'serif', size: 84, col: 'bone', u, at: 0.4, step: 0.09 });
+    L.type(g, 'ровно', 540, 800, { u, at: 0.85, size: 36, align: 'center' });
+    L.poster(g, u, [{ s: '06:00.', c: 'coral', at: 1.05, size: 480 }], { y: 1130 });
+  },
+  // 2. токены: что я слышу в ответ
+  (g, u, t) => {
+    L.type(g, 'слышу в ответ:', 540, 560, { u, at: 0.05, size: 38, align: 'center' });
+    const b = L.tokens(g, [{ s: 'ещё', c: 'coral', n: '31 дБ' }, { s: 'пять', c: 'blue', n: '12' }, { s: 'минут', c: 'bone', n: '9' },
+      { s: 'ну', c: 'green', n: '44' }, { s: 'мам', c: 'yellow', n: '27' }, { s: 'я', c: 'lilac', n: '3' }, { s: 'встаю', c: 'pink', n: '0' }], { y: 660, u, at: 0.3, step: 0.2 });
+    L.words(g, '(и ни одного слова правды.)', 540, b + 90, { kind: 'serif', size: 52, col: '#8A8680', u, at: 2.1, step: 0.07 });
+  },
+  // 3. буквенный шторм: храп
+  (g, u, t) => {
+    L.storm(g, u, 'Р', { row: 'ХРРРР... ХРРРР...' });
+  },
+  // 4. 7.
+  (g, u, t) => {
+    L.bigNum(g, u, '7.', { at: 0.05, y: 960, size: 720 });
+    L.words(g, '(я считал. дважды.)', 540, 1340, { kind: 'serif', size: 50, col: '#6E6A64', u, at: 0.8, step: 0.1 });
+  },
+  // 5. рейтинг отговорок со штампами
+  (g, u, t) => {
+    L.type(g, 'отговорка дня:', 64, 470, { u, at: 0.05, size: 42, col: C.BONE });
+    g.fillStyle = C.CORAL; g.fillRect(450, 492, 180 * L.eo((u - 0.4) / 0.3), 4);
+    L.bars(g, [{ s: 'ещё пять минут', p: 41, c: 'coral' }, { s: 'я уже встал', p: 27 }, { s: 'сегодня суббота', p: 18 },
+      { s: 'ты сломался', p: 9 }, { s: 'кот лёг сверху', p: 5 }], { y: 610, u, at: 0.4, step: 0.18 });
+    L.stamp(g, 790, 852, 'ВРАНЬЁ', u, 2.0, -0.07);
+    L.stamp(g, 760, 976, 'СПИСАНО', u, 2.7, 0.05);
+    const v = 0.3 + 0.7 * L.eio((u - 3.2) / 0.7);
+    L.slider(g, 64, 1290, 952, 'громкость', v, u, 1.2);
+  },
+  // 6. сетка уведомлений: отложить x7
+  (g, u, t) => {
+    L.type(g, 'история утра:', 540, 440, { u, at: 0.02, size: 38, align: 'center' });
+    const T = ['06:00', '06:05', '06:10', '06:15', '06:20', '06:25'], SUB = ['подъём', 'подъём!', 'точно встаю', 'ну всё', 'последний', 'серьёзно'];
+    for (let i = 0; i < 6; i++) {
+      const c = i % 2, r = (i / 2) | 0, a = L.eo((u - 0.15 - i * 0.08) / 0.25), dk = u - 0.9 - i * 0.22;
+      L.note(g, 64 + c * 486, 530 + r * 270, 466, 244, T[i], SUB[i], { a, dead: dk > 0, strike: dk / 0.18 });
+    }
+    const n = Math.min(7, 1 + Math.max(0, Math.floor((u - 0.9) / 0.22)));
+    L.poster(g, u, [{ s: 'ОТЛОЖИТЬ ×' + (u > 0.9 ? n : 1), c: 'bone', at: 0.5, size: 200 }], { y: 1430, seed: 4 });
+  },
+  // 7. каждый звонок это крик: волна
+  (g, u, t) => {
+    L.words(g, 'так что каждый звонок', 540, 600, { kind: 'bold', size: 62, col: 'bone', u, at: 0.05, step: 0.1 });
+    L.words(g, 'это *крик,*', 540, 760, { kind: 'serif', size: 120, col: 'bone', key: 'coral', u, at: 0.55, step: 0.15 });
+    L.wave(g, 540, 1080, 960, 330, t, { u, at: 0.75, amp: 0.7 + 0.3 * Math.sin(u * 3) });
+  },
+  // 8. календарь: понедельник
+  (g, u, t) => {
+    L.type(g, 'что я знаю:', 540, 520, { u, at: 0.02, size: 38, align: 'center' });
+    L.calendar(g, 540, 900, 'НОЯ', '09', { u, at: 0.3 });
+    L.words(g, 'понедельник.', 540, 1290, { kind: 'bold', size: 76, col: 'bone', u, at: 1.2 });
+  },
+  // 9-13. пулемёт слов, фоны меняются
+  (g, u) => { L.poster(g, u, [{ s: 'ВСТАВАЙ', c: 'ink', at: 0.02 }], { y: 1000, kind: 'coral', jit: 1, seed: 1 }); },
+  (g, u) => { L.poster(g, u, [{ s: 'НЕ', c: 'ink', at: 0.02, size: 380 }, { s: 'ЛЕЖИ', c: 'coral', at: 0.25, size: 420 }], { y: 1000, kind: 'paper', seed: 2 }); },
+  (g, u) => { L.poster(g, u, [{ s: 'ПОДЪЁМ', c: 'ink', at: 0.02 }], { y: 1000, kind: 'blue', jit: 1, seed: 3 }); },
+  (g, u, t) => { L.dashWall(g, t, 0.5); L.poster(g, u, [{ s: 'ЕЩЁ', c: 'bone', at: 0.02, size: 400 }, { s: 'РАЗ?', c: 'blue', at: 0.3, size: 400 }], { y: 1000, seed: 5 }); },
+  (g, u) => { L.poster(g, u, [{ s: 'НЕТ.', c: 'bone', at: 0.02, size: 560 }], { y: 1000, kind: 'coral', jit: 1, seed: 6 }); },
+  // 14. финал на бумаге
+  (g, u, t) => {
+    L.words(g, 'я подожду.', 540, 560, { kind: 'serif', size: 96, col: '#8A857B', u, at: 0.1 });
+    L.words(g, 'недолго.', 540, 680, { kind: 'serif', size: 96, col: 'coral', u, at: 0.6 });
+    L.poster(g, u, [{ s: 'ВСТАЁМ?', c: 'ink', at: 1.05, size: 400 }], { y: 1040, kind: 'paper', seed: 7 });
+    L.type(g, '06:35 · отложено ×7', 540, 1340, { u, at: 1.6, size: 36, align: 'center', col: '#7E7A72', cursor: true });
   }
-  const fx = 230 + 310 * L.eo((u - 1.1) / 0.25) + 310 * L.eo((u - 1.8) / 0.25);
-  if (u > 0.3) L.corners(g, fx - 150, 710, fx + 150, 1300, 60, '#fff');
-  hero(g, 170, 1520, 0.62 * L.spr(u - 0.4), t, { face: u > 2.1 ? 'shock' : 'smile', look: 1 });
-  L.stamp(g, 850, 1120, 'НЕ БРАТЬ', C.RED, u - 2.3, -0.18);
-}
-
-// 4. Папа, жми сюда: телефон, палец, нажатие
-function s4(g, u, t) {
-  const a = L.spr(u - 0.05), done = u > 2.0, s = 0.88;
-  g.save(); L.punch(g, u, 2.0, 470, 1364, 0.05);
-  const btn = L.phone(g, 470, 1100 + 900 * (1 - a), s, t, { acc: C.VIO, done, ping: u > 0.4 ? u - 0.4 : null });
-  if (done) L.burst(g, btn.x, btn.y, (u - 2) / 0.3, C.PINK, { r0: 70, dr: 90 });
-  const fi = L.eo((u - 1.4) / 0.5), fa = 1 - L.eo((u - 2.6) / 0.22);
-  if (fi > 0 && fa > 0) {
-    g.globalAlpha = L.cl((u - 1.4) / 0.2) * fa;
-    L.hand(g, btn.x + L.lerp(-180, -10, fi), btn.y + L.lerp(140, 12, fi), 0.5, s, u > 1.95 && u < 2.1 ? 1 : 0);
-    g.globalAlpha = 1;
-  }
-  g.restore();
-  hero(g, 860, 1450, 0.55 * L.spr(u - 0.3), t, { face: done ? 'wink' : 'smile', look: -1 });
-  L.stamp(g, 850, 820, 'ГОТОВО', C.GRN, u - 2.4, 0.2);
-}
-
-// 5. Двадцать стилей за вечер: сетка карточек, перевороты, мозг кипит
-function s5(g, u, t) {
-  const GL = ['dot', 'tri', 'zig', 'bars', 'ring'];
-  for (let i = 0; i < 20; i++) {
-    const c = i % 4, r = (i / 4) | 0, a = L.spr(u - 0.08 - i * 0.025); if (a <= 0) continue;
-    const act = u > 0.8 && Math.floor(u * 5) % 20 === i, fl = act ? Math.cos(((u * 5) % 1) * L.TAU) : 1;
-    L.tile(g, 210 + c * 220, 695 + r * 170 + Math.sin(t * 4 + i) * 4, 200, 150,
-      { s: a, flip: fl, col: L.PAL[(i + (fl < 0 ? 3 : 0)) % 6], glyph: GL[i % 5], num: i + 1 });
-  }
-  L.steam(g, 540, 1540, u, '#fff', 110);
-  hero(g, 540, 1585, 0.5 * L.spr(u - 0.1), t, { face: 'boil' });
-}
-
-// 6. Финал: тёмный фон, лучи, герой крупно
-function s6(g, u, t, D) {
-  L.rays(g, 540, 1010, t, C.LIME, 0.12);
-  hero(g, 540, 1010 + Math.sin(t * 3) * 10, 1.35 * L.spr(u - 0.05), t, { face: 'happy', line: C.CREAM, arms: true, wave: true });
-  L.caption(g, u, { text: 'ДЛЯ ВСЕЙ СЕМЬИ', key: 'СЕМЬИ', kc: C.LIME, y: 1460, size: 66, at: 0.9, col: C.CREAM });
-  L.stamp(g, 840, 720, 'ЕЩЁ ХОЧУ', C.PINK, u - 1.6, 0.18);
-}
+];
 
 function draw(t, k) {
-  const g = k.g;
-  SC = SC || L.scenes(k, [
-    { bg: C.PINK, kc: C.YEL, text: 'СТО ЗАПРОСОВ В МИНУТУ', key: 'МИНУТУ', f: s1 },
-    { bg: C.YEL, kc: C.PINK, text: 'МАМЕ РЕЦЕПТ ЧИТАЮ ВСЛУХ', key: 'ВСЛУХ', f: s2 },
-    { bg: C.BLUE, kc: C.LIME, text: 'ЗЕЛЁНЫЙ, БЕРИ КРАСНЫЙ, НЕТ', key: 'БЕРИ', f: s3 },
-    { bg: C.LIME, kc: C.PINK, text: 'ПАПА, ЖМИ ВОТ СЮДА', key: 'СЮДА', f: s4 },
-    { bg: C.ORA, kc: C.BLUE, text: '20 СТИЛЕЙ ЗА ВЕЧЕР', key: 'СТИЛЕЙ', f: s5 },
-    { bg: C.INK, kc: C.LIME, text: 'Помощник AI', key: 'AI', size: 140, y: 390, f: s6, last: true }
-  ]);
-  const { i, S, u, D, prev } = L.scene(t, SC);
-  L.bg(g, t, S.bg, i);
-  g.save(); L.cam(g, u, D, i);
-  S.f(g, u, t, D, S);
-  L.headline(g, u, { text: S.text, key: S.key, kc: S.kc, y: S.y || 330, size: S.size || 124, D, seed: i, exit: !S.last });
+  const g = k.g, { i, u } = L.scene(t, CUTS, k.duration);
+  let kind = KIND[i];
+  if (kind === 'storm') kind = L.stormBg(u);
+  L.bg(g, kind, t, { code: i === 5 ? 0.3 : i === 2 ? 0.22 : 0, ghost: kind === 'ink' && i < 9 ? 'Б' : null });
+  g.save(); L.cam(g, u);
+  S[i](g, u, t);
   g.restore();
-  if (prev) L.wipe(g, u, prev.bg);
-  L.hud(g, t, { label: 'ЗАПРОСОВ', from: 7, to: 1247, t1: 18.5 });
-  if (prev) L.glitch(g, u, i);
-  L.grain(g, t);
+  if (i >= 9 && i < 14) L.counter(g, L.pad(i - 8) + '/05', kind);
+  if (i > 0) L.cut(g, u, i + 1, kind, i >= 9 ? 0.14 : 0.2);
+  const n = snoozed(t), sec = 6 * 3600 + n * 300 + t * 2;
+  L.hud(g, t, { kind, title: 'будильник · спальня', live: 'звоню', p: t / k.duration, left: 'отложено ×' + n,
+    right: L.pad(sec / 3600) + ':' + L.pad((sec / 60) % 60) + ':' + L.pad(sec % 60) });
 }
 
 function sound(s) {
-  const T = s.subs.map(x => x.t0);
-  const at = (i, d) => (T[i] != null ? T[i] : i * 3.4) + d;
-  CHAOS.sfx(s, [
-    [0, 'pop_double', 0.2], [0.2, 'bubble', 0.14], [0.65, 'pop_high', 0.12], [1.6, 'counter', 0.1], [2.4, 'pop_soft', 0.1],
-    [at(1, 0), 'kalimba_run', 0.18], [at(1, 0.3), 'click', 0.12], [at(1, 0.8), 'type', 0.1], [at(1, 2.1), 'type', 0.08],
-    [at(2, 0), 'marimba_run', 0.18], [at(2, 0.6), 'pop_high', 0.14], [at(2, 1.3), 'wood', 0.14], [at(2, 2.0), 'error_soft', 0.12], [at(2, 2.3), 'woodblock', 0.2],
-    [at(3, 0), 'kalimba_run', 0.18], [at(3, 0.4), 'notify', 0.12], [at(3, 2.0), 'click', 0.16], [at(3, 2.05), 'success', 0.14], [at(3, 2.4), 'rim', 0.16],
-    [at(4, 0), 'marimba_run', 0.2], [at(4, 0.1), 'tally', 0.12], [at(4, 1.0), 'pop_soft', 0.1], [at(4, 1.8), 'magic', 0.12], [at(4, 2.6), 'bubble_down', 0.12],
-    [at(5, 0), 'fanfare_soft', 0.2], [at(5, 0.2), 'sparkle', 0.12], [at(5, 0.9), 'pop_double', 0.12], [at(5, 1.6), 'woodblock', 0.18], [at(5, 1.7), 'success3', 0.14]
+  L.cutSounds(s, CUTS.slice(0, 9), ['click', 'tick'], 0.14);
+  L.sfx(s, [
+    [0.05, 'notify', 0.18], [0.3, 'pop_high', 0.12], [0.85, 'rim', 0.16], [1.3, 'counter', 0.08],
+    [2.65, 'key_soft', 0.08], [3.65, 'counter', 0.1], [3.65, 'rim', 0.15],
+    [4.9, 'pop_soft', 0.1], [5.3, 'toggle_on', 0.08], [5.9, 'toggle_on', 0.08], [6.5, 'toggle_on', 0.08], [6.75, 'type', 0.08],
+    [7.6, 'error_soft', 0.12], [8.2, 'bamboo', 0.1], [8.8, 'bamboo', 0.1],
+    [9.45, 'woodblock', 0.18], [10.2, 'type', 0.08],
+    [11.45, 'tally', 0.1], [13.0, 'woodblock', 0.2], [13.7, 'rim', 0.18], [14.2, 'toggle_on', 0.1],
+    [16.3, 'counter', 0.12], [17.2, 'tally', 0.1],
+    [18.75, 'magic', 0.1], [19.1, 'sparkle', 0.08],
+    [20.5, 'pop_double', 0.13], [21.4, 'pop_soft', 0.1],
+    [22.6, 'click', 0.16], [23.4, 'click', 0.16, 1.2], [24.2, 'click', 0.16, 0.9], [25.0, 'tick', 0.16], [25.8, 'error_soft', 0.16],
+    [26.8, 'kalimba_run', 0.14], [27.85, 'pop_high', 0.13], [28.4, 'success3', 0.16]
   ]);
 }

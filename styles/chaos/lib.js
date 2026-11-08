@@ -2,16 +2,26 @@
 const CHAOS = (() => {
   const W = 1080, H = 1920, X0 = 60, X1 = 1020, TAU = Math.PI * 2;
   const SANS = '"Inter Display","Inter",Roboto,"Helvetica Neue",Arial,system-ui,sans-serif';
-  const SERIF = '"DejaVu Serif",Georgia,"Noto Serif","Times New Roman",serif';
+  const SERIF = '"Liberation Serif",Georgia,"DejaVu Serif","Noto Serif","Times New Roman",serif';
   const MONO = '"DejaVu Sans Mono",ui-monospace,Menlo,"Roboto Mono",monospace';
-  const C = { INK: '#15111C', CREAM: '#F6F1E9', WHITE: '#FFFFFF', PINK: '#FF3D8B', YEL: '#FFE14D', BLUE: '#2F6BFF',
-    LIME: '#B6FF3B', ORA: '#FF9A1F', RED: '#FF3B30', VIO: '#7B5CFF', GRN: '#2BD96B', SKIN: '#F2B48C', NAIL: '#FFE3D3',
-    SHADE: 'rgba(21,17,28,.3)' };
-  const PAL = [C.PINK, C.YEL, C.BLUE, C.LIME, C.VIO, C.CREAM];
-  // пары [фон сцены, цвет ключевого слова]; последняя - финал
-  const PAIRS = [[C.PINK, C.YEL], [C.YEL, C.PINK], [C.BLUE, C.LIME], [C.LIME, C.PINK], [C.ORA, C.BLUE], [C.VIO, C.YEL], [C.INK, C.LIME]];
+  const SX = 0.62; // сжатие плакатного шрифта (узкий гротеск)
+  const C = {
+    BLACK: '#060606', INK: '#121212', BONE: '#EEE9DD', DIM: '#8E8A84', MUTE: '#4A4744', TRACK: '#1E1E1E',
+    CORAL: '#D9714F', CORAL_L: '#E27F5C', CORAL_D: '#B25B42', BLUE: '#7597EB', BAR_BLUE: '#6F86D6',
+    PAPER: '#EFEBE0', RED: '#E5483C', CYAN: '#22D3EE', MAG: '#FF2D55',
+    CARD: '#111111', CARD_E: '#2A2A2A', DOT_R: '#E5574B', DOT_Y: '#E0B44A', DOT_G: '#5EC25A',
+    T_CORAL: '#C9654A', T_BLUE: '#7597EB', T_BONE: '#E9E4D8', T_GREEN: '#A8D08C', T_YEL: '#E0BC6E', T_LILAC: '#C6A0F1', T_PINK: '#F8A7B9'
+  };
+  // фоны: base (центр), edge (края), fg (главный текст), alt (второй цвет), hud (строка интерфейса), light (светлый фон?)
+  const BG = {
+    ink:   { base: '#070707', edge: '#020202', fg: 'bone', alt: 'coral', hud: '#8E8A84', track: '#1E1E1E', fill: '#B9604A', dim: '#4A4744', light: false },
+    coral: { base: '#D96D4D', edge: '#A3533C', fg: 'ink', alt: 'bone', hud: 'rgba(30,12,8,.55)', track: 'rgba(0,0,0,.16)', fill: '#7A3626', dim: 'rgba(30,12,8,.45)', light: true },
+    paper: { base: '#EFEBE0', edge: '#9C978D', fg: 'ink', alt: 'coral', hud: '#7E7A72', track: '#CFCABE', fill: '#C9654A', dim: '#9E998F', light: true },
+    blue:  { base: '#7B9EF6', edge: '#4E6796', fg: 'ink', alt: 'bone', hud: 'rgba(10,16,40,.55)', track: 'rgba(0,0,0,.14)', fill: '#24335E', dim: 'rgba(10,16,40,.45)', light: true }
+  };
+  const TOK = { coral: C.T_CORAL, blue: C.T_BLUE, bone: C.T_BONE, green: C.T_GREEN, yellow: C.T_YEL, lilac: C.T_LILAC, pink: C.T_PINK };
 
-  // ---------- математика и изинги ----------
+  // ---------- математика ----------
   const cl = x => (x < 0 ? 0 : x > 1 ? 1 : x);
   const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
   const lerp = (a, b, p) => a + (b - a) * p;
@@ -19,446 +29,455 @@ const CHAOS = (() => {
   const eo = x => { x = cl(x); return 1 - (1 - x) ** 3; };
   const eio = x => { x = cl(x); return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2; };
   const back = x => { x = cl(x); const c = 1.7; return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2; };
-  const spr = (x, k = 6, w = 15) => (x <= 0 ? 0 : 1 - Math.exp(-k * x) * Math.cos(w * x));
-  const inOut = (u, a, D, din = 0.27, dout = 0.19) => eo((u - a) / din) * (1 - eo((u - (D - dout)) / dout));
+  const spr = (x, k = 7, w = 16) => (x <= 0 ? 0 : 1 - Math.exp(-k * x) * Math.cos(w * x));
   const rnd = n => { const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
   const fmt = v => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const pad = (n, l = 2) => String(Math.floor(n)).padStart(l, '0');
 
   // ---------- сцены ----------
-  function scenes(k, list) {
-    const n = list.length, sb = k.subs || [], D = k.duration;
-    return list.map((S, i) => {
-      const t0 = i === 0 ? 0 : sb[i] ? sb[i].t0 : D * i / n;
-      const t1 = i === n - 1 ? D : sb[i + 1] ? sb[i + 1].t0 : D * (i + 1) / n;
-      return Object.assign({ t0, t1 }, S);
-    });
-  }
-  function scene(t, SC) {
-    let i = 0; while (i < SC.length - 1 && t >= SC[i + 1].t0) i++;
-    const S = SC[i]; return { i, S, u: t - S.t0, D: S.t1 - S.t0, prev: i > 0 ? SC[i - 1] : null };
+  // CUTS = [0, 2.6, ...] -> { i, u (секунды от начала сцены), D (длина сцены) }
+  function scene(t, CUTS, dur = 1e9) {
+    let i = 0; while (i < CUTS.length - 1 && t >= CUTS[i + 1]) i++;
+    const t1 = i < CUTS.length - 1 ? CUTS[i + 1] : dur;
+    return { i, u: t - CUTS[i], D: t1 - CUTS[i], last: i === CUTS.length - 1 };
   }
 
+  // ---------- шрифты ----------
+  // kind: cond (плакатный узкий, рисовать со scale(SX,1)), bold (жирный гротеск), serif (курсивная антиква), mono
+  function font(kind, size) {
+    if (kind === 'cond') return `900 ${size}px ${SANS}`;
+    if (kind === 'bold') return `800 ${size}px ${SANS}`;
+    if (kind === 'serif') return `italic 400 ${size}px ${SERIF}`;
+    if (kind === 'mono') return `400 ${size}px ${MONO}`;
+    if (kind === 'monob') return `700 ${size}px ${MONO}`;
+    return `400 ${size}px ${SANS}`;
+  }
+  // цвет текста: 'bone' | 'ink' | 'coral' (градиент) | 'blue' | любой css
+  function paint(g, col, w, align = 'center') {
+    if (col === 'coral') {
+      const x0 = align === 'left' ? 0 : align === 'right' ? -w : -w / 2;
+      const gr = g.createLinearGradient(x0, 0, x0 + w, 0);
+      gr.addColorStop(0, '#BF6244'); gr.addColorStop(0.45, '#DB7352'); gr.addColorStop(1, '#B05A41');
+      return gr;
+    }
+    return col === 'bone' ? C.BONE : col === 'ink' ? C.INK : col === 'blue' ? C.BLUE : col;
+  }
+  const colOf = (kind, which) => BG[kind || 'ink'][which];
+
+  // ---------- текстуры ----------
+  let TX = null;
+  function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 100000) / 100000; }; }
+  function tex() {
+    if (TX) return TX;
+    TX = { bgc: {}, stamps: {} };
+    // фон каждого цвета: виньетка + зерно запекаются один раз в полный размер (+20 px запаса на дрожание зерна)
+    const BW = W + 20, BH = H + 20, nz = new OffscreenCanvas(BW, BH), nc = nz.getContext('2d'), id = nc.createImageData(BW, BH), d = id.data, r = rng(77);
+    for (let i = 0; i < d.length; i += 4) { const v = r(); d[i] = d[i + 1] = d[i + 2] = v > 0.5 ? 255 : 0; d[i + 3] = Math.floor(Math.abs(v - 0.5) * 2 * 130); }
+    nc.putImageData(id, 0, 0);
+    for (const k in BG) {
+      const cv = new OffscreenCanvas(BW, BH), c = cv.getContext('2d'), b = BG[k];
+      const gr = c.createRadialGradient(BW / 2, BH * 0.48, 40, BW / 2, BH / 2, BH * 0.62);
+      gr.addColorStop(0, b.base); gr.addColorStop(0.45, b.base); gr.addColorStop(1, b.edge);
+      c.fillStyle = gr; c.fillRect(0, 0, BW, BH);
+      c.globalAlpha = k === 'ink' ? 0.1 : 0.14; c.drawImage(nz, 0, 0); TX.bgc[k] = cv;
+    }
+    // стена кода
+    const CODE = ['const подъём = "06:00";', 'если (спит) {', '  громкость += 10;', '  звонок(повтор);', '}', 'пока (лежит) ждать(5);', 'отложено++;', 'вернуть "вставай";',
+      'функция утро() {', '  кофе.налить();', '  окно.открыть();', '}', 'журнал("снова 5 минут");', 'проверить(одеяло);', 'сигнал.громче();', 'таймер.сброс();'];
+    const cc = new OffscreenCanvas(1080, 1400), c2 = cc.getContext('2d'), r2 = rng(5);
+    c2.font = font('mono', 22); c2.textBaseline = 'middle';
+    for (let i = 0; i < 40; i++) {
+      c2.fillStyle = '#3A3836'; c2.fillText(pad(200 + i * 3, 4), 70, 20 + i * 35);
+      c2.fillStyle = '#4A4744'; c2.fillText(CODE[Math.floor(r2() * CODE.length)], 150 + Math.floor(r2() * 3) * 22, 20 + i * 35);
+    }
+    TX.code = cc;
+    // стена тире (как стена токенов)
+    const dw = new OffscreenCanvas(1080, 1920), c3 = dw.getContext('2d'), r3 = rng(11);
+    for (let y = 70; y < 1900; y += 34) {
+      let x = 40 + r3() * 20;
+      while (x < 1040) {
+        const w = 18 + Math.floor(r3() * 5) * 14, hi = r3() > 0.94;
+        c3.fillStyle = hi ? '#D9714F' : r3() > 0.5 ? '#3B3936' : '#2A2826';
+        if (x + w < 1040) c3.fillRect(x, y, w, 7);
+        x += w + 12 + r3() * 8;
+      }
+    }
+    TX.dash = dw;
+    TX.half = new OffscreenCanvas(540, 960); TX.hg = TX.half.getContext('2d'); TX.tint = [new OffscreenCanvas(540, 960), new OffscreenCanvas(540, 960)];
+    return TX;
+  }
+
+  // ---------- фон ----------
+  // kind: ink | coral | paper | blue;  o: { code: прозрачность стены кода, ghost: 'Б' гигантская тень-буква }
+  function bg(g, kind, t, o = {}) {
+    const T = tex(); kind = kind || 'ink';
+    const f = Math.floor(t * 15); g.drawImage(T.bgc[kind], -10 + (f * 7) % 9 - 4, -10 + (f * 5) % 9 - 4);
+    if (o.ghost) {
+      const gc = ghostTex(o.ghost);
+      g.save(); g.globalAlpha = kind === 'ink' ? 0.016 : 0.03;
+      g.drawImage(gc, 540 + Math.sin(t * 0.3) * 30 - 360, 980 + Math.cos(t * 0.23) * 20 - 640, 720, 1280); g.restore();
+    }
+    if (o.code) {
+      g.save(); g.globalAlpha = o.code; const y = -((t * 46) % 700);
+      g.drawImage(T.code, 0, y + 320); g.restore();
+    }
+  }
+  // гигантская тень-буква: заранее в текстуру 360x640 (мягкая за счёт растяжения)
+  function ghostTex(ch) {
+    const T = tex(), key = 'gh' + ch; if (T.stamps[key]) return T.stamps[key];
+    const cv = new OffscreenCanvas(180, 320), c = cv.getContext('2d');
+    c.fillStyle = '#FFFFFF'; c.font = font('cond', 380); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.translate(90, 175); c.scale(SX, 1); c.fillText(ch, 0, 0);
+    return (T.stamps[key] = cv);
+  }
+  // стена тире на весь кадр (фон-перебивка как «стена токенов»)
+  function dashWall(g, t, a = 1) {
+    const T = tex(), y0 = 330, y1 = 1600; g.save(); g.globalAlpha = a; g.drawImage(T.dash, 0, 330 + ((t * 30) % 34), W, y1 - y0, 0, y0, W, y1 - y0); g.restore();
+  }
+
+  // ---------- строка интерфейса ----------
+  // o: { kind, title, live, p (0..1), left, right }
+  function hud(g, t, o = {}) {
+    const b = BG[o.kind || 'ink'];
+    g.save(); g.font = font('mono', 28); g.textBaseline = 'middle'; g.fillStyle = b.hud;
+    g.textAlign = 'left'; g.fillText(o.title || '', 64, 196);
+    g.textAlign = 'right'; g.fillText(o.live || 'эфир', 988, 196);
+    g.globalAlpha = 0.7 + 0.3 * Math.sin(t * 5); g.fillStyle = o.kind === 'coral' ? '#6E2C1E' : C.CORAL; g.beginPath(); g.arc(1016, 196, 10, 0, TAU); g.fill(); g.globalAlpha = 1;
+    g.fillStyle = b.track; g.fillRect(64, 238, 952, 3);
+    g.fillStyle = b.fill; g.fillRect(64, 237, Math.max(18, 952 * cl(o.p || 0)), 5);
+    g.font = font('mono', 25); g.fillStyle = b.hud;
+    g.textAlign = 'left'; g.fillText(o.left || '', 64, 272);
+    g.textAlign = 'right'; g.fillText(o.right || '', 1016, 272);
+    g.restore();
+  }
+  // маленький счётчик внизу по центру «07/16»
+  function counter(g, text, kind = 'ink', y = 1640) {
+    g.save(); g.font = font('mono', 26); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = BG[kind].dim; g.fillText(text, 540, y); g.restore();
+  }
+
+  // ---------- камера ----------
+  // после склейки кадр оседает с 1.04 до 1, дальше медленный наезд
+  function cam(g, u, o = {}) {
+    const s = 1 + 0.04 * (1 - eo(u / 0.32)) + (o.push != null ? o.push : 0.006) * u;
+    const cx = o.cx || 540, cy = o.cy || 960;
+    g.translate(cx, cy); g.scale(s, s); g.translate(-cx, -cy);
+  }
+
+  // ---------- глитч ----------
+  // спрайт строки: текст рисуется один раз в OffscreenCanvas (кэш до 24 строк), дальше только drawImage
+  const SPR = new Map(); let SPX = 0; const SPX_MAX = 9e6; // кэш до ~9 млн пикселей (~36 МБ)
+  function sprite(s, fnt, sx, col, size) {
+    const key = s + '|' + fnt + '|' + sx + '|' + col;
+    let e = SPR.get(key); if (e) { SPR.delete(key); SPR.set(key, e); return e; }
+    const m = new OffscreenCanvas(8, 8).getContext('2d'); m.font = fnt;
+    const tw0 = m.measureText(s).width, tw = tw0 * sx, pad = Math.ceil(size * 0.08) + 6;
+    const w = Math.ceil(tw) + pad * 2, h = Math.ceil(size * 1.3), oy = Math.ceil(size * 1.0);
+    const cv = new OffscreenCanvas(w, h), c = cv.getContext('2d');
+    c.font = fnt; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+    c.translate(pad, oy); c.scale(sx, 1); c.fillStyle = paint(c, col, tw0, 'left'); c.fillText(s, 0, 0);
+    e = { cv, w, h, ox: pad, oy, tw }; SPR.set(key, e); SPX += w * h;
+    while (SPX > SPX_MAX && SPR.size > 1) { const k0 = SPR.keys().next().value, e0 = SPR.get(k0); SPX -= e0.w * e0.h; SPR.delete(k0); }
+    return e;
+  }
+  // текст с RGB-расслоением и разломом на полосы. a = 0..1 сила глитча. Возвращает ширину.
+  // o: { font, sx, col, glitch, light, size, seed, align }
+  function gtext(g, s, x, y, o) {
+    const sx = o.sx || 1, align = o.align || 'center', light = !!o.light, a = o.glitch || 0, size = o.size || 100;
+    const e = sprite(s, o.font, sx, o.col || 'bone', size);
+    const x0 = (align === 'center' ? x - e.tw / 2 : align === 'right' ? x - e.tw : x) - e.ox, y0 = y - e.oy;
+    if (a > 0.02) {
+      const d = 6 + a * 26;
+      g.save(); g.globalAlpha *= 0.9; g.globalCompositeOperation = light ? 'multiply' : 'screen';
+      g.drawImage(sprite(s, o.font, sx, light ? '#2BB8D6' : C.CYAN, size).cv, x0 - d, y0);
+      g.drawImage(sprite(s, o.font, sx, light ? '#E2334F' : C.MAG, size).cv, x0 + d * 0.8, y0);
+      g.restore();
+      if (a > 0.3) {
+        const n = 6, bh = Math.ceil(e.h / n), sd = (o.seed || 1) * 37 + Math.floor(a * 7);
+        for (let i = 0; i < n; i++) {
+          const off = (rnd(sd + i * 3.1) - 0.5) * a * 140, hh = Math.min(bh, e.h - i * bh);
+          if (hh > 0) g.drawImage(e.cv, 0, i * bh, e.w, hh, x0 + off, y0 + i * bh, e.w, hh);
+        }
+        return e.tw;
+      }
+    }
+    g.drawImage(e.cv, x0, y0);
+    return e.tw;
+  }
+  // всплеск глитча посреди сцены: возвращает силу 0..1 в редкие моменты
+  function jitter(t, seed = 1, rate = 0.06) { const f = Math.floor(t * 12); return rnd(f * 7.3 + seed) < rate ? 0.35 + rnd(f + seed * 3) * 0.5 : 0; }
+
+  // глитч всего кадра на склейке: сдвиг полос + цветные двойники. Вызывать после рисования сцены, до hud.
+  function cut(g, u, seed = 1, kind = 'ink', dur = 0.2) {
+    if (u < 0 || u > dur || !g.canvas) return;
+    const a = 1 - u / dur, T = tex(), light = BG[kind].light, f = Math.floor(u * 30), cv = g.canvas;
+    T.hg.clearRect(0, 0, 540, 960); T.hg.drawImage(cv, 0, 0, 540, 960);
+    ['#00FFFF', '#FF0000'].forEach((tint, j) => {
+      const c = T.tint[j].getContext('2d');
+      c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, 540, 960); c.drawImage(T.half, 0, 0);
+      c.globalCompositeOperation = light ? 'screen' : 'multiply'; c.fillStyle = tint; c.fillRect(0, 0, 540, 960);
+    });
+    // цветные двойники в 4 широких полосах
+    g.save(); g.globalCompositeOperation = light ? 'multiply' : 'screen'; g.globalAlpha = 0.7 * a;
+    for (let i = 0; i < 4; i++) {
+      const y0 = Math.floor(rnd(seed * 17 + i * 3 + f) * 1500) + 200, h = 120 + Math.floor(rnd(seed + i + f * 7) * 260);
+      const dx = (14 + 34 * a) * (rnd(i + f) > 0.5 ? 1 : -1);
+      g.drawImage(T.tint[0], 0, y0 / 2, 540, h / 2, -dx, y0, W, h);
+      g.drawImage(T.tint[1], 0, y0 / 2, 540, h / 2, dx, y0, W, h);
+    }
+    g.restore();
+    // сдвиг полос из того же снимка (полуразмер, растянут: полосы чуть мягче, как в видео-глитче)
+    for (let i = 0; i < 7; i++) {
+      const y0 = Math.floor(rnd(seed * 13 + f * 5 + i) * 940) * 2, h = Math.min(H - y0, 16 + Math.floor(rnd(seed + i * 7 + f) * 80) * 2), dx = (rnd(seed * 3 + i + f * 11) - 0.5) * 220 * a;
+      if (h > 2) g.drawImage(T.half, 0, y0 / 2, 540, h / 2, dx, y0, W, h);
+    }
+  }
+
+  // ---------- типографика ----------
+  // раскладка слов по строкам в пределах maxW (учитывая сжатие sx). *слово* = ключевое
+  function wlay(g, text, maxW, sx = 1) {
+    let open = false;
+    const ws = text.split(/\s+/).filter(Boolean).map(s => { const st = s.startsWith('*'), en = /\*[,.!?:»)]*$/.test(s); const key = open || st; if (st && !en) open = true; if (en) open = false; return { s: s.replace(/\*/g, ''), key }; });
+    const sp = g.measureText(' ').width * sx, lines = []; let cur = [], cw = 0;
+    ws.forEach(w => { w.w = g.measureText(w.s).width * sx; if (cur.length && cw + sp + w.w > maxW) { lines.push({ ws: cur, w: cw }); cur = []; cw = 0; } cw += (cur.length ? sp : 0) + w.w; cur.push(w); });
+    if (cur.length) lines.push({ ws: cur, w: cw });
+    return { lines, sp };
+  }
+  // слова по одному (подъём 14 px + проявление 0,2 с). o: {kind:'serif'|'bold'|'mono', size, col, key, u, at, step, align, x, maxW, lh, maxLines}
+  function words(g, text, x, y, o) {
+    let size = o.size || 60; const kind = o.kind || 'serif', maxW = o.maxW || 960, maxL = o.maxLines || 2;
+    let L;
+    for (let k = 0; k < 14; k++) { g.font = font(kind, size); L = wlay(g, text, maxW); if (L.lines.length <= maxL && L.lines.every(l => l.w <= maxW)) break; size = Math.floor(size * 0.93); }
+    const lh = size * (o.lh || 1.18), align = o.align || 'center', step = o.step != null ? o.step : 0.11;
+    g.save(); g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+    let j = 0;
+    L.lines.forEach((ln, li) => {
+      let cx = align === 'center' ? x - ln.w / 2 : align === 'right' ? x - ln.w : x;
+      const yy = y + li * lh;
+      ln.ws.forEach(w => {
+        const a = eo(((o.u || 0) - (o.at || 0) - j * step) / 0.22); j++;
+        if (a > 0) {
+          g.globalAlpha = a; g.fillStyle = paint(g, w.key ? (o.key || 'coral') : (o.col || 'bone'), w.w, 'left');
+          g.save(); g.translate(cx, yy + (1 - a) * 14); g.fillText(w.s, 0, 0); g.restore();
+        }
+        cx += w.w + L.sp;
+      });
+    });
+    g.restore();
+    return { bottom: y + (L.lines.length - 1) * lh, size, end: (o.at || 0) + j * step + 0.22 };
+  }
+  // плакат: огромные узкие заглавные строки стопкой, каждая подгоняется под ширину.
+  // lines: [{ s:'Я ТВОЙ', c:'bone'|'coral'|'ink'|'blue', at:0.3, size? }], o: { y (центр), size (макс.), kind, gap (0.84), maxW, seed }
+  function poster(g, u, lines, o = {}) {
+    const maxW = o.maxW || 960, kind = o.kind || 'ink', gap = o.gap || 0.84, light = BG[kind].light;
+    const L = lines.map(l => {
+      let sz = l.size || o.size || 330; g.font = font('cond', sz);
+      const w = g.measureText(l.s).width * SX; if (w > maxW) sz = Math.floor(sz * maxW / w);
+      return Object.assign({ sz }, l);
+    });
+    const tot = L.reduce((a, l) => a + l.sz * gap, 0);
+    let y = (o.y || 960) - tot / 2;
+    L.forEach((l, i) => {
+      y += l.sz * gap; const p = u - (l.at || 0);
+      if (p < 0) return;
+      const a = cl(p / 0.1), sc = 1 + 0.07 * (1 - eo(p / 0.3)), gl = Math.max(1 - cl(p / 0.2), o.jit ? jitter(u, i + (o.seed || 0)) : 0);
+      g.save(); g.globalAlpha *= a; const by = y - l.sz * 0.02;
+      g.translate(540, by - l.sz * 0.36); g.scale(sc, sc); g.translate(-540, -(by - l.sz * 0.36));
+      gtext(g, l.s, o.x || 540, by, { font: font('cond', l.sz), sx: SX, col: l.c || BG[kind].fg, glitch: gl, light, size: l.sz, seed: i + (o.seed || 0) * 5, align: 'center' });
+      g.restore();
+    });
+    return { top: (o.y || 960) - tot / 2, bottom: y };
+  }
+  // строка моно с печатью по буквам и блочным курсором. o: {u, at, cps, col, size, align, cursor, key:[подстрока, цвет]}
+  function type(g, text, x, y, o = {}) {
+    const size = o.size || 34, cps = o.cps || 28, n = Math.floor(((o.u || 0) - (o.at || 0)) * cps);
+    if (n < 0) return 0;
+    const s = text.slice(0, Math.min(n, text.length)), done = n >= text.length;
+    g.save(); g.font = font(o.bold ? 'monob' : 'mono', size); g.textBaseline = 'middle'; g.textAlign = 'left';
+    const fw = g.measureText(text).width, x0 = o.align === 'center' ? x - fw / 2 : o.align === 'right' ? x - fw : x;
+    g.fillStyle = o.col || C.DIM; g.fillText(s, x0, y);
+    const cw = g.measureText(s).width;
+    if (!done || o.cursor) { if (!done || Math.floor((o.u || 0) * 2.4) % 2 === 0) { g.fillStyle = o.cc || C.CORAL; g.fillRect(x0 + cw + 4, y - size * 0.55, size * 0.5, size * 1.08); } }
+    g.restore();
+    return fw;
+  }
+  // огромное число-плакат «7.»
+  function bigNum(g, u, s, o = {}) { return poster(g, u, [{ s, c: o.c || 'coral', at: o.at || 0, size: o.size || 640 }], { y: o.y || 900, kind: o.kind, seed: 9 }); }
+
+  // ---------- элементы ----------
+  // цветные плашки-токены моно со словами и числами под ними
+  // items: [{ s:'ещё', c:'coral'|'blue'|'bone'|'green'|'yellow'|'lilac'|'pink', n:'31' }], o: { y, u, at, step, size }
+  function tokens(g, items, o = {}) {
+    const size = o.size || 62, h = size * 1.9, gap = 18, rowH = h + 92;
+    g.save(); g.font = font('mono', size);
+    const pos = []; let x = 58, y = o.y || 680;
+    items.forEach((it, i) => {
+      const label = (i ? '·' : '') + it.s, w = g.measureText(label).width + size * 0.7;
+      if (x + w > 1022 && x > 58) { x = 58; y += rowH; }
+      pos.push({ x, y, w, label, it }); x += w + gap;
+    });
+    pos.forEach((p, i) => {
+      const k = (o.u || 0) - (o.at || 0) - i * (o.step || 0.14); if (k < 0) return;
+      const s = 0.6 + 0.4 * spr(k / 0.9), a = cl(k / 0.08);
+      g.save(); g.globalAlpha = a; g.translate(p.x + p.w / 2, p.y + h / 2); g.scale(s, s);
+      g.fillStyle = TOK[p.it.c] || p.it.c; rr(g, -p.w / 2, -h / 2, p.w, h, 14); g.fill();
+      g.fillStyle = C.INK; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.label, 0, 2);
+      g.restore();
+      if (p.it.n != null) { g.globalAlpha = cl((k - 0.15) / 0.2); g.font = font('mono', 30); g.fillStyle = '#6E6A64'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.it.n, p.x + p.w / 2, p.y + h + 34); g.font = font('mono', size); g.globalAlpha = 1; }
+    });
+    g.restore();
+    return y + rowH;
+  }
+  // рейтинг-столбики: rows [{ s, p (0..100), c:'coral'|'blue' }], o: { y, u, at, step, x, w }
+  function bars(g, rows, o = {}) {
+    const x = o.x || 64, w = o.w || 952, pmax = Math.max(...rows.map(r => r.p)), pitch = o.pitch || 118;
+    g.save(); g.textBaseline = 'middle';
+    rows.forEach((r, i) => {
+      const k = (o.u || 0) - (o.at || 0) - i * (o.step || 0.16); if (k < 0) return;
+      const y = (o.y || 640) + i * pitch, a = cl(k / 0.12);
+      g.globalAlpha = a; g.font = font('mono', 40); g.textAlign = 'left'; g.fillStyle = C.BONE; g.fillText(r.s, x, y);
+      g.font = font('mono', 30); g.textAlign = 'right'; g.fillStyle = C.DIM; g.fillText(Math.round(r.p * eo(k / 0.6)) + '%', x + w, y);
+      g.fillStyle = r.c === 'coral' ? '#C9654A' : C.BAR_BLUE; g.fillRect(x, y + 34, Math.max(26, w * 0.96 * (r.p / pmax)) * eo(k / 0.6), 12);
+    });
+    g.restore();
+    return (o.y || 640) + rows.length * pitch;
+  }
+  // штамп: красная рамка и узкие заглавные, удар с перелётом. Кэшируется.
+  function stampTex(text, col) {
+    const T = tex(), key = text + col; if (T.stamps[key]) return T.stamps[key];
+    const sz = 74, mc = new OffscreenCanvas(10, 10).getContext('2d'); mc.font = font('cond', sz);
+    const w = Math.ceil(mc.measureText(text).width * SX) + 56, h = Math.ceil(sz * 1.05);
+    const cv = new OffscreenCanvas(w + 12, h + 12), c = cv.getContext('2d');
+    c.translate(6, 6); c.strokeStyle = col; c.lineWidth = 6; rr(c, 3, 3, w - 6, h - 6, 10); c.stroke();
+    c.fillStyle = col; c.font = font('cond', sz); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.save(); c.translate(w / 2, h / 2 + 4); c.scale(SX, 1); c.fillText(text, 0, 0); c.restore();
+    c.globalCompositeOperation = 'destination-out'; const r = rng(text.length * 97 + 3);
+    for (let i = 0; i < 260; i++) { c.globalAlpha = 0.3 + r() * 0.7; c.fillRect(r() * w, r() * h, 1 + r() * 4, 1 + r() * 3); }
+    return (T.stamps[key] = cv);
+  }
+  function stamp(g, x, y, text, u, at = 0, rot = -0.08, col = C.RED, sc = 1) {
+    const k = u - at; if (k < 0) return;
+    const cv = stampTex(text, col), s = sc * (1 + 0.9 * (1 - eo(k / 0.13)) - 0.06 * Math.sin(cl(k / 0.35) * Math.PI));
+    g.save(); g.globalAlpha = cl(k / 0.06); g.translate(x + (k < 0.2 ? (rnd(Math.floor(k * 60)) - 0.5) * 10 : 0), y); g.rotate(rot); g.scale(s, s);
+    g.drawImage(cv, -cv.width / 2, -cv.height / 2); g.restore();
+  }
+  // ползунок «громкость»: v 0..1
+  function slider(g, x, y, w, label, v, u = 9, at = 0) {
+    const a = cl((u - at) / 0.2); if (a <= 0) return;
+    g.save(); g.globalAlpha = a; g.font = font('mono', 28); g.textBaseline = 'middle'; g.fillStyle = '#5E5A55';
+    g.textAlign = 'left'; g.fillText(label, x, y); const lx = x + g.measureText(label).width + 40, rx = x + w - 90;
+    g.fillStyle = '#2A2826'; g.fillRect(lx, y - 1.5, rx - lx, 3);
+    g.fillStyle = '#7A3E2F'; g.fillRect(lx, y - 1.5, (rx - lx) * v, 3);
+    g.fillStyle = C.CORAL; g.beginPath(); g.arc(lx + (rx - lx) * v, y, 14, 0, TAU); g.fill();
+    g.fillStyle = '#7E7A72'; g.textAlign = 'right'; g.fillText(v.toFixed(1).replace('.', ','), x + w, y);
+    g.restore();
+  }
+  // окно-файл с печатью строк «ключ: значение». lines: [['имя','соня'], ...]
+  function win(g, x, y, w, h, title, lines, o = {}) {
+    const k = (o.u || 0) - (o.at || 0); if (k < 0) return;
+    const s = 0.92 + 0.08 * spr(k / 0.8), a = cl(k / 0.1);
+    g.save(); g.globalAlpha = a; g.translate(x + w / 2, y + h / 2); g.scale(s, s); g.translate(-(x + w / 2), -(y + h / 2));
+    g.fillStyle = C.CARD; rr(g, x, y, w, h, 18); g.fill(); g.strokeStyle = C.CARD_E; g.lineWidth = 3; g.stroke();
+    [C.DOT_R, C.DOT_Y, C.DOT_G].forEach((c, i) => { g.fillStyle = c; g.beginPath(); g.arc(x + 40 + i * 32, y + 44, 10, 0, TAU); g.fill(); });
+    g.font = font('mono', 28); g.fillStyle = '#7E7A72'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(title, x + w / 2, y + 44);
+    g.fillStyle = C.CARD_E; g.fillRect(x, y + 88, w, 2);
+    let tt = (o.at || 0) + 0.3; const cps = o.cps || 22;
+    lines.forEach((ln, i) => {
+      const ly = y + 160 + i * 74, kk = ln[0] + ': ', full = kk + ln[1];
+      const n = Math.floor(((o.u || 0) - tt) * cps); tt += full.length / cps + 0.12;
+      if (n < 0) return;
+      g.font = font('mono', 40); g.textAlign = 'left';
+      const s1 = full.slice(0, Math.min(n, full.length));
+      g.fillStyle = '#6E6A64'; g.fillText(s1.slice(0, kk.length), x + 40, ly);
+      const kw = g.measureText(kk).width; g.fillStyle = ln[2] || C.BONE; g.fillText(s1.slice(kk.length), x + 40 + kw, ly);
+      const last = i === lines.length - 1 || ((o.u || 0) - tt) * cps < 0;
+      if (last && (n < full.length || Math.floor((o.u || 0) * 2.4) % 2 === 0)) { g.fillStyle = C.CORAL; g.fillRect(x + 44 + g.measureText(s1).width, ly - 24, 22, 46); }
+    });
+    g.restore();
+  }
+  // карточка-уведомление (сетка карточек чата). o: { a (0..1), dead: перечёркнута }
+  function note(g, x, y, w, h, label, sub, o = {}) {
+    const a = o.a == null ? 1 : o.a; if (a <= 0) return;
+    const s = 0.85 + 0.15 * a;
+    g.save(); g.globalAlpha = cl(a * 1.5); g.translate(x + w / 2, y + h / 2); g.scale(s, s); g.translate(-(x + w / 2), -(y + h / 2));
+    g.fillStyle = C.CARD; rr(g, x, y, w, h, 16); g.fill(); g.strokeStyle = C.CARD_E; g.lineWidth = 2; g.stroke();
+    g.fillStyle = o.dead ? '#4A4744' : C.CORAL; g.beginPath(); g.arc(x + w - 30, y + 30, 9, 0, TAU); g.fill();
+    g.font = font('mono', 22); g.fillStyle = '#5E5A55'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText('будильник', x + 26, y + 32);
+    g.font = font('monob', 52); g.fillStyle = o.dead ? '#5E5A55' : C.BONE; g.fillText(label, x + 26, y + 96);
+    g.font = font('mono', 28); g.fillStyle = o.dead ? '#4A4744' : C.DIM; g.fillText(sub, x + 26, y + 150);
+    g.fillStyle = '#262422'; g.fillRect(x + 26, y + h - 52, w * 0.62, 8); g.fillRect(x + 26, y + h - 32, w * 0.4, 8);
+    if (o.dead) { const p = eo(o.strike == null ? 1 : o.strike); g.fillStyle = C.CORAL; g.fillRect(x + 20, y + 94, (w * 0.62) * p, 6); }
+    g.restore();
+  }
+  // календарь-лист: коралловая шапка с месяцем, кольца, огромное число
+  function calendar(g, cx, cy, mon, num, o = {}) {
+    const k = (o.u || 0) - (o.at || 0); if (k < 0) return;
+    const s = (o.s || 1) * (0.7 + 0.3 * spr(k / 0.8)), w = 600, h = 470, gl = 1 - cl(k / 0.18);
+    g.save(); g.globalAlpha = cl(k / 0.08); g.translate(cx + gl * (rnd(Math.floor(k * 30)) - 0.5) * 60, cy); g.scale(s, s);
+    g.fillStyle = '#E9E4D8'; rr(g, -w / 2, -h / 2, w, h, 24); g.fill();
+    g.save(); rr(g, -w / 2, -h / 2, w, h, 24); g.clip(); g.fillStyle = '#D9714F'; g.fillRect(-w / 2, -h / 2, w, 140); g.restore();
+    g.fillStyle = C.INK; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(-w / 2 + 70 + i * 92, -h / 2 + 140, 7, 0, TAU); g.fill(); }
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.save(); g.font = font('cond', 96); g.translate(0, -h / 2 + 108); g.scale(SX, 1); g.fillStyle = C.INK; g.fillText(mon, 0, 0); g.restore();
+    g.save(); g.font = font('cond', 290); g.translate(0, h / 2 - 50); g.scale(SX, 1); g.fillStyle = C.INK; g.fillText(num, 0, 0); g.restore();
+    g.restore();
+  }
+  // звуковая волна из вертикальных коралловых штрихов
+  function wave(g, cx, cy, w, h, t, o = {}) {
+    const k = (o.u || 0) - (o.at || 0); if (k < 0) return;
+    const n = 150, grow = eo(k / 0.5), amp = o.amp || 1;
+    g.save(); g.fillStyle = o.col || C.CORAL;
+    for (let i = 0; i < n; i++) {
+      const p = i / (n - 1); if (p > grow) break;
+      const env = Math.pow(Math.sin(Math.PI * p), 0.5);
+      const v = 0.12 + 0.88 * Math.abs(Math.sin(i * 0.47 + t * 11) * Math.sin(i * 0.13 - t * 3.7) + 0.3 * Math.sin(i * 1.7 + t * 23));
+      const hh = h * env * Math.min(1, v) * amp;
+      g.fillRect(cx - w / 2 + p * w - 1.5, cy - hh / 2, 3, hh);
+    }
+    g.restore();
+  }
+  // буквенный шторм: огромные буквы ch в случайных местах, дрожат каждые 2 кадра. Фон меняй через stormBg(u)
+  function storm(g, u, ch, o = {}) {
+    const f = Math.floor(u * 15), kind = o.kind || 'paper', n = o.n || 8;
+    for (let i = 0; i < n; i++) {
+      const a = u - i * 0.06; if (a < 0) continue;
+      const r1 = rnd(i * 13.1 + f * 0.0 + 1), r2 = rnd(i * 7.7 + 3), jx = (rnd(f * 3 + i) - 0.5) * 30;
+      const sz = 240 + r2 * 340, x = 200 + (i % 3) * 340 + (r1 - 0.5) * 220 + jx, y = 560 + Math.floor(i / 3) * 400 + rnd(i * 5.3 + 9) * 260;
+      g.save(); g.font = font('cond', sz);
+      const w = g.measureText(ch).width * SX; const xx = clamp(x, 110 + w / 2, 970 - w / 2);
+      gtext(g, ch, xx, y, { font: font('cond', sz), sx: SX, col: 'ink', glitch: i % 3 === f % 3 ? 0.4 + 0.5 * rnd(f + i * 11) : 0.12 * rnd(f + i), light: true, size: sz, seed: i + f });
+      g.restore();
+    }
+    if (o.row) {
+      const n2 = Math.floor(cl(u / 0.8) * o.row.length), dx = (rnd(f * 5) - 0.5) * 16;
+      g.save(); g.font = font('monob', 64); g.textAlign = 'center'; g.textBaseline = 'middle';
+      const s2 = o.row.slice(0, n2);
+      g.fillStyle = '#2BB8D6'; g.globalAlpha = 0.8; g.fillText(s2, 540 - 8 + dx, 1050);
+      g.fillStyle = '#E2334F'; g.fillText(s2, 540 + 6 + dx, 1050);
+      g.globalAlpha = 1; g.fillStyle = C.INK; g.fillText(s2, 540 + dx, 1050); g.restore();
+    }
+  }
+  const STORM = ['coral', 'blue', 'paper', 'blue', 'coral', 'paper'];
+  const stormBg = u => STORM[Math.floor(u * 8) % STORM.length];
+
   // ---------- примитивы ----------
-  function circ(g, x, y, r) { g.beginPath(); g.arc(x, y, Math.max(0, r), 0, TAU); g.fill(); }
   function rr(g, x, y, w, h, r) {
     r = Math.max(0, Math.min(r, w / 2, h / 2)); g.beginPath(); g.moveTo(x + r, y);
     g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
   }
-  function card(g, x, y, w, h, r, fill, lw = 8, off = 0) {
-    if (off) { g.fillStyle = C.INK; rr(g, x + off, y + off, w, h, r); g.fill(); }
-    g.fillStyle = fill; rr(g, x, y, w, h, r); g.fill();
-    if (lw) { g.lineWidth = lw; g.strokeStyle = C.INK; g.lineJoin = 'round'; g.stroke(); }
-  }
-  function star(g, x, y, r1, r2, n = 5, rot = -Math.PI / 2) {
-    for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n, r = i % 2 ? r2 : r1; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
-    g.closePath();
-  }
-
-  // ---------- фон и фактуры ----------
-  let TX = null;
-  function tex() {
-    if (TX) return TX;
-    const d = new OffscreenCanvas(540, 960), c = d.getContext('2d'); c.fillStyle = C.INK;
-    for (let y = 0; y < 960; y += 20) for (let x = (y / 20 % 2) * 10; x < 540; x += 20) { c.beginPath(); c.arc(x, y, 0.6 + 3.4 * y / 960, 0, TAU); c.fill(); }
-    const n = new OffscreenCanvas(270, 480), m = n.getContext('2d'), id = m.createImageData(270, 480); let s = 12345;
-    for (let i = 0; i < id.data.length; i += 4) {
-      s = (Math.imul(s, 1103515245) + 12345) >>> 0; const v = s >>> 24;
-      id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255;
-    }
-    m.putImageData(id, 0, 0); TX = { d, n }; return TX;
-  }
-  function doodles(g, t, seed = 0, col = C.INK, al = 0.3, n = 10) {
-    g.save(); g.globalAlpha = al; g.strokeStyle = col; g.lineWidth = 7; g.lineCap = 'round'; g.lineJoin = 'round';
-    for (let i = 0; i < n; i++) {
-      const x = rnd(i + seed) * W + Math.sin(t * 0.8 + i) * 40, P = H + 300;
-      const y = ((rnd(i * 3 + 1) * P - t * (60 + rnd(i + 5) * 80)) % P + P) % P - 150, r = 18 + rnd(i + 7) * 22;
-      g.save(); g.translate(x, y); g.rotate(t * (i % 2 ? 1 : -1)); g.beginPath();
-      if (i % 3 === 0) g.arc(0, 0, r, 0, TAU);
-      else if (i % 3 === 1) { g.moveTo(-r, 0); g.lineTo(r, 0); g.moveTo(0, -r); g.lineTo(0, r); }
-      else for (let k = 0; k <= 4; k++) g.lineTo(-r * 1.5 + k * r * 0.75, k % 2 ? r * 0.5 : -r * 0.5);
-      g.stroke(); g.restore();
-    }
-    g.restore();
-  }
-  function bg(g, t, col, seed = 0, o = {}) {
-    const T = tex(), dark = o.dark != null ? o.dark : col === C.INK;
-    g.fillStyle = col; g.fillRect(0, 0, W, H);
-    g.save(); g.translate(W / 2, H / 2); g.rotate(-0.45 + seed * 0.3);
-    g.globalAlpha = dark ? 0.06 : 0.13; g.fillStyle = dark ? '#fff' : C.INK;
-    const sh = (t * (o.speed || 70)) % 180;
-    for (let i = -9; i <= 9; i++) g.fillRect(i * 180 + sh - 90, -1300, 70, 2600);
-    g.restore();
-    if (!dark) { g.globalAlpha = 0.08; g.drawImage(T.d, 0, 0, W, H); }
-    g.globalAlpha = 1;
-    if (o.doodles !== false) doodles(g, t, seed, dark ? C.LIME : C.INK, 0.3, o.n || 10);
-  }
-  function grain(g, t, al = 0.06) {
-    const f = Math.floor(t * 30); g.globalAlpha = al; g.drawImage(tex().n, -rnd(f) * 40, -rnd(f + 1) * 40, W + 40, H + 40); g.globalAlpha = 1;
-  }
-
-  // ---------- камера и переходы ----------
-  function cam(g, u, D, seed = 0, amp = 1) {
-    const q = Math.exp(-u * 7) * amp, z = 1 + 0.1 * q + 0.04 * u / D;
-    g.translate(W / 2 + Math.sin(u * 63 + seed) * 22 * q + Math.sin(u * 0.9 + seed) * 8, H / 2 + Math.cos(u * 51 + seed) * 18 * q);
-    g.rotate(Math.sin(u * 37) * 0.03 * q + Math.sin(u * 0.7 + seed * 2) * 0.006);
-    g.scale(z, z); g.translate(-W / 2, -H / 2);
-  }
-  function punch(g, u, at, x = 540, y = 960, amt = 0.06) {
-    if (u < at) return; const s = 1 + amt * Math.exp(-(u - at) * 10);
-    g.translate(x, y); g.scale(s, s); g.translate(-x, -y);
-  }
-  function drift(t, depth = 1, seed = 0) {
-    return { x: Math.sin(t * 0.7 + seed) * 14 * depth, y: Math.cos(t * 0.53 + seed * 2) * 10 * depth };
-  }
-  function wipe(g, u, col, dur = 0.22) {
-    if (u < 0 || u >= dur) return; const o = eo(u / dur) * (W + 800);
-    g.fillStyle = col; g.beginPath(); g.moveTo(o - 300, 0); g.lineTo(o + W + 500, 0); g.lineTo(o + W + 200, H); g.lineTo(o - 600, H); g.fill();
-    g.fillStyle = C.INK; g.beginPath(); g.moveTo(o - 300, 0); g.lineTo(o - 250, 0); g.lineTo(o - 550, H); g.lineTo(o - 600, H); g.fill();
-  }
-  function glitch(g, u, seed = 0, dur = 0.16) {
-    if (u < 0 || u >= dur) return;
-    g.save(); g.globalAlpha = 0.85 * (1 - u / dur);
-    for (let i = 0; i < 7; i++) { g.fillStyle = PAL[i % 6]; g.fillRect((rnd(i + 3 + seed) - 0.5) * 300, rnd(i + seed * 11) * H, W, 16 + rnd(i * 5 + seed) * 70); }
-    const fd = dur * 0.62; if (u < fd) { g.globalAlpha = 0.45 * (1 - u / fd); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); }
-    g.restore();
-  }
-
-  // ---------- текст ----------
-  function font(g, s, w = 900, fam = SANS) { g.font = `${w} ${s}px ${fam}`; }
-  function fit(g, text, maxW, size, w = 900, fam = SANS) {
-    font(g, size, w, fam); const m = g.measureText(text).width;
-    if (m > maxW) { size = size * maxW / m * 0.99; font(g, size, w, fam); }
-    return size;
-  }
-  function safeX(cx, w, pad = 0) { const h = w / 2 + pad; return 2 * h >= X1 - X0 ? (X0 + X1) / 2 : clamp(cx, X0 + h, X1 - h); }
-  function norm(w) { return String(w).replace(/[.,:;!?«»"'()]/g, '').toUpperCase(); }
-  function split(ws, sp, n) {
-    const m = ws.length, mn = n === 1 ? 1 : 2; let best = null;
-    const wd = (a, b) => { let s = sp * (b - a - 1); for (let i = a; i < b; i++) s += ws[i]; return s; };
-    (function rec(st, left, acc, mx) {
-      if (left === 1) { if (m - st < mn) return; const w = Math.max(mx, wd(st, m)); if (!best || w < best.w) best = { w, cuts: acc.concat(m) }; return; }
-      for (let e = st + mn; e <= m - mn * (left - 1); e++) rec(e, left - 1, acc.concat(e), Math.max(mx, wd(st, e)));
-    })(0, n, [], 0);
-    return best;
-  }
-  const LC = new Map();
-  function layout(g, text, o = {}) {
-    const size = o.size || 124, maxW = Math.min(o.maxW || 860, 900), maxL = o.lines || 3, fam = o.fam || SANS, wt = o.weight || 900;
-    const id = [text, size, maxW, maxL, fam, wt].join('|'); if (LC.has(id)) return LC.get(id);
-    const words = String(text || '').split(/\s+/).filter(Boolean);
-    if (!words.length) return { s: size, sp: 0, ws: [], words, lines: [], lw: [], w: 0 };
-    font(g, size, wt, fam);
-    let sp = g.measureText(' ').width, ws = words.map(w => g.measureText(w).width), best = null;
-    const nMax = Math.max(1, Math.min(maxL, Math.floor(words.length / 2)));
-    for (let n = 1; n <= nMax; n++) { const p = split(ws, sp, n); if (!p) continue; if (!best || p.w < best.w) best = p; if (p.w <= maxW) { best = p; break; } }
-    const s = size * Math.min(1, maxW / best.w * 0.98);
-    font(g, s, wt, fam); sp = g.measureText(' ').width; ws = words.map(w => g.measureText(w).width);
-    const lines = []; let a = 0; best.cuts.forEach(e => { const l = []; for (let i = a; i < e; i++) l.push(i); lines.push(l); a = e; });
-    const lw = lines.map(l => l.reduce((q, i) => q + ws[i], 0) + sp * (l.length - 1));
-    const L = { s, sp, ws, words, lines, lw, w: Math.max(...lw) }; LC.set(id, L); return L;
-  }
-  function headline(g, u, o) {
-    const L = layout(g, o.text, o); if (!L.lines.length) return null;
-    const sz = L.s, lh = sz * (o.lh || 1.06), keys = [].concat(o.key || []).map(norm), seed = o.seed || 0;
-    const cx = safeX(o.x || 540, L.w, sz * 0.12), y0 = o.y || 330, ink = o.ink || C.INK;
-    const ex = o.D && o.exit !== false ? eo((u - (o.D - 0.19)) / 0.19) : 0, st = o.step || 0.18, d0 = o.at == null ? 0.05 : o.at;
-    font(g, sz, o.weight || 900, o.fam || SANS); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-    let j = 0;
-    L.lines.forEach((l, li) => {
-      let x = cx - L.lw[li] / 2; const y = y0 + li * lh;
-      l.forEach(wi => {
-        const w = L.words[wi], ww = L.ws[wi], wx = x + ww / 2, a = eo((u - d0 - j * st) / 0.27), key = keys.includes(norm(w));
-        x += ww + L.sp; j++; if (a <= 0 || ex >= 1) return;
-        const s = (1.1 - 0.1 * a) * (1 - 0.15 * ex) * (key ? 1 + 0.04 * Math.sin(u * 9) : 1), al = a * (1 - ex);
-        g.save(); g.globalAlpha = al; g.translate(wx, y); g.rotate((rnd(j + seed * 7) - 0.5) * 0.07); g.scale(s, s);
-        g.fillStyle = ink; g.fillText(w, 7, 9); g.lineWidth = sz * 0.15; g.strokeStyle = ink; g.strokeText(w, 0, 0);
-        if (a < 1) { g.globalAlpha = al * 0.7; g.fillStyle = C.BLUE; g.fillText(w, -8, 0); g.fillStyle = C.PINK; g.fillText(w, 8, 0); g.globalAlpha = al; }
-        g.fillStyle = key ? (o.kc || C.YEL) : (o.col || '#fff'); g.fillText(w, 0, 0); g.restore();
-      });
-    });
-    return { y0, bottom: y0 + (L.lines.length - 1) * lh + sz * 0.6, size: sz, end: d0 + (j - 1) * st + 0.27 };
-  }
-  function caption(g, u, o) {
-    const at = o.at || 0, D = o.D || 1e9, fam = o.fam || SANS, wt = o.weight || 900, ex = eo((u - (D - 0.19)) / 0.19);
-    if (u < at || ex >= 1) return;
-    const sz = fit(g, o.text, o.maxW || 860, o.size || 66, wt, fam), sp = g.measureText(' ').width;
-    const ws = o.text.split(/\s+/).filter(Boolean), wl = ws.map(w => g.measureText(w).width), tw = g.measureText(o.text).width;
-    const cx = safeX(o.x || 540, tw, o.plate ? 34 : 8), y = o.y || 1460, keys = [].concat(o.key || []).map(norm);
-    g.save(); g.textAlign = 'left'; g.textBaseline = 'middle';
-    if (o.plate) { g.globalAlpha = eo((u - at) / 0.25) * (1 - ex); card(g, cx - tw / 2 - 30, y - sz * 0.78, tw + 60, sz * 1.56, sz * 0.5, o.plate, 6, 8); }
-    let x = cx - tw / 2;
-    ws.forEach((w, i) => {
-      const a = eo((u - at - 0.1 - i * (o.step || 0.12)) / 0.25) * (1 - ex);
-      if (a > 0) { g.globalAlpha = a; g.fillStyle = keys.includes(norm(w)) ? (o.kc || C.YEL) : (o.col || C.CREAM); g.fillText(w, x, y + 24 * (1 - a) + sz * 0.04); }
-      x += wl[i] + sp;
-    });
-    g.restore();
-  }
-  function plate(g, x, y, text, u, o = {}) {
-    if (u <= 0) return 0;
-    const sz = fit(g, text, o.maxW || 820, o.size || 44, o.weight || 800, o.fam || SANS), tw = g.measureText(text).width;
-    const w = tw + sz * 1.2, h = sz * 1.6, s = spr(u); x = safeX(x, w, 6);
-    g.save(); g.translate(x, y); g.rotate(o.rot || 0); g.scale(s, s);
-    card(g, -w / 2, -h / 2, w, h, h / 2, o.bg || C.INK, o.line === false ? 0 : 6, o.off || 0);
-    g.fillStyle = o.fg || C.CREAM; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 0, sz * 0.05); g.restore();
-    return w;
-  }
-  function label(g, x, y, text, o = {}) {
-    const al = o.align || 'left', mw = Math.min(o.maxW || 900, al === 'left' ? X1 - Math.max(x, X0) : 900);
-    fit(g, text, mw, o.size || 28, o.weight || 700, o.fam || MONO); const w = g.measureText(text).width;
-    x = al === 'left' ? Math.max(x, X0) : safeX(x, w);
-    g.textAlign = al === 'left' ? 'left' : 'center'; g.textBaseline = 'middle'; g.fillStyle = o.col || C.INK;
-    g.globalAlpha = o.a == null ? 1 : o.a; g.fillText(text, x, y); g.globalAlpha = 1;
-  }
-  function typeLine(g, x, y, text, p, o = {}) {
-    const sz = fit(g, text, o.maxW || 820, o.size || 48, 700, MONO), tw = g.measureText(text).width;
-    const n = Math.floor(cl(p) * text.length), x0 = safeX(x, tw + sz * 0.6, 4) - (tw + sz * 0.6) / 2, sub = text.slice(0, n);
-    g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = o.col || C.INK; g.fillText(sub, x0, y);
-    if (o.cursor !== false && (p < 1 || (o.t || 0) % 1 < 0.5)) g.fillRect(x0 + g.measureText(sub).width + 4, y - sz * 0.45, sz * 0.5, sz * 0.9);
-  }
-  function stamp(g, x, y, txt, col, u, rot = 0, o = {}) {
-    if (u < 0) return;
-    const f0 = o.from || 2, s = f0 - (f0 - 1) * eo(u / 0.2);
-    const fs = fit(g, txt, o.maxW || 300, o.size || 60), bw = g.measureText(txt).width + 56, bh = fs * 1.66;
-    const hw = (bw / 2 * Math.abs(Math.cos(rot)) + bh / 2 * Math.abs(Math.sin(rot))) * s;
-    x = 2 * hw >= X1 - X0 ? 540 : clamp(x, X0 + hw, X1 - hw);
-    g.save(); g.globalAlpha = Math.min(1, u / 0.1); g.translate(x, y); g.rotate(rot); g.scale(s, s);
-    g.fillStyle = o.bg || '#fff'; rr(g, -bw / 2, -bh / 2, bw, bh, 18); g.fill(); g.lineWidth = 10; g.strokeStyle = col; g.stroke();
-    g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 0, fs * 0.06); g.restore();
-  }
-  function hud(g, t, o = {}) {
-    const a = eo((t - (o.at || 0)) / 0.3); if (a <= 0) return 0;
-    const t0 = o.t0 || 0, p = Math.pow(prog(t, t0, (o.t1 || 18) - t0), o.pow || 1.35);
-    const n = Math.floor(lerp(o.from || 0, o.to == null ? 1000 : o.to, p)), w = o.w || 440, x = clamp(o.x || 70, X0, X1 - w), y = o.y || 128;
-    g.save(); g.globalAlpha = a; g.translate(x, y - 60 * (1 - a));
-    g.fillStyle = C.INK; rr(g, 0, 0, w, 92, 46); g.fill();
-    g.fillStyle = (t * 2) % 1 < 0.5 ? (o.dot || C.RED) : '#5A2020'; circ(g, 40, 46, 11);
-    const ns = fmt(n) + (o.suf || ''); g.textBaseline = 'middle';
-    fit(g, ns, w * 0.45, 54, 700, MONO); const nw = g.measureText(ns).width;
-    g.fillStyle = o.col || C.LIME; g.textAlign = 'right'; g.fillText(ns, w - 28, 49);
-    fit(g, o.label || '', w - nw - 110, 28, 700, MONO); g.fillStyle = C.CREAM; g.textAlign = 'left'; g.fillText(o.label || '', 64, 47);
-    g.restore(); return n;
-  }
-  function bigNum(g, x, y, v, o = {}) {
-    const txt = (o.pre || '') + fmt(v) + (o.suf || ''), sz = fit(g, txt, o.maxW || 860, o.size || 180), w = g.measureText(txt).width;
-    x = safeX(x, w, 20); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-    g.fillStyle = C.INK; g.fillText(txt, x + 8, y + 10); g.lineWidth = sz * 0.12; g.strokeStyle = C.INK; g.strokeText(txt, x, y);
-    g.fillStyle = o.col || C.YEL; g.fillText(txt, x, y);
-  }
-
-  // ---------- фирменные приёмы ----------
-  function rays(g, x, y, t, col, al = 0.3, n = 12) {
-    g.save(); g.translate(x, y); g.rotate(t * 0.4); g.fillStyle = col; g.globalAlpha = al; g.beginPath();
-    for (let i = 0; i < n; i++) { const a = i * TAU / n; g.moveTo(0, 0); g.lineTo(Math.cos(a - 0.1) * 1500, Math.sin(a - 0.1) * 1500); g.lineTo(Math.cos(a + 0.1) * 1500, Math.sin(a + 0.1) * 1500); g.closePath(); }
-    g.fill(); g.restore();
-  }
-  function corners(g, x0, y0, x1, y1, L = 60, col = C.INK, lw = 12) {
-    g.strokeStyle = col; g.lineWidth = lw; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath();
-    g.moveTo(x0, y0 + L); g.lineTo(x0, y0); g.lineTo(x0 + L, y0); g.moveTo(x1 - L, y0); g.lineTo(x1, y0); g.lineTo(x1, y0 + L);
-    g.moveTo(x1, y1 - L); g.lineTo(x1, y1); g.lineTo(x1 - L, y1); g.moveTo(x0 + L, y1); g.lineTo(x0, y1); g.lineTo(x0, y1 - L); g.stroke();
-  }
-  function focus(g, cx, cy, w, h, u, col = C.INK, L = 60) {
-    if (u <= 0) return; const o = 90 * (1 - eo(u / 0.3));
-    g.save(); g.globalAlpha = cl(u / 0.15); corners(g, cx - w / 2 - o, cy - h / 2 - o, cx + w / 2 + o, cy + h / 2 + o, L, col); g.restore();
-  }
-  function ripples(g, x, y, u, col = C.INK, o = {}) {
-    const n = o.n || 3, a1 = o.a1 == null ? TAU : o.a1;
-    g.save(); g.strokeStyle = col; g.lineWidth = o.lw || 10; g.lineCap = 'round';
-    for (let i = 0; i < n; i++) { const p = ((u * (o.speed || 1.6) + i / n) % 1 + 1) % 1; g.globalAlpha = 1 - p; g.beginPath(); g.arc(x, y, (o.r0 || 30) + p * (o.dr || 95), o.a0 || 0, a1); g.stroke(); }
-    g.restore();
-  }
-  function burst(g, x, y, p, col = C.PINK, o = {}) {
-    if (p <= 0 || p >= 1) return; const n = o.n || 8, r0 = (o.r0 || 70) + eo(p) * (o.dr || 90), L = o.len || 40;
-    g.save(); g.strokeStyle = col; g.lineWidth = o.lw || 9; g.lineCap = 'round'; g.globalAlpha = 1 - p; g.beginPath();
-    for (let i = 0; i < n; i++) { const a = i * TAU / n + (o.rot || 0); g.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); g.lineTo(x + Math.cos(a) * (r0 + L), y + Math.sin(a) * (r0 + L)); }
-    g.stroke(); g.restore();
-  }
-  function steam(g, x, y, u, col = '#fff', spread = 110) {
-    g.save(); g.fillStyle = col;
-    for (const sd of [-1, 1]) for (let j = 0; j < 3; j++) { const p = ((u * 1.3 + j / 3) % 1 + 1) % 1; g.globalAlpha = (1 - p) * 0.85; circ(g, x + sd * (spread + p * 40), y - p * 60, 14 + p * 16); }
-    g.restore();
-  }
-  function scan(g, x, y, w, h, u, col = C.LIME, speed = 1) {
-    g.globalAlpha = 0.85; g.fillStyle = col; g.fillRect(x, y + ((u * speed * h) % h + h) % h, w, 8); g.globalAlpha = 1;
-  }
-  function marker(g, x, y, w, h, p, col = C.YEL) { const k = eo(p); if (k <= 0) return; g.fillStyle = col; rr(g, x, y, w * k, h, h / 2); g.fill(); }
-  function dotsLoad(g, x, y, t, col = C.INK, act = C.PINK, r = 10, gap = 34) {
-    for (let d = 0; d < 3; d++) { g.fillStyle = d === Math.floor(t * 6) % 3 ? act : col; circ(g, x + (d - 1) * gap, y, r); }
-  }
-  function arrow(g, x0, y0, x1, y1, p, col = C.INK, lw = 10, bend = 0.25) {
-    p = cl(p); if (p <= 0) return;
-    const mx = (x0 + x1) / 2 - (y1 - y0) * bend, my = (y0 + y1) / 2 + (x1 - x0) * bend;
-    const pt = q => [(1 - q) * (1 - q) * x0 + 2 * (1 - q) * q * mx + q * q * x1, (1 - q) * (1 - q) * y0 + 2 * (1 - q) * q * my + q * q * y1];
-    g.strokeStyle = col; g.lineWidth = lw; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath();
-    for (let i = 0; i <= 24; i++) { const [x, y] = pt(p * i / 24); g.lineTo(x, y); } g.stroke();
-    if (p > 0.85) {
-      const [ax, ay] = pt(p), [bx, by] = pt(p - 0.05), a = Math.atan2(ay - by, ax - bx), L = lw * 3.2; g.beginPath();
-      g.moveTo(ax - Math.cos(a - 0.5) * L, ay - Math.sin(a - 0.5) * L); g.lineTo(ax, ay); g.lineTo(ax - Math.cos(a + 0.5) * L, ay - Math.sin(a + 0.5) * L); g.stroke();
-    }
-  }
-  function spark(g, x, y, r, col = '#fff', rot = 0) { g.fillStyle = col; g.beginPath(); star(g, x, y, r, r * 0.3, 4, rot); g.fill(); }
-
-  // ---------- герои и предметы ----------
-  function shadow(g, x, y, w, al = 0.22) { g.fillStyle = `rgba(21,17,28,${al})`; g.beginPath(); g.ellipse(x, y, w, w * 0.17, 0, 0, TAU); g.fill(); }
-  function bodyPath(g, kind, t) {
-    if (kind === 'box') { rr(g, -160, -125, 320, 250, 44); return; }
-    g.beginPath();
-    if (kind === 'drop') {
-      g.moveTo(0, -180); g.bezierCurveTo(70, -110, 160, -40, 155, 30); g.bezierCurveTo(150, 110, 80, 135, 0, 135);
-      g.bezierCurveTo(-80, 135, -150, 110, -155, 30); g.bezierCurveTo(-160, -40, -70, -110, 0, -180); g.closePath();
-    } else if (kind === 'blob') {
-      for (let i = 0; i <= 24; i++) { const a = i / 24 * TAU, r = 145 + 9 * Math.sin(a * 5 + t * 3); g.lineTo(Math.cos(a) * r * 1.07, Math.sin(a) * r * 0.92); }
-      g.closePath();
-    } else g.ellipse(0, 0, 158, 135, 0, 0, TAU);
-  }
-  // o: body egg|blob|drop|box, col, top sprout|antenna|ears|tuft|none, acc, face smile|talk|boil|wink|shock|sleep|happy, look -1..1, arms, wave, glasses, line, tilt
-  function mascot(g, x, y, s, t, o = {}) {
-    if (s <= 0) return;
-    const col = o.col || C.BLUE, f = o.face || 'smile', ln = o.line || C.INK, top = o.top || 'sprout', acc = o.acc || C.YEL, ax = Math.sin(t * 5) * 18;
-    g.save(); g.translate(x, y); shadow(g, 0, 178 * s, 130 * s);
-    const b = Math.sin(t * 7) * 0.04; g.scale(s * (1 - b), s * (1 + b)); g.rotate(Math.sin(t * 2.3) * 0.05 + (o.tilt || 0));
-    g.lineWidth = 12; g.strokeStyle = ln; g.lineJoin = 'round'; g.lineCap = 'round'; g.fillStyle = acc;
-    if (top === 'antenna') { g.beginPath(); g.moveTo(0, -120); g.quadraticCurveTo(ax * 0.3, -170, ax, -200); g.stroke(); circ(g, ax, -206, 20); g.stroke(); }
-    else if (top === 'sprout') {
-      g.beginPath(); g.moveTo(0, -120); g.quadraticCurveTo(ax * 0.3, -165, ax * 0.6, -190); g.stroke();
-      for (const sd of [-1, 1]) { g.save(); g.translate(ax * 0.6, -190); g.rotate(sd * 0.5); g.beginPath(); g.ellipse(sd * 30, -8, 32, 15, 0, 0, TAU); g.fill(); g.stroke(); g.restore(); }
-    } else if (top === 'ears') for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 50, -110); g.lineTo(sd * (120 + ax * 0.3), -200); g.lineTo(sd * 140, -60); g.closePath(); g.fill(); g.stroke(); }
-    else if (top === 'tuft') { g.beginPath(); for (let i = -1; i <= 1; i++) { g.moveTo(i * 30, -125); g.quadraticCurveTo(i * 40 + ax * 0.4, -175, i * 55 + ax * 0.8, -185); } g.stroke(); }
-    if (o.arms) for (const sd of [-1, 1]) {
-      const w = sd === 1 && o.wave ? Math.sin(t * 12) * 0.5 - 0.7 : 0.35;
-      g.save(); g.translate(sd * 148, 30); g.rotate(sd * w); g.beginPath(); g.moveTo(0, 0); g.lineTo(sd * 60, 30); g.stroke();
-      g.fillStyle = col; circ(g, sd * 66, 34, 18); g.stroke(); g.restore();
-    }
-    g.fillStyle = col; bodyPath(g, o.body || 'egg', t); g.fill(); g.lineWidth = 12; g.stroke();
-    g.fillStyle = 'rgba(255,255,255,.3)'; rr(g, -110, -98, 110, 30, 15); g.fill();
-    g.fillStyle = o.cheek || C.PINK; g.globalAlpha = 0.55; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(sd * 105, 48, 24, 14, 0, 0, TAU); g.fill(); }
-    g.globalAlpha = 1; const bl = (t % 3.3) < 0.1;
-    for (const sd of [-1, 1]) {
-      const ex = sd * 62, ey = -22; g.lineWidth = 10; g.beginPath();
-      if (f === 'sleep') { g.moveTo(ex - 28, ey - 4); g.quadraticCurveTo(ex, ey + 18, ex + 28, ey - 4); g.stroke(); continue; }
-      if (f === 'happy' || (f === 'wink' && sd === 1) || (bl && f !== 'boil' && f !== 'shock')) { g.moveTo(ex - 30, ey + 6); g.quadraticCurveTo(ex, ey - 26, ex + 30, ey + 6); g.stroke(); continue; }
-      g.fillStyle = '#fff'; g.lineWidth = 8; g.ellipse(ex, ey, 40, 46, 0, 0, TAU); g.fill(); g.stroke();
-      if (f === 'boil') { g.lineWidth = 6; g.beginPath(); for (let a = 0; a < 14; a += 0.35) { const r = a * 2.4; g.lineTo(ex + Math.cos(a + t * 14 * sd) * r, ey + Math.sin(a + t * 14 * sd) * r); } g.stroke(); }
-      else { const px = ex + (o.look != null ? o.look * 14 : Math.sin(t * 1.7) * 12), py = ey + 6, pr = f === 'shock' ? 11 : 19; g.fillStyle = ln; circ(g, px, py, pr); g.fillStyle = '#fff'; circ(g, px + pr * 0.37, py - pr * 0.42, pr * 0.32); }
-    }
-    if (o.glasses) { g.lineWidth = 8; g.strokeStyle = ln; for (const sd of [-1, 1]) { rr(g, sd * 62 - 52, -78, 104, 110, 30); g.stroke(); } g.beginPath(); g.moveTo(-10, -30); g.lineTo(10, -30); g.stroke(); }
-    g.lineWidth = 9; g.fillStyle = ln; g.beginPath();
-    if (f === 'talk') { g.ellipse(0, 58, 30, 8 + 16 * Math.abs(Math.sin(t * 17)), 0, 0, TAU); g.fill(); }
-    else if (f === 'boil') { for (let i = 0; i <= 8; i++) g.lineTo(-36 + i * 9, 58 + (i % 2 ? 8 : -8)); g.stroke(); }
-    else if (f === 'shock') { g.ellipse(0, 62, 20, 26, 0, 0, TAU); g.fill(); }
-    else if (f === 'sleep') { g.moveTo(-16, 58); g.lineTo(16, 58); g.stroke(); }
-    else if (f === 'happy') { g.arc(0, 32, 40, 0.15, Math.PI - 0.15); g.closePath(); g.fill(); }
-    else { g.arc(0, 34, 36, 0.5, 2.64); g.stroke(); }
-    g.restore();
-  }
-  function hand(g, x, y, rot = 0, s = 1, press = 0) {
-    const k = s * (1 - 0.08 * press); g.save(); g.translate(x, y); g.rotate(rot); g.scale(k, k);
-    g.strokeStyle = C.INK; g.lineWidth = 8; g.lineJoin = 'round'; g.lineCap = 'round';
-    card(g, -60, 170, 150, 170, 60, C.SKIN, 8);
-    g.beginPath(); for (let i = 0; i < 2; i++) { g.moveTo(45, 225 + i * 45); g.lineTo(88, 225 + i * 45); } g.stroke();
-    card(g, -38, 0, 76, 260, 38, C.SKIN, 8);
-    g.fillStyle = C.NAIL; rr(g, -22, 10, 44, 44, 16); g.fill(); g.restore();
-  }
-  function phone(g, x, y, s, t, o = {}) {
-    const n = Math.min(o.rows == null ? 4 : o.rows, 4), done = !!o.done;
-    g.save(); g.translate(x, y); g.rotate((o.rot || 0) + Math.sin(t * 1.2) * 0.015); g.scale(s, s);
-    g.fillStyle = C.INK; rr(g, -250, -430, 500, 860, 64); g.fill();
-    g.fillStyle = o.screen || C.CREAM; rr(g, -224, -400, 448, 800, 44); g.fill();
-    g.fillStyle = o.acc || C.VIO; rr(g, -190, -360, 380, 60, 30); g.fill();
-    for (let i = 0; i < n; i++) {
-      const yy = -260 + i * 110; card(g, -190, yy, 380, 84, 22, '#fff', 5);
-      g.fillStyle = PAL[(i + (o.seed || 0)) % 5]; circ(g, -145, yy + 42, 22); g.fillStyle = C.SHADE;
-      rr(g, -105, yy + 22, 200 - i * 20, 16, 8); g.fill(); rr(g, -105, yy + 48, 120, 14, 7); g.fill();
-    }
-    card(g, -170, 250, 340, 100, 50, done ? C.GRN : (o.btn || C.BLUE), 7);
-    g.save(); g.translate(0, 300); glyph(g, done ? 'check' : 'arrow', 30, '#fff', 12); g.restore();
-    if (o.ping != null && !done) ripples(g, 0, 300, o.ping, C.PINK, { r0: 30, dr: 110, lw: 8, speed: 1.2 });
-    g.restore(); return { x, y: y + 300 * s };
-  }
-  function sheet(g, x, y, s, t, o = {}) {
-    const n = Math.min(o.rows || 8, 8), rd = o.read || 0;
-    g.save(); g.translate(x, y); g.rotate((o.rot == null ? -0.05 : o.rot) + Math.sin(t * 1.5) * 0.012); g.scale(s, s);
-    g.fillStyle = C.INK; rr(g, -246, -306, 520, 640, 26); g.fill();
-    card(g, -260, -320, 520, 640, 26, o.paper || C.CREAM, 8);
-    g.fillStyle = o.acc || C.PINK; rr(g, -210, -275, 260, 44, 22); g.fill();
-    g.fillStyle = o.acc2 || C.ORA; g.beginPath(); g.arc(170, -255, 42, 0, Math.PI); g.closePath(); g.fill(); g.stroke();
-    for (let i = 0; i < n; i++) {
-      const yy = -190 + i * 60, w = 410 - rnd(i + 2 + (o.seed || 0)) * 150;
-      if (i < rd) { g.fillStyle = o.hl || C.YEL; rr(g, -216, yy - 8, (i + 1 <= rd ? w : w * (rd - i)) + 12, 38, 19); g.fill(); }
-      g.fillStyle = C.SHADE; rr(g, -210, yy, w, 22, 11); g.fill();
-    }
-    if (o.scan != null) scan(g, -250, -300, 500, 600, o.scan, C.LIME, 0.87);
-    g.restore();
-  }
-  function glyph(g, kind, r, col = C.INK, lw = 8) {
-    g.fillStyle = col; g.strokeStyle = col; g.lineWidth = lw; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath();
-    switch (kind) {
-      case 'tri': g.moveTo(-r, r * 0.9); g.lineTo(0, -r); g.lineTo(r, r * 0.9); g.closePath(); g.fill(); break;
-      case 'zig': for (let k = 0; k <= 5; k++) g.lineTo(-r * 1.4 + k * r * 0.56, k % 2 ? r * 0.6 : -r * 0.6); g.stroke(); break;
-      case 'bars': for (let k = 0; k < 3; k++) g.rect(-r * 1.3 + k * r * 1.1, -r, r * 0.55, r * 2); g.fill(); break;
-      case 'ring': g.arc(0, 0, r, 0, TAU); g.stroke(); g.beginPath(); g.arc(0, 0, r * 0.3, 0, TAU); g.fill(); break;
-      case 'check': g.moveTo(-r * 0.8, 0); g.lineTo(-r * 0.2, r * 0.6); g.lineTo(r * 0.9, -r * 0.6); g.stroke(); break;
-      case 'cross': g.moveTo(-r * 0.7, -r * 0.7); g.lineTo(r * 0.7, r * 0.7); g.moveTo(r * 0.7, -r * 0.7); g.lineTo(-r * 0.7, r * 0.7); g.stroke(); break;
-      case 'dash': g.moveTo(-r * 0.8, 0); g.lineTo(r * 0.8, 0); g.stroke(); break;
-      case 'plus': g.moveTo(-r * 0.8, 0); g.lineTo(r * 0.8, 0); g.moveTo(0, -r * 0.8); g.lineTo(0, r * 0.8); g.stroke(); break;
-      case 'arrow': g.moveTo(-r * 0.8, 0); g.lineTo(r * 0.8, 0); g.moveTo(r * 0.2, -r * 0.6); g.lineTo(r * 0.8, 0); g.lineTo(r * 0.2, r * 0.6); g.stroke(); break;
-      case 'star': star(g, 0, 0, r, r * 0.45, 5); g.fill(); break;
-      case 'wave': for (let k = 0; k <= 16; k++) g.lineTo(-r * 1.3 + k * r * 2.6 / 16, Math.sin(k * 0.8) * r * 0.4); g.stroke(); break;
-      default: g.arc(0, 0, r, 0, TAU); g.fill();
-    }
-  }
-  function tile(g, x, y, w, h, o = {}) {
-    const fl = o.flip == null ? 1 : o.flip, s = o.s == null ? 1 : o.s; if (s <= 0) return;
-    g.save(); g.translate(x, y); g.scale(s * Math.max(0.05, Math.abs(fl)), s);
-    g.fillStyle = o.col || C.YEL; g.strokeStyle = C.INK; g.lineWidth = 7; rr(g, -w / 2, -h / 2, w, h, 20); g.fill(); g.stroke();
-    if (o.glyph) glyph(g, o.glyph, Math.min(w, h) * 0.24, C.INK, 8);
-    if (o.num != null) { g.fillStyle = C.INK; g.font = `700 24px ${MONO}`; g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText(String(o.num).padStart(2, '0'), -w / 2 + 14, -h / 2 + 11); }
-    g.restore();
-  }
-  function badge(g, x, y, r, kind, col = C.GRN, p = 1) {
-    if (p <= 0) return; g.save(); g.translate(x, y); g.scale(p, p);
-    g.fillStyle = col; g.strokeStyle = C.INK; g.lineWidth = 9; circ(g, 0, 0, r); g.stroke();
-    glyph(g, kind, r * 0.5, '#fff', r * 0.22); g.restore();
-  }
-  function chat(g, x, y, w, h, t, o = {}) {
-    const s = o.s == null ? 1 : o.s; if (s <= 0) return; const tl = o.tail === 'r' ? 1 : -1;
-    g.save(); g.translate(x, y); g.scale(s, s); g.rotate(o.rot || 0);
-    g.fillStyle = C.INK; rr(g, -w / 2 + 10, -h / 2 + 12, w, h, h * 0.45); g.fill();
-    g.fillStyle = o.col || '#fff'; g.strokeStyle = C.INK; g.lineWidth = 7; g.lineJoin = 'round';
-    g.beginPath(); g.moveTo(tl * w * 0.2, h / 2 - 4); g.lineTo(tl * w * 0.42, h / 2 + 34); g.lineTo(tl * w * 0.05, h / 2 - 4); g.fill(); g.stroke();
-    rr(g, -w / 2, -h / 2, w, h, h * 0.45); g.fill(); g.stroke();
-    if (o.lines) { g.fillStyle = C.SHADE; for (let i = 0; i < o.lines; i++) { rr(g, -w * 0.38, -h * 0.25 + i * 30, w * (0.76 - 0.2 * rnd(i + 9)), 16, 8); g.fill(); } }
-    else for (let d = 0; d < 3; d++) { g.fillStyle = d === (Math.floor(t * 6) + (o.seed || 0)) % 3 ? C.PINK : C.INK; circ(g, (d - 1) * w * 0.24, 0, h * 0.11); }
-    g.restore();
-  }
-  // kind: carton|jar|pot|bottle|cup|box; (x,y) - низ предмета
-  function item(g, x, y, s, kind, col = C.ORA, col2 = C.CREAM) {
-    g.save(); g.translate(x, y); g.scale(s, s); g.strokeStyle = C.INK; g.lineWidth = 8; g.lineJoin = 'round'; g.fillStyle = col;
-    if (kind === 'carton') {
-      rr(g, -90, -260, 180, 260, 10); g.fill(); g.stroke();
-      g.beginPath(); g.moveTo(-90, -260); g.lineTo(0, -320); g.lineTo(90, -260); g.closePath(); g.fillStyle = col2; g.fill(); g.stroke();
-      g.fillRect(-90, -170, 180, 60); g.strokeRect(-90, -170, 180, 60);
-    } else if (kind === 'jar') { rr(g, -80, -240, 160, 240, 28); g.fill(); g.stroke(); g.fillStyle = col2; g.fillRect(-80, -160, 160, 70); g.strokeRect(-80, -160, 160, 70); }
-    else if (kind === 'pot') { rr(g, -95, -210, 190, 210, 44); g.fill(); g.stroke(); g.fillStyle = C.INK; rr(g, -70, -250, 140, 44, 10); g.fill(); g.fillStyle = col2; circ(g, 0, -100, 40); g.stroke(); }
-    else if (kind === 'bottle') { rr(g, -30, -300, 60, 90, 14); g.fill(); g.stroke(); rr(g, -80, -230, 160, 230, 40); g.fill(); g.stroke(); g.fillStyle = col2; g.fillRect(-80, -150, 160, 60); g.strokeRect(-80, -150, 160, 60); }
-    else if (kind === 'cup') {
-      g.beginPath(); g.arc(88, -120, 42, -1.3, 1.3); g.stroke();
-      g.beginPath(); g.moveTo(-90, -200); g.lineTo(90, -200); g.lineTo(65, 0); g.lineTo(-65, 0); g.closePath(); g.fill(); g.stroke();
-      g.fillStyle = col2; circ(g, 0, -100, 34); g.stroke();
-    } else { g.fillRect(-100, -190, 200, 190); g.strokeRect(-100, -190, 200, 190); g.fillStyle = col2; g.fillRect(-20, -190, 40, 190); g.strokeRect(-20, -190, 40, 190); }
-    g.restore();
-  }
-  function shelf(g, x0, x1, y, col = C.CREAM) { card(g, Math.max(x0, 0), y, Math.min(x1, W) - Math.max(x0, 0), 36, 10, col, 8); }
 
   // ---------- звук ----------
-  function sfx(s, E, jit = 0.2) {
+  // склейки: щелчок-глитч; names чередуются
+  function cutSounds(s, cuts, names = ['click', 'tick'], v = 0.13) {
+    const N = Array.isArray(names) ? names : [names];
+    cuts.slice(1).forEach((c, i) => s.play(c, N[i % N.length], v, { pitch: 0.9 + s.rand(i + 5) * 0.3 }));
+  }
+  // E: [[t, имя, громкость, pitch?], ...]
+  function sfx(s, E, jit = 0.15) {
     E.forEach((e, i) => s.play(Math.max(0, e[0]), e[1], clamp(e[2] || 0.12, 0.05, 0.3),
       { pitch: clamp((e[3] || 1) * (1 - jit / 2 + s.rand(i + 1) * jit), 0.5, 2) }));
   }
 
-  return { W, H, TAU, SANS, SERIF, MONO, C, PAL, PAIRS, cl, clamp, lerp, prog, eo, eio, back, spr, inOut, rnd, fmt,
-    scenes, scene, circ, rr, card, star, tex, bg, doodles, grain, cam, punch, drift, wipe, glitch,
-    font, fit, safeX, norm, layout, headline, caption, plate, label, typeLine, stamp, hud, bigNum,
-    rays, corners, focus, ripples, burst, steam, scan, marker, dotsLoad, arrow, spark,
-    shadow, mascot, hand, phone, sheet, glyph, tile, badge, chat, item, shelf, sfx };
+  return { W, H, X0, X1, TAU, SANS, SERIF, MONO, SX, C, BG, TOK, cl, clamp, lerp, prog, eo, eio, back, spr, rnd, fmt, pad,
+    scene, font, paint, colOf, tex, bg, dashWall, hud, counter, cam, gtext, jitter, cut,
+    wlay, words, poster, type, bigNum, tokens, bars, stamp, slider, win, note, calendar, wave, storm, stormBg, rr, cutSounds, sfx };
 })();
