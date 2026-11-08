@@ -4030,23 +4030,6 @@ function buildChatMenu() {
   nm.id = "chat-menu-style-name";
   head.appendChild(nm);
   menu.appendChild(head);
-  const list = [{ id: "", name: "Авто" }, ...(Array.isArray(STYLE_LIST_CACHE) ? STYLE_LIST_CACHE : [])];
-  list.forEach((s) => {
-    const id = String(s.id || "");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "chat-menu-item";
-    b.setAttribute("role", "menuitemradio");
-    b.dataset.style = id;
-    b.dataset.label = id ? T(String(s.name || id)) : T("Авто");
-    b.textContent = b.dataset.label;
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      setCreativeStyle(id);
-      menu.hidden = true;
-    });
-    menu.appendChild(b);
-  });
   const demo = document.createElement("button");
   demo.type = "button";
   demo.className = "chat-menu-item chat-menu-demo";
@@ -4072,6 +4055,23 @@ function buildChatMenu() {
     });
     menu.appendChild(sk);
   }
+  const list = [{ id: "", name: "Авто" }, ...(Array.isArray(STYLE_LIST_CACHE) ? STYLE_LIST_CACHE : [])];
+  list.forEach((s) => {
+    const id = String(s.id || "");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chat-menu-item";
+    b.setAttribute("role", "menuitemradio");
+    b.dataset.style = id;
+    b.dataset.label = id ? T(String(s.name || id)) : T("Авто");
+    b.textContent = b.dataset.label;
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setCreativeStyle(id);
+      menu.hidden = true;
+    });
+    menu.appendChild(b);
+  });
   refreshStyleMarks();
 }
 function stopStyleVideos() {
