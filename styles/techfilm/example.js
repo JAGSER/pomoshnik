@@ -1,7 +1,6 @@
-// example.js: «Премьера TanStack AI» в стиле TECH (только библиотека + canvas)
-const T=TECH,C=T.C;
+// «Как работает солнечная батарея» в стиле TECH
+const T=TECH,C=T.C,A='#FFB23F',PK='#FF4D7E',VI='#8A6BFF',MONO='"DejaVu Sans Mono",ui-monospace,Menlo,"Roboto Mono",monospace';
 let CUT=null;
-const MOD=['текст','звук','изображение','видео'];
 
 function draw(t,k){const g=k.g;
   if(!CUT)CUT=k.subs.map(s=>s.t0).concat(k.duration);
@@ -11,121 +10,157 @@ function draw(t,k){const g=k.g;
   T.cutFlash(g,t,CUT);
 }
 
-// 1. Поле ввода, искра улетает в центр, рождается сеть
-function s1(g,t,S){const l=S.l;
-  T.title(g,['Чем','станет','один','AI','API?'],{t,t0:S.t0,tout:S.t1,acc:2});
-  const b=T.inputBar(g,150,1360,780,'спроси что угодно',t,S.t0,{press:S.t0+.75,out:S.t0+1.85});
-  if(l>=.82&&l<1.2)T.comet(g,b.sx,b.sy,540,960,T.eo(T.prog(l,.82,1.15)));
-  if(l>=1.1){const conv=T.eo(T.prog(l,1.72,2));
-    T.ring(g,540,960,T.prog(l,1.1,1.7),60,480,'a');
-    T.network(g,540,960,t,S.t0+1.1,{conv,seed:11});
-    T.spark(g,540,960,1.2+.3*conv);}
-}
+// ---------- предметы темы ----------
+function rays(g,x,y,r0,r1,a,rot){if(a<=0)return;g.save();g.globalAlpha*=T.clamp(a);
+  g.strokeStyle=A;g.lineWidth=5;g.lineCap='round';g.beginPath();
+  for(let i=0;i<12;i++){const an=rot+i*Math.PI/6,q=i%2?.72:1,r=r0+(r1-r0)*q*T.clamp(a);
+    g.moveTo(x+Math.cos(an)*r0,y+Math.sin(an)*r0);g.lineTo(x+Math.cos(an)*r,y+Math.sin(an)*r);}
+  g.stroke();g.restore();}
 
-// 2. chat() в центре, 24 провайдера по кругу, счётчик в заголовке
-function s2(g,t,S){const l=S.l,ex=T.eo(T.prog(l,1.72,2)),n=T.countTo(l,.15,1.5,24);
-  T.title(g,['chat()','и','24','провайдера'],{t,t0:S.t0,tout:S.t1,acc:2,disp:{2:String(n)}});
-  const ph=Math.min(3,Math.floor(l/.4));
-  T.hub(g,540,960,(i)=>{const id=ph*6+i+1;return '#'+(id<10?'0':'')+id;},t,S.t0,{rx:360,ry:300,ex});
-  const pa=T.spring(T.prog(l,0,.4)),ps=pa*(1-ex);
-  T.glow(g,'a',540,960,260*Math.max(.01,ps),.5);
-  T.orbitDots(g,540,960,230,115,3,l,{a:1-ex});
-  T.pill(g,'chat()',540,960,{a:ps,size:80});
-  if(ex>0)T.spark(g,T.lerp(540,130,ex),T.lerp(960,640,ex),ex);
-  T.subline(g,'провайдер меняется, поток нет',1420,t,S.t0+.55,S.t0+1.8);
-}
+function panel(g,cx,cy,w,h,a,lit,t){if(a<=0)return;g.save();g.globalAlpha*=T.clamp(a*1.5);const al=g.globalAlpha;
+  g.translate(cx,cy);const s=.9+.1*a;g.scale(s,s);
+  g.strokeStyle='#2C3039';g.lineWidth=6;g.lineCap='round';g.beginPath();
+  g.moveTo(-w*.28,h/2);g.lineTo(-w*.34,h/2+80);g.moveTo(w*.28,h/2);g.lineTo(w*.34,h/2+80);g.stroke();
+  const x=-w/2,y=-h/2;T.card(g,x,y,w,h,{r:18});g.globalAlpha=al;
+  const cols=6,rows=4,p=18,gp=8,cw=(w-2*p-gp*(cols-1))/cols,ch=(h-2*p-gp*(rows-1))/rows;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const X=x+p+c*(cw+gp),Y=y+p+r*(ch+gp),i=r*cols+c;
+    g.globalAlpha=al;g.fillStyle='#1C2230';g.fillRect(X,Y,cw,ch);
+    if(lit>0){g.globalAlpha=al*lit*(.2+.16*Math.sin(t*3-i*.55));g.fillStyle=A;g.fillRect(X,Y,cw,ch);}}
+  g.globalAlpha=al;g.strokeStyle='#3A3E48';g.lineWidth=2;g.beginPath();
+  for(let r=0;r<rows;r++){const Y=y+p+r*(ch+gp);g.moveTo(x+p,Y+ch/3);g.lineTo(x+w-p,Y+ch/3);g.moveTo(x+p,Y+2*ch/3);g.lineTo(x+w-p,Y+2*ch/3);}
+  g.stroke();
+  const q=T.clamp(a);T.gradLine(g,x,y,x+w,y,q,3);T.gradLine(g,x+w,y,x+w,y+h,q,3);
+  T.gradLine(g,x+w,y+h,x,y+h,q,3);T.gradLine(g,x,y+h,x,y,q,3);
+  g.restore();}
 
-// 3. Вертикальный поток и четыре модальности
-function s3(g,t,S){const l=S.l,ex=T.exitK(l,S.len);
-  T.title(g,['Один','паттерн.','Все','модальности.'],{t,t0:S.t0,tout:S.t1,acc:3,size:112});
-  const hy=T.travel([[0,0,640],[.2,0,745],[.7,0,965],[1.2,0,1185],[1.7,0,1405],[2.2,0,1500]],l)[1];
-  T.spine(g,130,640,1500,hy,l,1-ex);
-  for(let i=0;i<4;i++){const Y=650+i*220,ti=.2+i*.5,a=T.spring(T.prog(l,ti-.05,ti+.4));
-    if(a<=0){T.ghost(g,200,Y,780,190,MOD[i],.6*T.clamp(l/.3)*(1-ex));continue;}
-    const q=T.prog(l,ti,ti+.5),c=['a','b','c','ok'][i],lt=l-ti;
-    g.globalAlpha=T.clamp(a*1.5)*(1-ex);
-    T.gradLine(g,130,Y+95,200,Y+95,T.clamp(a*2),4);
-    g.save();g.translate((1-a)*90-ex*60,0);
-    T.rowCard(g,200,Y,780,190,{col:c,label:MOD[i]});
-    if(i===0)T.typeLine(g,'Вот ваш план на день',240,Y+135,q,{lt,cur:c});
-    else if(i===1)T.wave(g,240,Y+118,680,q,lt,c);
-    else if(i===2)T.tiles(g,240,Y+62,700,112,q);
-    else T.timeline(g,240,Y+76,680,q,lt);
-    g.restore();}
-  g.globalAlpha=1;
-  T.spark(g,T.lerp(130,540,ex),T.lerp(hy,630,ex),1);
-}
+function photon(g,x,y,dx,dy,a){if(a<=0)return;g.save();g.globalAlpha*=T.clamp(a);
+  const nx=-dy,ny=dx;g.strokeStyle=A;g.lineWidth=4;g.lineCap='round';g.beginPath();
+  for(let j=0;j<=18;j++){const s=j*6,w=Math.sin(j*.95)*13*(1-j/18);
+    const px=x-dx*s+nx*w,py=y-dy*s+ny*w;j?g.lineTo(px,py):g.moveTo(px,py);}
+  g.stroke();g.fillStyle=A;g.beginPath();g.arc(x,y,9,0,7);g.fill();g.restore();}
 
-// 4. Агенты в песочницах, хаб MCP и инструменты
-function s4(g,t,S){const l=S.l,ex=T.exitK(l,S.len),SRC=[540,630],XS=[250,540,830],RT=[1.2,1.6,1.4];
-  T.title(g,['Агенты,','песочницы','и','MCP'],{t,t0:S.t0,tout:S.t1,acc:3,size:90});
+function dot(g,x,y,r,col,a){if(a<=0)return;g.save();g.globalAlpha*=T.clamp(a);g.fillStyle=col;
+  g.beginPath();g.arc(x,y,r,0,7);g.fill();g.restore();}
+
+// 1. Хук: солнце-искра, лучи в панель
+function s1(g,t,S){const l=S.l,ex=T.exitK(l,S.len),SUN=[540,640];
+  T.title(g,['Свет','в','ток'],{t,t0:S.t0,tout:S.t1,acc:2,size:116});
   g.globalAlpha=1-ex;
-  for(let i=0;i<3;i++){const x=XS[i],c=T.ACC[i];
-    T.curve(g,SRC,[540,720],[x,700],[x,800],T.eo(T.prog(l,.08,.5)),c,4);
-    T.curve(g,[x,1050],[x,1150],[540,1120],[540,1210],T.eo(T.prog(l,1.3+i*.1,1.6+i*.1)),C[c]+'99',3);}
-  for(let i=0;i<3;i++){const a=T.spring(T.prog(l,.42+i*.08,.85+i*.08));
-    T.sandbox(g,XS[i],925,{title:'запуск '+(i+1),col:T.ACC[i],pg:T.eo(T.prog(l,.7,.7+RT[i])),l,a,seed:i});}
-  T.pill(g,'MCP',540,1270,{a:T.spring(T.prog(l,1.2,1.6)),size:64,weight:800});
-  const TL=['поиск','файлы','база'];
-  for(let i=0;i<3;i++){const a=T.spring(T.prog(l,1.6+i*.1,2+i*.1));if(a<=0)continue;
-    const P=[[540,1330],[540,1390],[XS[i],1370],[XS[i],1432]];
-    T.curve(g,P[0],P[1],P[2],P[3],T.eo(T.prog(l,1.55+i*.1,1.8+i*.1)),C.wire,3);
-    T.flowDot(g,P[0],P[1],P[2],P[3],l*1.2+i*.3,'a');
-    T.chip(g,TL[i],XS[i],1470,{col:T.ACC[i],a});}
+  rays(g,SUN[0],SUN[1],70,130,T.eo(T.prog(l,.05,.4)),t*.2);
+  const pa=T.spring(T.prog(l,.15,.6)),lit=T.eo(T.prog(l,1,1.8));
+  panel(g,540,1130,760,400,pa,lit,t);
+  const XS=[330,540,750];
+  for(let i=0;i<3;i++){const P=[[540,790],[540,850],[XS[i],860],[XS[i],930]];
+    T.curve(g,P[0],P[1],P[2],P[3],T.eo(T.prog(l,.45+i*.08,.85+i*.08)),'a',3);
+    if(l>1.05)T.flowDot(g,P[0],P[1],P[2],P[3],l*1.1+i*.33,'a');}
+  T.subline(g,'солнечная батарея',1560,t,S.t0+1.4,S.t1-.3);
   g.globalAlpha=1;
-  T.spark(g,T.lerp(SRC[0],150,ex),T.lerp(SRC[1],985,ex),1);
+  T.spark(g,T.lerp(SUN[0],220,T.eo(ex)),T.lerp(SUN[1],700,T.eo(ex)),1.6-.6*ex);
 }
 
-// 5. Обрыв потока, переподключение, штамп проверки типов
-function s5(g,t,S){const l=S.l,ex=T.exitK(l,S.len);
-  T.title(g,['Поток','не','рвётся,','типы','сходятся.'],{t,t0:S.t0,tout:S.t1,acc:3,size:112});
-  const a=T.spring(T.prog(l,0,.4)),fr=l>.65&&l<1.3;
-  const P=l<.65?.45*T.prog(l,.08,.65):.45+.55*T.eo(T.prog(l,1.3,2.1));
-  const gap=fr?70*T.eo(T.prog(l,.65,.8))*(1-T.spring(T.prog(l,1,1.3))):0;
-  const hx=T.lerp(150,930,P),ty=985;
-  g.save();g.globalAlpha=T.clamp(a*1.5)*(1-ex);
-  const sc=.94+.06*a;g.translate(540,850);g.scale(sc,sc);g.translate(-540,-850);
-  T.card(g,100,640,880,420,{r:32});
-  T.label(g,'поток ответа',144,704);
-  const st=l<.65?['в эфире','ok']:fr?['обрыв','b']:['снова в сети','ok'];
-  T.status(g,st[0],936,704,st[1]);
-  const L1='Шаг 1: собираю данные',L2='Шаг 2: пишу вывод',n=Math.floor(P*(L1.length+L2.length));
-  const col=fr?'mut':'ink';
-  T.typeLine(g,L1,144,810,Math.min(1,n/L1.length),{color:col,cursor:n<L1.length,lt:l});
-  if(n>L1.length)T.typeLine(g,L2,144,880,(n-L1.length)/L2.length,{color:col,lt:l});
-  T.streamBar(g,150,930,ty,P,{gap,broken:fr});
-  const ma=T.eo(T.prog(l,1,1.2))*(1-T.prog(l,1.8,1.95));
-  if(ma>0)T.label(g,'та же точка',T.clamp(hx,250,830),ty+52,{align:'center',size:28,a:ma});
+// 2. Свет состоит из фотонов
+function s2(g,t,S){const l=S.l,ex=T.exitK(l,S.len),O=[220,700];
+  T.title(g,['Свет:','фотоны'],{t,t0:S.t0,tout:S.t1,acc:1,size:112});
+  g.globalAlpha=1-ex;
+  rays(g,O[0],O[1],60,110,T.eo(T.prog(l,0,.35)),t*.2);
+  panel(g,720,1330,400,200,T.spring(T.prog(l,.25,.7)),T.eo(T.prog(l,.9,2)),t);
+  const D=[650-O[0],1250-O[1]],L=Math.hypot(D[0],D[1]),dx=D[0]/L,dy=D[1]/L;
+  for(let i=0;i<7;i++){const c=(l*.42+i/7)%1,off=(i%3-1)*60,fa=T.clamp((l-.2-i*.06)/.3)*T.clamp((1-c)*6)*T.clamp(c*8);
+    photon(g,O[0]+dx*(90+c*(L-90))-dy*off,O[1]+dy*(90+c*(L-90))+dx*off,dx,dy,fa);}
+  const pa=T.spring(T.prog(l,.8,1.2));
+  T.curve(g,[760,900],[760,960],[640,1000],[600,1060],T.eo(T.prog(l,.9,1.3)),C.wire,3);
+  T.pill(g,'фотон',760,860,{a:pa,size:56});
+  T.subline(g,'крошечные порции энергии',1620,t,S.t0+1.5,S.t1-.3);
+  g.globalAlpha=1;
+  T.spark(g,T.lerp(O[0],540,T.eo(ex)),T.lerp(O[1],640,T.eo(ex)),1.4-.4*ex);
+}
+
+// 3. Решётка кремния: фотон выбивает электрон
+const LX=[200,370,540,710,880],LY=[760,930,1100,1270];
+function s3(g,t,S){const l=S.l,ex=T.exitK(l,S.len),HIT=1.3;
+  T.title(g,['Удар','фотона'],{t,t0:S.t0,tout:S.t1,acc:1,size:112});
+  g.globalAlpha=1-ex;
+  const ba=T.eo(T.prog(l,.1,.6));
+  g.save();g.globalAlpha*=ba;g.strokeStyle='#2C3039';g.lineWidth=4;g.lineCap='round';g.beginPath();
+  for(const y of LY){g.moveTo(LX[0],y);g.lineTo(LX[4],y);}for(const x of LX){g.moveTo(x,LY[0]);g.lineTo(x,LY[3]);}
+  g.stroke();g.restore();
+  g.font='700 26px '+MONO;g.textAlign='center';g.textBaseline='middle';
+  for(let r=0;r<4;r++)for(let c=0;c<5;c++){const i=r*5+c,a=T.spring(T.prog(l,.05+i*.02,.45+i*.02));if(a<=0)continue;
+    const x=LX[c],y=LY[r],hit=(i===2&&l>HIT);
+    g.save();g.globalAlpha*=T.clamp(a*1.5);g.fillStyle='#15171D';g.strokeStyle=hit?A:VI;g.lineWidth=4;
+    g.beginPath();g.arc(x,y,36*a,0,7);g.fill();g.stroke();
+    g.fillStyle='#8C909B';g.fillText('Si',x,y+1);g.restore();}
+  if(l>HIT){T.ring(g,540,760,T.prog(l,HIT,HIT+.5),30,220,'b');
+    const e=T.spring(T.prog(l,HIT,HIT+.45)),ex2=T.lerp(540,780,e)+3*Math.sin(l*9),ey=T.lerp(760,650,e)+3*Math.cos(l*7);
+    g.save();g.globalAlpha*=.5;g.setLineDash([6,10]);g.strokeStyle=PK;g.lineWidth=3;g.lineCap='round';
+    g.beginPath();g.moveTo(540,760);g.lineTo(ex2,ey);g.stroke();g.restore();
+    dot(g,ex2,ey,14,PK,1);
+    T.chip(g,'e-',ex2+100,ey,{col:'b',a:T.spring(T.prog(l,HIT+.2,HIT+.6))});}
+  T.subline(g,'атомы кремния',1430,t,S.t0+1.9,S.t1-.3);
+  g.globalAlpha=1;
+  const py=T.lerp(640,760,T.eo(T.prog(l,.8,HIT)));
+  T.spark(g,T.lerp(540,140,T.eo(ex)),T.lerp(py,970,T.eo(ex)),1);
+}
+
+// 4. Слои n и p толкают электроны в одну сторону
+function s4(g,t,S){const l=S.l,ex=T.exitK(l,S.len);
+  T.title(g,['Слои','n','и','p'],{t,t0:S.t0,tout:S.t1,acc:0,size:112});
+  g.globalAlpha=1-ex;
+  const LAY=[[700,'b','n-слой'],[1000,'c','p-слой']];
+  for(let i=0;i<2;i++){const a=T.spring(T.prog(l,.1+i*.1,.5+i*.1));if(a<=0)continue;
+    g.save();g.globalAlpha*=T.clamp(a*1.5);g.translate((1-a)*90,0);
+    T.rowCard(g,140,LAY[i][0],800,240,{col:LAY[i][1],label:LAY[i][2]});g.restore();}
+  const jp=T.eo(T.prog(l,.6,1.4));
+  T.gradLine(g,140,970,940,970,jp,4);
+  for(let i=0;i<6;i++){if(l<1.2)break;const c=((l-1.2)*.45+i/6)%1,y=T.lerp(1195,745,T.eo(c));
+    dot(g,230+i*92,y,12,PK,T.clamp((l-1.2-i*.05)/.3)*T.clamp((1-c)*7)*T.clamp(c*10));}
+  g.save();g.strokeStyle=A;g.lineWidth=4;g.lineCap='round';
+  for(let j=0;j<3;j++){const y=1150-((l*120+j*150)%450);g.globalAlpha=(1-ex)*T.clamp((l-1.2)/.3)*.8;
+    g.beginPath();g.moveTo(962,y+14);g.lineTo(980,y-4);g.lineTo(998,y+14);g.stroke();}
   g.restore();
-  const hX=T.lerp(hx,540,ex),hY=T.lerp(ty,640,ex);
-  if(fr)T.sparkPause(g,hX,hY);else T.spark(g,hX,hY,1);
-  g.globalAlpha=1-ex;
-  T.stamp(g,'tsc: 0 ошибок',540,1260,T.spring(T.prog(l,1.55,1.95)),{w:660,cp:T.eo(T.prog(l,1.7,1.95))});
+  T.subline(g,'электроны идут в одну сторону',1420,t,S.t0+1.6,S.t1-.3);
   g.globalAlpha=1;
+  T.spark(g,T.lerp(T.lerp(140,940,jp),540,T.eo(ex)),T.lerp(970,780,T.eo(ex)),1);
 }
 
-// 6. Всё сходится в искру, эмблема, имя, призыв, подпись
-function s6(g,t,S){const l=S.l,M=[540,640];
+// 5. Ток: панель питает дом, телефон, лампу; счётчик ватт
+function s5(g,t,S){const l=S.l,ex=T.exitK(l,S.len),n=T.countTo(l,.3,2.6,320);
+  T.title(g,['Выход','320','Вт'],{t,t0:S.t0,tout:S.t1,acc:1,size:112,disp:{1:String(n)}});
+  g.globalAlpha=1-ex;
+  panel(g,540,780,600,320,T.spring(T.prog(l,0,.4)),1,t);
+  const XS=[250,540,830],TL=['дом','телефон','лампа'];
+  for(let i=0;i<3;i++){const P=[[540,1040],[540,1150],[XS[i],1150],[XS[i],1250]];
+    T.curve(g,P[0],P[1],P[2],P[3],T.eo(T.prog(l,.3+i*.1,.8+i*.1)),C.wire,3);
+    if(l>.9)T.flowDot(g,P[0],P[1],P[2],P[3],l*1.2+i*.3,'a');
+    T.chip(g,TL[i],XS[i],1310,{col:T.ACC[i],a:T.spring(T.prog(l,.7+i*.1,1.1+i*.1))});}
+  T.label(g,'заряд батареи',150,1440,{size:32,a:T.eo(T.prog(l,.6,.9))});
+  T.streamBar(g,150,930,1500,T.eo(T.prog(l,.6,3)),{});
+  g.globalAlpha=1;
+  T.spark(g,540,T.lerp(780,640,T.eo(ex)),1.1);
+}
+
+// 6. Финал: всё сходится в искру-солнце
+function s6(g,t,S){const l=S.l,M=[540,620];
   T.converge(g,M[0],M[1],t,S.t0);
   T.ring(g,M[0],M[1],T.prog(l,.6,1.1),110,490,'b');
-  T.emblem(g,M[0],M[1],105,T.spring(T.prog(l,.55,1)));
-  T.spark(g,M[0],M[1],l<.6?1+l:1.6-.4*T.eo(T.prog(l,.6,1)));
-  T.brand(g,'TanStack AI',960,t,S.t0+.55,{size:180,step:.15});
-  T.title(g,['Строй','то,','что','будет','дальше.'],{t,t0:S.t0+.75,y:1010,size:92,acc:4});
-  T.credit(g,'фильм Studio1',1400,T.eo(T.prog(l,1.7,2)));
+  rays(g,M[0],M[1],90,170,T.spring(T.prog(l,.55,1)),t*.2);
+  T.spark(g,M[0],M[1],l<.6?1+l:1.6-.3*T.eo(T.prog(l,.6,1)));
+  T.brand(g,'Свет в ток',960,t,S.t0+.55,{size:150,step:.15});
+  T.title(g,['Ноль','топлива'],{t,t0:S.t0+.9,y:1110,size:92,acc:-1});
+  T.stamp(g,'чистая энергия',540,1380,T.spring(T.prog(l,1.5,1.9)),{w:660,cp:T.eo(T.prog(l,1.65,1.95))});
 }
 
 function sound(s){const P=(t,n,v,p)=>s.play(t,n,v,p?{pitch:p}:undefined);
-  // 1: хук, нажатие, вылет искры
-  P(.05,'pop_soft',.12);P(.4,'key_soft',.1);P(.75,'click',.12);P(.85,'drop',.14);P(1.12,'sparkle',.12);
-  // 2: склейка, счётчик провайдеров
-  P(2,'marimba_run',.16);P(2.15,'odometer',.1);P(2.4,'tick',.1,1);P(2.8,'tick',.1,1.15);P(3.2,'tick',.1,1.3);
-  // 3: четыре карточки, высота растёт
-  P(4,'kalimba_run',.16);[4.2,4.7,5.2,5.7].forEach((x,i)=>P(x,'pop_high',.11,.9+i*.12));
-  // 4: песочницы, MCP, инструменты
-  P(6.5,'marimba_run',.17,1.1);P(6.62,'bubble',.12);P(6.95,'wood',.1);P(7.7,'pop_double',.11);P(8.1,'click',.12);P(8.4,'woodblock',.1);
-  // 5: обрыв, возврат, штамп
-  P(9,'kalimba_run',.17,1.2);P(9.15,'type',.09);P(9.65,'toggle_off',.13);P(10.3,'toggle_on',.13);P(10.6,'success',.14);
-  // 6: схождение и финал
-  P(11.5,'magic',.18);P(12.1,'ta_da',.2);P(12.3,'pop_soft',.1);P(13.2,'notify',.1);P(14.2,'success3',.12,.9);
+  // 1: хук, панель, лучи
+  P(.05,'pop_soft',.12);P(.3,'wood',.11);P(.9,'tick',.1);P(1.4,'pop_high',.1);P(2.6,'key_soft',.09);
+  // 2: фотоны
+  P(4,'marimba_run',.16);P(4.4,'pop_high',.1);P(5,'pop_double',.11);P(6,'tick',.09,1.2);P(6.8,'key_soft',.09);
+  // 3: решётка, удар, электрон
+  P(8.5,'kalimba_run',.16,1.05);P(8.7,'wood',.1);P(9.8,'drop',.14);P(9.95,'pop_high',.12,1.3);P(10.6,'woodblock',.1);
+  // 4: слои n и p
+  P(13,'marimba_run',.16,1.1);P(13.3,'woodblock',.11);P(13.9,'click',.12);P(14.6,'tick',.1);P(15.4,'key_soft',.09);
+  // 5: счётчик ватт, потребители
+  P(17.5,'kalimba_run',.16,1.15);P(17.8,'odometer',.1);P(18.4,'tick',.1,1);P(19,'tick',.1,1.15);P(19.6,'tick',.1,1.3);P(20,'toggle_on',.12);P(20.3,'pop_high',.1);
+  // 6: схождение, финал
+  P(22,'marimba_run',.17,1.2);P(22.2,'magic',.18);P(22.8,'ta_da',.18);P(23.6,'woodblock',.12);P(25.5,'success3',.12,.9);
 }

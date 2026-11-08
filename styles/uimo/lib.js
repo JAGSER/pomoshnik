@@ -233,7 +233,7 @@ const UIM = (() => {
     card(g, x, y, w, h, 28, '#fff'); g.fillStyle = C.soft; rr(g, x, y, w, 64, 28); g.fill(); g.fillRect(x, y + 34, w, 30);
     ['#FF6B6B', '#FFC54D', '#4BD37B'].forEach((c, i) => { g.fillStyle = c; g.beginPath(); g.arc(x + 34 + i * 26, y + 32, 8, 0, 7); g.fill(); });
     g.fillStyle = C.line; rr(g, x + 130, y + 14, w - 160, 36, 18); g.fill();
-    const url = o.url || 'мой-сервис.рф'; g.fillStyle = C.mut; fit(g, url, 500, 22, w - 200, F.mono); g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(url, x + 150, y + 33);
+    const url = o.url || ''; g.fillStyle = C.mut; fit(g, url, 500, 22, w - 200, F.mono); g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(url, x + 150, y + 33);
     g.fillStyle = '#F6F4FC'; rr(g, x + 20, l.sy, l.sw, y + h - l.sy - 20, 18); g.fill();
     for (let i = 0; i < 5; i++) { g.fillStyle = i == 1 ? '#DCD3FF' : '#E9E5F4'; rr(g, x + 36, l.sy + 20 + i * 48, l.sw - 32, 28, 10); g.fill(); }
     g.fillStyle = '#2A2540'; rr(g, l.mx, l.sy + 16, l.mw * 0.34, 24, 8); g.fill(); g.fillStyle = '#E6E2F2'; rr(g, l.mx, l.sy + 50, l.mw * 0.24, 16, 6); g.fill();
@@ -348,7 +348,6 @@ const UIM = (() => {
     fit(g, o.brand || '', 900, 170, 900, F.sans); g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText(o.brand || '', 0, 0); g.restore();
     if (o.line) head(g, o.line, { y: y + 150, size: 100, t0: t0 + 0.35, t, key: o.key, col: o.col || '#fff', kc: o.kc || C.yel, lines: 1 });
     if (o.stamp) stamp(g, 540, o.sy || 1350, o.stamp, t0 + (o.st || 1.5), t, { col: o.kc || C.yel });
-    if (o.url) { const cp = spr(t - t0 - (o.ut || 2)); if (cp > 0) pill(g, 540, o.uy || 1530, o.url, { p: cp, bg: '#fff', fg: C.vi, size: 44, h: 96, wt: 800 }); }
   }
   // звук: список [t, имя, громкость, pitch?], громкость и pitch зажимаются в допустимые пределы
   function sfx(s, list) {
