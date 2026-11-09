@@ -158,7 +158,7 @@ const SLAM = (() => {
   }
 
   // ---------- терминал ----------
-  // cmd печатается после '$', затем строки [ ok ] имя ....... значение по одной
+  // cmd печатается после '$', затем строки [ ок ] имя ....... значение по одной
   function term(g, cmd, rows, x, y, lt, o) {
     o = o || {}; const big = o.big || 58, size = o.size || 36, cps = o.cps || 20, t0 = o.t0 || 0.15;
     g.textAlign = 'left'; g.font = F(500, big, MONO);
@@ -172,9 +172,9 @@ const SLAM = (() => {
       const ta = tDone + 0.08 + i * (o.step || 0.13); if (lt < ta) return;
       const yy = y + big * 0.9 + 26 + i * size * 1.55, a = clamp((lt - ta) / 0.06); g.globalAlpha = a;
       if (r.prompt) { g.fillStyle = C.lime; g.fillText('> ', x, yy); g.fillStyle = C.lime; g.fillText(r.prompt, x + cw * 2, yy); g.globalAlpha = 1; return; }
-      const st = r.st || 'ok';
+      const st = r.st || 'ок';
       g.fillStyle = C.lime; g.fillText('[', x, yy); g.fillText(']', x + cw * 5, yy);
-      g.fillStyle = st === 'ok' ? C.lime : C.grey; g.fillText(st, x + cw * 2, yy);
+      g.fillStyle = (st === 'ок' || st === 'ok') ? C.lime : C.grey; g.fillText(st, x + cw * 2, yy);
       g.fillStyle = C.wh; g.fillText(r.name, x + cw * 7, yy);
       const nd = Math.max(2, col - r.name.length - 1); g.fillStyle = C.dim;
       g.fillText('.'.repeat(Math.max(0, Math.floor(nd * eo((lt - ta) / 0.12)))), x + cw * (8 + r.name.length), yy);
@@ -192,7 +192,7 @@ const SLAM = (() => {
     '9': '.111.1...11...1.1111....1...1..11..', '%': '11..111..1...1...1...1...1..111..11', '-': '...............11111...............',
     '.': '.........................11...11...', ',': '....................11....1...1....', '!': '..1....1....1....1....1.........1..',
     '?': '.111.1...1....1...1...1.........1..', '/': '....1....1...1...1...1...1....1....', '+': '.......1....1..11111..1....1.......',
-    ':': '.......11...11.........11...11.....', ' ': '',
+    ':': '.......11...11.........11...11.....', ' ': '', '₽': '.111..1..1.1..1.111..1...111...1...',
     'А': '.111.1...11...1111111...11...11...1', 'Б': '111111....1....1111.1...11...11111.', 'В': '1111.1...11...11111.1...11...11111.',
     'Г': '111111....1....1....1....1....1....', 'Д': '..11..1.1..1.1..1.1..1.1.111111...1', 'Е': '111111....1....1111.1....1....11111',
     'Ж': '1.1.11.1.11.1.1.111.1.1.11.1.11.1.1', 'З': '.111.1...1....1..11.....11...1.111.', 'И': '1...11...11..111.1.111..11...11...1',
@@ -294,10 +294,10 @@ const SLAM = (() => {
   }
   // точечная иконка: o.grow 0..1 (точки появляются снизу вверх), o.scatter 0..1, o.t для мерцания и дрейфа фрагментов
   function dots(g, cx, cy, cell, o) {
-    o = o || {}; const S = sprout(), grow = o.grow == null ? 1 : o.grow, sc = o.scatter || 0, t = o.t || 0, sz = cell * (o.size || 0.72);
+    o = o || {}; const S = o.icon || sprout(), grow = o.grow == null ? 1 : o.grow, sc = o.scatter || 0, t = o.t || 0, sz = cell * (o.size || 0.72);
     const paths = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
     for (let i = 0; i < S.pts.length; i++) {
-      const p = S.pts[i]; const thr = (17 - p.y) / 34; if (thr > grow * 1.08 + hash(i) * 0.06) continue;
+      const p = S.pts[i]; const hr = (S.rows || 34) / 2, thr = (hr - p.y) / (hr * 2); if (thr > grow * 1.08 + hash(i) * 0.06) continue;
       let x = cx + p.x * cell, y = cy + p.y * cell; [x, y] = scatter(x, y, i, sc, cx, cy, o.R);
       const k = (hash(i + Math.floor(t * 6) * 977) < 0.03) ? 2 : p.k;
       paths[k === 0 ? (hash(i) < 0.5 ? 0 : 3) : k].rect(x - sz / 2, y - sz / 2, sz, sz);
@@ -344,7 +344,7 @@ const SLAM = (() => {
   }
   // логотип: росток сплошными белыми пикселями + лаймовые фрагменты
   function logo(g, cx, cy, cell, p, o) {
-    o = o || {}; const S = sprout(), P = new Path2D();
+    o = o || {}; const S = o.icon || sprout(), P = new Path2D();
     for (let i = 0; i < S.pts.length; i++) { const q = S.pts[i]; if (hash(i * 3) > p * 1.1) continue; P.rect(cx + q.x * cell - cell / 2, cy + q.y * cell - cell / 2, cell + 0.6, cell + 0.6); }
     g.fillStyle = o.color || C.wh; g.fill(P);
     g.fillStyle = C.lime; S.frag.forEach((f, j) => { const a = clamp(p * 3 - 1.5 - j * 0.15); if (a <= 0) return; const s = cell * 2.4 * a; g.fillRect(cx + (f.x + 0.6) * cell - s / 2, cy + (f.y + 0.4) * cell - s / 2, s, s); });
@@ -374,9 +374,9 @@ const SLAM = (() => {
     g.save(); g.globalAlpha = a; g.translate(0, (1 - eo(lt / 0.35)) * 40);
     g.fillStyle = 'rgba(16,18,21,0.92)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1.5; g.strokeRect(x, y, w, h);
     g.fillStyle = C.red; g.fillRect(x + 24, y + 30, 11, 11); g.fillStyle = '#3A3C40'; g.fillRect(x + 42, y + 30, 11, 11); g.fillRect(x + 60, y + 30, 11, 11);
-    g.font = F(400, 22, MONO); g.textAlign = 'left'; g.fillStyle = C.grey; g.fillText(o.path || '~/теплица/', x + 88, y + 42);
-    g.fillStyle = C.wh; g.fillText(o.file || 'журнал.log', x + 88 + mw(g, o.path || '~/теплица/'), y + 42);
-    g.textAlign = 'right'; g.fillStyle = C.dim; g.fillText(o.tag || '[демо]', x + w - 24, y + 42); g.textAlign = 'left';
+    g.font = F(400, 22, MONO); g.textAlign = 'left'; g.fillStyle = C.grey; g.fillText(o.path || '', x + 88, y + 42);
+    g.fillStyle = C.wh; g.fillText(o.file || '', x + 88 + mw(g, o.path || ''), y + 42);
+    g.textAlign = 'right'; g.fillStyle = C.dim; g.fillText(o.tag || '', x + w - 24, y + 42); g.textAlign = 'left';
     const rh = o.rh || 64, fs = o.fs || 34; let yy = y + 100;
     rows.forEach((r, i) => {
       const on = lt >= r.at, ra = clamp((lt - (o.in || 0.15) - i * 0.05) / 0.15); g.globalAlpha = a * ra;
@@ -390,7 +390,7 @@ const SLAM = (() => {
         g.font = F(500, fs * 0.85, MONO); const bw = mw(g, r.btn) + 30, k = spring((lt - r.at) * 1.6);
         g.save(); g.translate(x + w - 26 - bw / 2, yy - fs * 0.28); g.scale(0.85 + 0.15 * k, 0.85 + 0.15 * k);
         g.fillStyle = C.wh; g.fillRect(-bw / 2, -fs * 0.62, bw, fs * 1.18); g.fillStyle = C.ink; g.textAlign = 'center'; g.fillText(r.btn, 0, fs * 0.28); g.restore();
-      } else { g.fillStyle = on ? C.lime : C.dim; g.fillText(on ? (r.st1 || 'работает') : (r.st0 || 'в очереди'), x + w - 28, yy); }
+      } else { g.fillStyle = on ? C.lime : C.dim; g.fillText(on ? (r.st1 || o.st1 || 'работает') : (r.st0 || o.st0 || 'в очереди'), x + w - 28, yy); }
       g.textAlign = 'left'; yy += rh;
     });
     g.globalAlpha = a;
@@ -452,7 +452,7 @@ const SLAM = (() => {
     });
     g.globalAlpha = 1;
   }
-  // шкала соотношения: лайм (доля) + белый остаток, подписи "■ АВТО 95" / "■ ВЫ 05"
+  // шкала соотношения: лайм (доля) + белый остаток, подписи o.a / o.b ("■ АВТО 95" / "■ ВЫ 05")
   function ratioBar(g, x, y, w, share, p, o) {
     o = o || {}; const h = o.h || 16, fill = w * share * eo(p);
     g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, w, h);
@@ -461,9 +461,10 @@ const SLAM = (() => {
     if (p >= 1) { const k = eo(o.restP == null ? 1 : o.restP); g.fillStyle = '#E2E3E6'; g.fillRect(x + w * share + 4, y - 3, (w * (1 - share) - 4) * k, h + 6); }
     g.font = F(400, 24, MONO); g.textAlign = 'left';
     const v = Math.max(1, Math.round(share * 100 * eo(p)));
-    g.fillStyle = C.lime; g.fillRect(x, y + 44, 9, 9); tracked(g, (o.a || 'АВТО') + ' ' + String(v).padStart(2, '0'), x + 22, y + 54, 4);
-    g.fillStyle = p >= 1 ? '#D9DADD' : C.dim; g.fillRect(x + w - trW(g, (o.b || 'ВЫ') + ' 05', 4) - 22, y + 44, 9, 9);
-    tracked(g, (o.b || 'ВЫ') + ' ' + String(p >= 1 ? Math.round((1 - share) * 100) : 0).padStart(2, '0'), x + w, y + 54, 4, 'right');
+    g.fillStyle = C.lime; g.fillRect(x, y + 44, 9, 9); tracked(g, (o.a || '') + ' ' + String(v).padStart(2, '0'), x + 22, y + 54, 4);
+    const bs = (o.b || '') + ' ' + String(Math.round((1 - share) * 100)).padStart(2, '0');
+    g.fillStyle = p >= 1 ? '#D9DADD' : C.dim; g.fillRect(x + w - trW(g, bs, 4) - 22, y + 44, 9, 9);
+    tracked(g, (o.b || '') + ' ' + String(p >= 1 ? Math.round((1 - share) * 100) : 0).padStart(2, '0'), x + w, y + 54, 4, 'right');
   }
   // сегментная шкала n сегментов, k залиты
   function segBar(g, x, y, w, n, k, lt, o) {
@@ -513,26 +514,26 @@ const SLAM = (() => {
   }
 
   // ---------- HUD ----------
-  let HUD = { tl: 'СИСТЕМА.ОНЛАЙН', tr: ['ЦЕЛЬ:', '95% АВТО / 5% ВЫ'], bl2: ['ГРЯДКИ:', '2/5'], bm2: ['АПТАЙМ:', '24/7'], clock: 'МСК 06:14', fig: 'РИС.00' };
+  let HUD = { tl: '', tr: null, bl2: null, bm2: null, clock: '', fig: '', rec: null };
   function setHud(o) { HUD = Object.assign({}, HUD, o); }
   function hud(g, t, theme, fig, dur) {
     const th = TH[theme || 'dark']; g.font = F(400, 21, MONO); g.textAlign = 'left';
     g.fillStyle = theme === 'dark' ? 'rgba(4,5,7,0.55)' : 'rgba(0,0,0,0.05)'; g.fillRect(0, 0, W, 106);
     g.fillStyle = th.line; g.fillRect(0, 106, W, 1.5);
-    g.fillStyle = theme === 'dark' ? C.lime : th.fg; g.fillRect(36, 40, 9, 9); g.fillStyle = th.hudV; tracked(g, HUD.tl, 56, 50, 4);
-    const [l, v] = HUD.tr; const parts = v.split(' / '); let xr = 1044;
-    g.fillStyle = th.hudV; const w2 = tracked(g, parts[1] || '', xr, 50, 4, 'right'); xr -= w2;
-    g.fillStyle = th.hud; const w3 = tracked(g, ' / ', xr, 50, 4, 'right'); xr -= w3;
-    g.fillStyle = theme === 'dark' ? C.lime : th.fg; const w4 = tracked(g, parts[0], xr, 50, 4, 'right'); xr -= w4 + 12;
-    g.fillStyle = th.hud; tracked(g, l, xr, 50, 4, 'right');
-    g.fillStyle = th.hud; const a1 = tracked(g, HUD.bl2[0], 36, 86, 4); g.fillStyle = th.hudV; tracked(g, HUD.bl2[1], 36 + a1 + 12, 86, 4);
-    g.fillStyle = th.hud; const a2 = tracked(g, HUD.bm2[0], 380, 86, 4); g.fillStyle = th.hudV; tracked(g, HUD.bm2[1], 380 + a2 + 12, 86, 4);
-    const ss = String(Math.floor(t + 17) % 60).padStart(2, '0'); g.fillStyle = th.hud; const cw = tracked(g, HUD.clock + ':', 1044 - trW(g, ss, 4) - 2, 86, 4, 'right'); g.fillStyle = th.hudV; tracked(g, ss, 1044, 86, 4, 'right');
+    if (HUD.tl) { g.fillStyle = theme === 'dark' ? C.lime : th.fg; g.fillRect(36, 40, 9, 9); g.fillStyle = th.hudV; tracked(g, HUD.tl, 56, 50, 4); }
+    if (HUD.tr) { const [l, v] = HUD.tr; const parts = String(v).split(' / '); let xr = 1044;
+      if (parts.length > 1) { g.fillStyle = th.hudV; const w2 = tracked(g, parts[1], xr, 50, 4, 'right'); xr -= w2; g.fillStyle = th.hud; const w3 = tracked(g, ' / ', xr, 50, 4, 'right'); xr -= w3; }
+      g.fillStyle = theme === 'dark' ? C.lime : th.fg; const w4 = tracked(g, parts[0], xr, 50, 4, 'right'); xr -= w4 + 12;
+      g.fillStyle = th.hud; tracked(g, l, xr, 50, 4, 'right'); }
+    if (HUD.bl2) { g.fillStyle = th.hud; const a1 = tracked(g, HUD.bl2[0], 36, 86, 4); g.fillStyle = th.hudV; tracked(g, HUD.bl2[1], 36 + a1 + 12, 86, 4); }
+    if (HUD.bm2) { g.fillStyle = th.hud; const a2 = tracked(g, HUD.bm2[0], 380, 86, 4); g.fillStyle = th.hudV; tracked(g, HUD.bm2[1], 380 + a2 + 12, 86, 4); }
+    if (HUD.clock) { const ss = String(Math.floor(t + 17) % 60).padStart(2, '0'); g.fillStyle = th.hud; tracked(g, HUD.clock + ':', 1044 - trW(g, ss, 4) - 2, 86, 4, 'right'); g.fillStyle = th.hudV; tracked(g, ss, 1044, 86, 4, 'right'); }
     corners(g, 24, 124, 26, 26, 26, th.br, 2); g.fillStyle = th.br; g.fillRect(1030, 124, 26, 2); g.fillRect(1054, 124, 2, 26);
     g.fillRect(24, 1636, 26, 2); g.fillRect(24, 1612, 2, 26); g.fillRect(1030, 1636, 26, 2); g.fillRect(1054, 1612, 2, 26);
     g.fillStyle = theme === 'dark' ? C.lime : th.fg; g.fillRect(36, 1659, 8, 8); g.fillStyle = th.hud; tracked(g, fig || HUD.fig, 56, 1668, 4);
     const tc = '00:' + String(Math.floor(t)).padStart(2, '0') + '.' + String(Math.floor((t % 1) * 100)).padStart(2, '0');
-    g.fillStyle = th.hud; const rw = tracked(g, tc, 1044, 1668, 4, 'right'); g.fillStyle = th.hudV; const rw2 = tracked(g, 'LIVE · ', 1044 - rw, 1668, 4, 'right'); g.fillStyle = th.hud; tracked(g, 'РЕНДЕР: ', 1044 - rw - rw2, 1668, 4, 'right');
+    g.fillStyle = th.hud; const rw = tracked(g, tc, 1044, 1668, 4, 'right');
+    if (HUD.rec) { g.fillStyle = th.hudV; const rw2 = tracked(g, HUD.rec[1] + ' · ', 1044 - rw, 1668, 4, 'right'); g.fillStyle = th.hud; tracked(g, HUD.rec[0] + ' ', 1044 - rw - rw2, 1668, 4, 'right'); }
     g.fillStyle = th.line; g.fillRect(0, 1686, W, 1.5); g.fillStyle = theme === 'dark' ? C.lime : th.fg; g.fillRect(0, 1685, W * clamp(t / (dur || 18)), 3);
   }
 
@@ -592,10 +593,471 @@ const SLAM = (() => {
     });
   }
 
+
+  // ---------- ТИПОВЫЕ ОБЪЕКТЫ: точечные спрайты (квадратные клетки с зазором, как иконка из точек) ----------
+  // Цвет любого объекта: имя из WC ('blue', 'rust', 'pink'...) или '#hex'. Тень формы делается сама (роль заглавной буквой).
+  const WC = { lime: '#C6FA40', white: '#E8E9EC', grey: '#8B8E94', dark: '#34373D', black: '#1A1C20', pink: '#FF8FBE', orange: '#FF8A2E', red: '#FF4B55',
+    rust: '#E5792B', yellow: '#FFD43B', blue: '#3E8BFF', sky: '#7FC8FF', navy: '#2C4FA8', green: '#5ED16A', olive: '#7E9E2A', brown: '#8C5B3A', wood: '#A8743F',
+    violet: '#A77BFF', beige: '#E8CFA0', sea: '#2F7FD1', warm: '#FFD86B', concrete: '#9A9DA3' };
+  const SKIN = ['#F3CDA8', '#E2A97E', '#B97A50', '#7A4B2E'], HAIR = ['#2B2019', '#6B4226', '#D8B26A', '#C9CBD0', '#B8502A'];
+  const SHIRTS = ['#3E8BFF', '#FF8A2E', '#5ED16A', '#E8E9EC', '#FF8FBE', '#FFD43B', '#A77BFF', '#FF4B55'];
+  const wc = c => c == null ? null : (WC[c] || c);
+  const HX = new Map(), MX = new Map();
+  function hx(c) { c = wc(c); let v = HX.get(c); if (v) return v; if (c[0] === '#') { let s = c.slice(1); if (s.length === 3) s = s.replace(/./g, m => m + m); v = [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16)); } else { const m = c.match(/[\d.]+/g) || [128, 128, 128]; v = m.slice(0, 3).map(Number); } HX.set(c, v); return v; }
+  function mix(a, b, k) { const key = a + '|' + b + '|' + k; let v = MX.get(key); if (v) return v; const p = hx(a), q = hx(b); v = 'rgb(' + p.map((x, i) => Math.round(x + (q[i] - x) * k)).join(',') + ')'; MX.set(key, v); return v; }
+  // сетка-раскраска: значения ячеек - буквы ролей
+  function grid(w, h) {
+    const c = new Array(w * h).fill(0), o = { w, h, c,
+      p(x, y, v) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < w && y < h) c[y * w + x] = v; return o; },
+      r(x0, y0, x1, y1, v) { for (let y = Math.round(y0); y <= y1; y++) for (let x = Math.round(x0); x <= x1; x++) o.p(x, y, v); return o; },
+      e(cx, cy, rx, ry, v, ring) { for (let y = Math.floor(cy - ry - 1); y <= cy + ry + 1; y++) for (let x = Math.floor(cx - rx - 1); x <= cx + rx + 1; x++) { const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry, d = dx * dx + dy * dy; if (d <= 1 && (!ring || d >= ring)) o.p(x, y, v); } return o; },
+      l(x0, y0, x1, y1, v) { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1); for (let i = 0; i <= n; i++) o.p(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, v); return o; },
+      get(x, y) { return (x >= 0 && y >= 0 && x < w && y < h) ? c[y * w + x] : 0; } };
+    return o;
+  }
+  // спрайт: build() -> grid, roles {буква: цвет}. Кэш по ключу. Клетка = квадрат 0.84 с зазором, 10% клеток тусклее, 5% светлее (фактура стиля)
+  const SPC = new Map();
+  function sprite(key, cell, roles, build) {
+    const k = key + '|' + cell + '|' + JSON.stringify(roles); let cv = SPC.get(k); if (cv) return cv;
+    const gr = build(), pad = 2, s = Math.max(1, cell * 0.84), off = (cell - s) / 2;
+    cv = new OffscreenCanvas(Math.ceil(gr.w * cell + pad * 2), Math.ceil(gr.h * cell + pad * 2)); const c = cv.getContext('2d');
+    for (let y = 0; y < gr.h; y++) for (let x = 0; x < gr.w; x++) {
+      const v = gr.c[y * gr.w + x]; if (!v) continue;
+      let cc = roles[v]; if (!cc && roles[v.toLowerCase()]) cc = mix(wc(roles[v.toLowerCase()]), '#000000', 0.32); if (!cc) continue; cc = wc(cc);
+      const q = hash(x * 131 + y * 977 + gr.w * 7);
+      c.fillStyle = q < 0.1 ? mix(cc, '#08090C', 0.3) : q > 0.95 ? mix(cc, '#FFFFFF', 0.35) : cc;
+      c.fillRect(pad + x * cell + off, pad + y * cell + off, s, s);
+    }
+    cv._pad = pad; cv._g = gr; if (SPC.size > 500) SPC.clear(); SPC.set(k, cv); return cv;
+  }
+  // вывод спрайта: (x, y) = точка привязки (ax, ay в клетках). o.dir -1 зеркально, o.p 0..1 собирается снизу вверх, o.alpha
+  function put(g, cv, x, y, cell, ax, ay, o) {
+    o = o || {}; const a = o.alpha == null ? 1 : o.alpha, p = o.p == null ? 1 : clamp(o.p); if (a <= 0 || p <= 0) return;
+    const X = Math.round(x - ax * cell - cv._pad), Y = Math.round(y - ay * cell - cv._pad), w = cv.width, h = cv.height, ga = g.globalAlpha;
+    g.globalAlpha = ga * a;
+    if (o.dir === -1) { g.save(); g.translate(Math.round(x) * 2, 0); g.scale(-1, 1); }
+    if (p >= 1) g.drawImage(cv, X, Y); else { const hh = Math.max(1, Math.round(h * p)); g.drawImage(cv, 0, h - hh, w, hh, X, Y + h - hh, w, hh); }
+    if (o.dir === -1) g.restore();
+    g.globalAlpha = ga;
+  }
+  const frameOf = (o, n, sp) => o.f != null ? o.f : Math.floor((o.t || 0) * (sp || o.speed || 5)) % (n || 2);
+  const glowAt = (g, x, y, r, a) => { g.globalAlpha = a; g.drawImage(GLOW, x - r, y - r, r * 2, r * 2); g.globalAlpha = 1; };
+  // свечение любого цвета (кэш)
+  const GLC = new Map();
+  function glowC(g, x, y, r, c, a) { c = wc(c); let cv = GLC.get(c); if (!cv) { cv = new OffscreenCanvas(64, 64); const x2 = cv.getContext('2d'), p = hx(c), gg = x2.createRadialGradient(32, 32, 0, 32, 32, 32); gg.addColorStop(0, 'rgba(' + p + ',0.6)'); gg.addColorStop(1, 'rgba(' + p + ',0)'); x2.fillStyle = gg; x2.fillRect(0, 0, 64, 64); GLC.set(c, cv); }
+    const ga = g.globalAlpha; g.globalAlpha = ga * (a == null ? 1 : a); g.drawImage(cv, x - r, y - r, r * 2, r * 2); g.globalAlpha = ga; }
+
+  // ---- человек ----
+  // рисует фигуру в сетку gr: (ox, oy) = левая колонка торса и строка макушки. Возвращает {hand:[x,y], bottom}
+  function figure(gr, ox, oy, o, f) {
+    const kind = o.kind || 'adult', T = kind === 'child' ? 5 : 8, L = kind === 'child' ? 5 : kind === 'old' ? 7 : 8, pose = o.pose || 'stand';
+    const P = (x, y, v) => gr.p(ox + x, oy + y, v), R = (x0, y0, x1, y1, v) => gr.r(ox + x0, oy + y0, ox + x1, oy + y1, v);
+    const hb = kind === 'old' && pose !== 'sit' ? 1 : 0, hs = o.hairStyle || 'short', ts = 6, ls = ts + T, le = ls + L - 1;
+    // рюкзак за спиной
+    if (o.bag) R(-2, ts + 1, -1, ts + (kind === 'child' ? 4 : 5), 'p');
+    // голова, волосы, каска
+    R(hb, 1, 3 + hb, 4, 's');
+    if (hs !== 'bald') { R(hb, 0, 3 + hb, 0, 'h'); P(hb, 1, 'h'); P(3 + hb, 1, 'h'); if (hs === 'long') { R(hb - 1, 1, hb - 1, 6, 'h'); R(4 + hb, 1, 4 + hb, 5, 'h'); } if (hs === 'bun') R(1 + hb, -1, 2 + hb, -1, 'h'); }
+    if (o.helmet || o.hat) { R(hb - 1, 0, 4 + hb, 0, 'm'); R(hb, -1, 3 + hb, -1, 'm'); }
+    if (pose === 'walk' || pose === 'run' || pose === 'ride') P(3 + hb, 2, 'k'); else if (!o.noEyes) { P(1 + hb, 2, 'k'); P(3 + hb, 2, 'k'); }
+    R(1, 5, 2, 5, 's');
+    // торс
+    R(0, ts, 3, ts + T - 1, 'a'); R(0, ts, 0, ts + T - 1, 'A');
+    // ноги
+    const shoe = (x0, x1, y) => R(x0, y, x1, y, 'k');
+    const lg = o.dress ? 's' : 'b', lgS = o.dress ? 'S' : 'B';
+    if (pose === 'sit' || pose === 'ride') {
+      if (pose === 'sit') { R(0, ls, 5, ls + 1, 'b'); R(4, ls + 2, 5, ls + 2 + Math.round(L * 0.6), lg); shoe(4, 6, ls + 3 + Math.round(L * 0.6)); }
+      else { R(1, ls, 4, ls + 1, 'b'); const k = f ? 0 : 1; R(3 + k, ls + 2, 4 + k, ls + 5, lg); shoe(3 + k, 5 + k, ls + 6); }
+    } else if (o.dress) {
+      R(-1, ls, 4, ls + 3, 'a'); R(-1, ls, -1, ls + 3, 'A');
+      const sh = (pose === 'walk' || pose === 'run') && !f ? 1 : 0;
+      R(0 - sh, ls + 4, 0 - sh, le, 's'); R(3 + sh, ls + 4, 3 + sh, le, 'S'); shoe(-sh, 1 - sh, le + 1); shoe(3 + sh, 4 + sh, le + 1);
+    } else {
+      const sw = (pose === 'walk' && !f) ? 1 : (pose === 'run' && !f) ? 2 : (pose === 'dance' && !f) ? 1 : 0, mid = ls + Math.floor(L / 2);
+      R(0, ls, 3, ls + 1, 'b');
+      if (pose === 'dance' && f) { R(0, ls + 2, 1, mid, lg); R(-1, mid, 0, mid + 1, lg); shoe(-2, -1, mid + 1); R(2, ls + 2, 3, le, lgS); shoe(2, 4, le + 1); }
+      else { R(0, ls + 2, 1, mid, lg); R(0 - sw, mid + 1, 1 - sw, le, lg); R(2, ls + 2, 3, mid, lgS); R(2 + sw, mid + 1, 3 + sw, le, lgS); shoe(-sw, 1 - sw + (sw ? 0 : 0), le + 1); shoe(2 + sw, 4 + sw, le + 1); }
+    }
+    // руки
+    let hand = [4, ts + T - 1];
+    const armL = () => { R(-1, ts, -1, ts + T - 2, 'A'); P(-1, ts + T - 1, 's'); };
+    const armR = () => { R(4, ts, 4, ts + T - 2, 'a'); P(4, ts + T - 1, 's'); };
+    const it = o.item;
+    if (it === 'accordion' || it === 'basket') {
+      R(-1, ts, -1, ts + 1, 'A'); R(4, ts, 4, ts + 1, 'a'); P(-2, ts + 3, 's'); P(5, ts + 3, 's');
+      if (it === 'accordion') { const fw = f ? 0 : 1; R(-1 + fw, ts + 2, 4 - fw, ts + 5, 'i'); for (let x = 0 + fw; x <= 3 - fw; x += 2) R(x, ts + 2, x, ts + 5, 'I'); }
+      else { R(-1, ts + 3, 4, ts + 5, 'i'); R(-1, ts + 2, -1, ts + 2, 'I'); R(4, ts + 2, 4, ts + 2, 'I'); }
+      hand = [5, ts + 3];
+    } else if (pose === 'wave') {
+      armL(); if (f) { R(5, ts - 3, 5, ts - 1, 'a'); P(4, ts, 'a'); P(5, ts - 4, 's'); hand = [5, ts - 4]; } else { R(4, ts - 3, 4, ts, 'a'); P(4, ts - 4, 's'); hand = [4, ts - 4]; }
+    } else if (pose === 'dance') {
+      if (f) { R(-3, ts, -1, ts, 'A'); P(-4, ts, 's'); R(4, ts, 6, ts, 'a'); P(7, ts, 's'); hand = [7, ts]; }
+      else { R(-1, ts - 3, -1, ts, 'A'); P(-1, ts - 4, 's'); R(4, ts - 3, 4, ts, 'a'); P(4, ts - 4, 's'); hand = [4, ts - 4]; }
+    } else if (pose === 'hold' || pose === 'ride' || (pose === 'sit' && it)) {
+      armL(); R(4, ts, 4, ts + 2, 'a'); R(5, ts + 3, 6, ts + 3, 'a'); P(7, ts + 3, 's'); hand = [7, ts + 3];
+      if (pose === 'ride') { gr.r(ox + 4, oy + ts + 3, ox + 6, oy + ts + 3, 0); R(5, ts + 1, 6, ts + 1, 'a'); R(4, ts, 4, ts, 'a'); P(7, ts + 2, 's'); hand = [7, ts + 2]; }
+    } else if (pose === 'walk' || pose === 'run') {
+      if (f) { armL(); armR(); } else { R(-1, ts, -1, ts + T - 3, 'A'); P(-2, ts + T - 2, 's'); R(4, ts, 4, ts + T - 3, 'a'); P(5, ts + T - 2, 's'); hand = [5, ts + T - 2]; }
+    } else { armL(); armR(); }
+    if (o.cane) { const b = pose === 'sit' ? ls + 3 + Math.round(L * 0.6) : le + 1; R(5, hand[1], 5, b, 'w'); }
+    // предмет в руке
+    const [hx2, hy2] = hand;
+    if (it === 'book') { R(hx2 - 1, hy2 - 2, hx2 + 2, hy2 - 1, 'i'); R(hx2 - 1, hy2 - 1, hx2 + 2, hy2 - 1, 'I'); }
+    else if (it === 'box') R(hx2 - 1, hy2 - 3, hx2 + 2, hy2 - 1, 'i');
+    else if (it === 'bag') { R(hx2, hy2 + 1, hx2 + 2, hy2 + 3, 'i'); }
+    else if (it === 'cup') R(hx2, hy2 - 2, hx2 + 1, hy2 - 1, 'i');
+    else if (it === 'phone') R(hx2, hy2 - 2, hx2, hy2 - 1, 'i');
+    else if (it === 'fish') { R(hx2 + 1, hy2, hx2 + 4, hy2 + 1, 'i'); P(hx2 + 5, hy2 - 1, 'i'); P(hx2 + 5, hy2 + 2, 'i'); }
+    else if (it === 'flag') { R(hx2, hy2 - 9, hx2, hy2 + 1, 'w'); R(hx2 + 1, hy2 - 9, hx2 + 3, hy2 - 7, 'i'); }
+    else if (it === 'flower') { R(hx2, hy2 - 3, hx2, hy2, 'G'); R(hx2 - 1, hy2 - 5, hx2 + 1, hy2 - 4, 'i'); }
+    const bottom = (pose === 'sit') ? ls + 3 + Math.round(L * 0.6) : pose === 'ride' ? ls + 6 : (pose === 'dance' && f && !o.dress) ? le + 1 : le + 1;
+    return { hand: [ox + hand[0], oy + hand[1]], bottom: oy + bottom, seat: oy + ls };
+  }
+  function figRoles(o, i) {
+    i = i || 0; const kind = o.kind || 'adult';
+    return { a: o.shirt || o.dress || SHIRTS[i % SHIRTS.length], b: o.pants || (kind === 'child' ? '#2C4FA8' : '#4A4E57'), s: typeof o.skin === 'number' ? SKIN[o.skin] : (o.skin || SKIN[i % 2]),
+      h: typeof o.hair === 'number' ? HAIR[o.hair] : (o.hair || (kind === 'old' ? HAIR[3] : HAIR[(i * 3) % 5 === 3 ? 0 : (i * 3) % 5])), k: '#4A4D55',
+      m: o.helmet === true ? '#FFD43B' : (o.helmet || o.hat || '#FFD43B'), p: o.bag === true ? '#FF4B55' : (o.bag || '#FF4B55'), i: o.itemCol || (o.item === 'accordion' ? '#FF4B55' : o.item === 'book' ? '#E8E9EC' : o.item === 'fish' ? '#9AB8C8' : '#FFD43B'),
+      w: '#A8743F', G: '#5ED16A' };
+  }
+  // person(g, x, y, o): x,y = середина ступней на земле. Возвращает {top, hand:{x,y}, w, h}
+  function person(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, kind = o.kind || 'adult', pose = o.pose || 'stand';
+    const anim = pose === 'walk' || pose === 'run' || pose === 'dance' || pose === 'wave' || pose === 'ride' || o.item === 'accordion';
+    const f = anim ? frameOf(o, 2, o.speed || (pose === 'run' ? 8 : pose === 'wave' ? 4 : 5)) : 0;
+    const roles = figRoles(o, o.i), T = kind === 'child' ? 5 : 8, L = kind === 'child' ? 5 : kind === 'old' ? 7 : 8, H = 9 + T + L, Wd = 14, ox = 5, oy = 1;
+    let info = null;
+    const key = 'p:' + [kind, pose, f, o.hairStyle, !!o.dress, !!(o.helmet || o.hat), !!o.bag, o.item || '', !!o.cane, !!o.noEyes].join(',');
+    const cv = sprite(key, cell, roles, () => { const gr = grid(Wd, H); info = figure(gr, ox, oy, o, f); gr.info = info; return gr; });
+    info = cv._g.info; const ay = info.bottom + 1, ax = ox + 2;
+    put(g, cv, x, y, cell, ax, ay, o);
+    const d = o.dir === -1 ? -1 : 1;
+    return { top: y - (ay - oy) * cell, hand: { x: x + d * (info.hand[0] + 0.5 - ax) * cell, y: y - (ay - info.hand[1] - 0.5) * cell }, h: (ay - oy) * cell, w: 6 * cell, seat: y - (ay - info.seat) * cell };
+  }
+  // ряд людей: n, gap (px между центрами), kinds:['adult','child'...], shirts:[...], poses:[...], each(i) -> доп. параметры
+  function crowd(g, x, y, o) {
+    o = o || {}; const n = o.n || 3, cell = o.cell || 8, gap = o.gap || cell * 8;
+    for (let i = 0; i < n; i++) {
+      const pi = Object.assign({ i: i + (o.seed || 0), cell, t: (o.t || 0) + i * 0.13, dir: o.dir, pose: (o.poses && o.poses[i % o.poses.length]) || o.pose || 'stand',
+        kind: (o.kinds && o.kinds[i % o.kinds.length]) || o.kind || 'adult', p: o.p, alpha: o.alpha, helmet: o.helmet, bag: o.bag, item: o.item }, o.shirts ? { shirt: o.shirts[i % o.shirts.length] } : {}, o.each ? o.each(i) : {});
+      person(g, x + (i - (n - 1) / 2) * gap, y + (o.stagger ? (i % 2) * o.stagger : 0), pi);
+    }
+  }
+
+  // ---- животные (вид сбоку, смотрят вправо; dir:-1 влево) ----
+  function dog(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, pose = o.pose || 'stand', f = pose === 'walk' || pose === 'run' ? frameOf(o, 2, 6) : pose === 'sleep' ? frameOf(o, 2, 0.8) : 0;
+    const roles = { a: o.col || 'rust', k: '#1A1C20', n: '#2A1E16', c: o.collar || '#3E8BFF', x: '#E8E9EC' };
+    const cv = sprite('dog:' + pose + f + (o.collar ? 'c' : ''), cell, roles, () => {
+      const gr = grid(17, 11);
+      if (pose === 'sleep') { gr.r(2, 6, 12, 9, 'a').r(2, 9, 12, 9, 'A').r(12, 5, 15, 9, 'a').p(15, 9, 'A').r(11, 4, 12, 5, 'A').r(13, 7, 14, 7, 'n').p(16, 8, 'n').r(0, 8, 1, 9, 'a');
+        if (f) gr.p(14, 2, 'x'); else gr.p(15, 1, 'x'); if (o.collar) gr.r(12, 6, 12, 9, 'c'); }
+      else if (pose === 'sit') { gr.r(4, 3, 9, 8, 'a').r(2, 7, 8, 9, 'a').r(4, 8, 8, 9, 'A').r(9, 0, 13, 4, 'a').p(9, 0, 'A').p(13, 0, 'A').r(14, 2, 15, 3, 'a').p(15, 2, 'n').p(12, 1, 'k').r(8, 5, 9, 9, 'a').r(9, 9, 10, 9, 'A').r(0, 6, 1, 7, 'a'); if (o.collar) gr.r(9, 4, 11, 4, 'c'); }
+      else { gr.r(3, 4, 12, 7, 'a').r(3, 7, 12, 7, 'A').r(11, 1, 14, 5, 'a').p(11, 0, 'A').p(12, 0, 'A').r(15, 3, 16, 4, 'a').p(16, 3, 'n').p(13, 2, 'k').r(0, 2, 2, 3, 'a').p(2, 4, 'a');
+        const s = f ? 1 : 0; gr.r(4 - s, 8, 4 - s, 10, 'A').r(6 + s, 8, 6 + s, 10, 'a').r(10 - s, 8, 10 - s, 10, 'A').r(12 + s, 8, 12 + s, 10, 'a'); if (o.collar) gr.r(11, 5, 11, 6, 'c'); }
+      return gr; });
+    put(g, cv, x, y, cell, 8.5, 11, o);
+    if (pose === 'sleep' && o.zz !== false) { const t = o.t || 0; g.font = F(500, cell * 2.6, MONO); g.fillStyle = C.wh; for (let i = 0; i < 2; i++) { const ph = (t * 0.5 + i * 0.5) % 1; g.globalAlpha = Math.sin(ph * Math.PI) * (o.alpha == null ? 1 : o.alpha) * 0.8; g.fillText('з', x + (o.dir === -1 ? -1 : 1) * cell * (5 + ph * 4) , y - cell * (11 + ph * 6)); } g.globalAlpha = 1; }
+  }
+  function cat(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 7, pose = o.pose || 'stand', f = pose === 'walk' ? frameOf(o, 2, 6) : 0;
+    const roles = { a: o.col || 'grey', k: '#1A1C20', e: '#C6FA40', n: '#FF8FBE' };
+    const cv = sprite('cat:' + pose + f, cell, roles, () => {
+      const gr = grid(15, 11);
+      if (pose === 'sleep') gr.r(2, 7, 11, 10, 'a').r(10, 5, 13, 9, 'a').p(10, 4, 'a').p(13, 4, 'a').r(11, 7, 12, 7, 'k').r(0, 9, 1, 10, 'A').r(2, 10, 11, 10, 'A');
+      else if (pose === 'sit') gr.r(5, 4, 9, 10, 'a').r(4, 8, 9, 10, 'A').r(8, 1, 12, 5, 'a').p(8, 0, 'a').p(12, 0, 'a').p(9, 2, 'e').p(11, 2, 'e').p(10, 4, 'n').r(2, 9, 3, 10, 'a').p(1, 8, 'a');
+      else { gr.r(2, 5, 10, 7, 'a').r(2, 7, 10, 7, 'A').r(10, 2, 13, 5, 'a').p(10, 1, 'a').p(13, 1, 'a').p(12, 3, 'e').p(13, 4, 'n').r(0, 1, 0, 4, 'a').p(1, 5, 'a');
+        const s = f ? 1 : 0; gr.r(3 - s, 8, 3 - s, 10, 'A').r(4 + s, 8, 4 + s, 10, 'a').r(8 - s, 8, 8 - s, 10, 'A').r(10 + s, 8, 10 + s, 10, 'a'); }
+      return gr; });
+    put(g, cv, x, y, cell, 7.5, 11, o);
+  }
+  // птица: машет крыльями (кадр по t). col тело, wing крылья
+  function bird(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 6, f = o.f != null ? o.f : Math.floor(((o.t || 0) * (o.speed || 6) + (o.ph || 0) * 4)) % 3;
+    const cv = sprite('bird:' + f, cell, { a: o.col || 'white', b: o.wing || '#B9BCC2', y: '#FFD43B', k: '#1A1C20' }, () => {
+      const gr = grid(13, 7); gr.r(4, 3, 8, 4, 'a').r(9, 2, 10, 3, 'a').p(11, 3, 'y').p(10, 2, 'k').p(3, 3, 'b').p(2, 3, 'b');
+      if (f === 0) gr.l(5, 2, 2, 0, 'b').l(7, 2, 10, 0, 'b'); else if (f === 1) gr.r(1, 2, 5, 2, 'b').r(7, 2, 11, 1, 'B'); else gr.l(5, 5, 3, 6, 'b').l(7, 5, 9, 6, 'b');
+      return gr; });
+    put(g, cv, x, y, cell, 6.5, 3.5, o);
+  }
+  // стая кружит: n птиц по эллипсу вокруг (cx, cy), rx, ry
+  function birds(g, t, o) {
+    o = o || {}; const n = o.n || 5;
+    for (let i = 0; i < n; i++) { const a = t * (o.speed || 0.7) + i * PI2 / n, d = Math.sin(a) > 0 ? 1 : -1;
+      bird(g, o.x + Math.cos(a) * (o.rx || 260) * (0.8 + 0.2 * hash(i)), o.y + Math.sin(a) * (o.ry || 70) + hash(i * 3) * 40, { t, ph: i, cell: o.cell || 6, dir: -d, col: o.col, wing: o.wing, alpha: o.alpha }); }
+  }
+
+  // ---- транспорт ----
+  function car(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, f = o.move ? frameOf(o, 2, 8) : 0;
+    const cv = sprite('car:' + f, cell, { a: o.col || 'red', g: '#9FD3FF', k: '#25272C', x: '#C9CBD0', l: '#FFD86B' }, () => {
+      const gr = grid(20, 9); gr.r(5, 0, 13, 0, 'a').r(4, 1, 14, 3, 'a').r(6, 1, 8, 3, 'g').r(10, 1, 12, 3, 'g').r(0, 3, 19, 6, 'a').r(0, 6, 19, 6, 'A').p(19, 4, 'l').p(0, 4, 'A');
+      for (const cx of [4, 15]) { gr.e(cx, 7, 2, 2, 'k'); gr.p(cx - 1 + f, 6 + f, 'x'); } return gr; });
+    put(g, cv, x, y, cell, 10, 9, o);
+  }
+  // автобус: num - номер на табло, people - головы в окнах, cell 9 по умолчанию (~300 px)
+  function bus(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 9, f = o.move ? frameOf(o, 2, 8) : 0, ppl = o.people == null ? 3 : o.people;
+    const cv = sprite('bus:' + f + ':' + ppl, cell, { a: o.col || 'blue', g: '#9FD3FF', k: '#25272C', x: '#C9CBD0', l: '#FFD86B', w: '#E8E9EC', s: SKIN[0], h: HAIR[1] }, () => {
+      const gr = grid(36, 15); gr.r(0, 0, 35, 12, 'a').r(0, 12, 35, 12, 'A').r(1, 0, 34, 0, 'A');
+      for (let i = 0; i < 6; i++) gr.r(2 + i * 5, 2, 5 + i * 5, 6, 'g');
+      gr.r(31, 2, 34, 6, 'g').r(32, 8, 34, 11, 'g').r(26, 8, 29, 12, 'g').r(26, 8, 26, 12, 'A').r(0, 8, 24, 8, 'w').p(35, 10, 'l');
+      for (let i = 0; i < ppl; i++) { const cx = 3 + ((i * 2 + 1) % 6) * 5; gr.r(cx, 4, cx + 1, 5, 's').r(cx, 3, cx + 1, 3, 'h').r(cx - 1, 6, cx + 2, 6, i % 2 ? 'x' : 'l'); }
+      for (const cx of [7, 28]) { gr.e(cx, 13, 2.3, 2.3, 'k'); gr.p(cx - 1 + f, 12 + f, 'x'); } return gr; });
+    put(g, cv, x, y, cell, 18, 15, o);
+    if (o.num != null) { const d = o.dir === -1 ? -1 : 1, s = String(o.num), cw = cell * 0.55, pw = pixWidth(s, cw) + cell * 1.2, cx = x + d * 15.5 * cell;
+      g.globalAlpha = o.alpha == null ? 1 : o.alpha; g.fillStyle = '#16181C'; g.fillRect(cx - pw / 2, y - 14.6 * cell, pw, cell * 5.2);
+      pixText(g, s, cx, y - 14.6 * cell + cell * 0.7, cw, { align: 'center', color: '#FFB23B', alpha: o.alpha }); g.globalAlpha = 1; }
+  }
+  // велосипед с седоком: rider = параметры person (kind, shirt, helmet...); rider:false - без седока
+  function bike(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 7, f = o.move === false ? 0 : frameOf(o, 2, 6), r = o.rider === false ? null : (o.rider || {});
+    const roles = r ? Object.assign(figRoles(r, r.i), { f: o.col || 'red', q: '#3A3D44', x: '#C9CBD0' }) : { f: o.col || 'red', q: '#3A3D44', x: '#C9CBD0' };
+    const key = 'bike:' + f + ':' + (r ? [r.kind, r.hairStyle, !!r.helmet, !!r.bag, !!r.dress].join(',') : '-');
+    const cv = sprite(key, cell, roles, () => {
+      const gr = grid(22, 36), by = 35;
+      for (const cx of [4, 16]) { gr.e(cx + 0.5, by - 3.5, 4, 4, 'q', 0.45); gr.p(cx + (f ? 1 : -1) + 0.5, by - 3.5, 'x'); }
+      gr.l(4, by - 4, 9, by - 4, 'f').l(9, by - 4, 14, by - 9, 'f').l(4, by - 4, 8, by - 10, 'f').l(8, by - 10, 14, by - 10, 'f').l(14, by - 10, 16, by - 4, 'f').r(7, by - 11, 9, by - 11, 'q');
+      let inf = null; if (r) inf = figure(gr, 7, r.kind === 'child' ? 12 : 9, Object.assign({}, r, { pose: 'ride' }), f);
+      const hx3 = inf ? inf.hand[0] : 15, hy3 = inf ? inf.hand[1] + 1 : by - 14; gr.l(14, by - 10, hx3, hy3, 'f').r(hx3 - 1, hy3, hx3, hy3, 'q');
+      return gr; });
+    put(g, cv, x, y, cell, 10.5, 36, o);
+  }
+  // лодка: kind 'motor'|'row'|'sail', riders: [параметры person], wake - пена за кормой (нужен t)
+  function boat(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, kind = o.kind || 'motor', rd = o.riders || [];
+    const roles = Object.assign(rd[0] ? figRoles(rd[0], rd[0].i) : {}, { u: o.col || 'white', z: o.stripe || 'red', c: o.cabin || 'white', g: '#9FD3FF', k: '#34373D', w: '#A8743F', v: o.sail || '#E8E9EC' });
+    const key = 'boat:' + kind + ':' + rd.length + ':' + rd.map(r => [r.kind, r.pose, r.hairStyle, !!r.helmet, !!r.hat, !!r.dress].join('.')).join('|');
+    const cv = sprite(key, cell, roles, () => {
+      const gr = grid(30, 34), hy = 27;
+      rd.slice(0, 2).forEach((r, i) => figure(gr, (kind === 'motor' ? 5 : 9) + i * 7, hy - (r.kind === 'child' ? 12 : 18), Object.assign({}, r, { pose: r.pose || 'stand' }), 0));
+      if (kind === 'sail') { gr.r(15, 2, 15, hy - 1, 'w'); for (let yy = 3; yy < hy - 2; yy++) gr.r(16, yy, 16 + Math.round((yy - 3) * 0.45), yy, 'v'); }
+      if (kind === 'motor') { gr.r(17, hy - 7, 25, hy - 1, 'c').r(17, hy - 7, 25, hy - 7, 'C').r(19, hy - 5, 23, hy - 3, 'g').r(0, hy - 2, 2, hy + 3, 'k'); }
+      for (let yy = hy; yy <= hy + 5; yy++) { const ins = yy - hy; gr.r(2 + ins, yy, 29 - ins * 1.4, yy, yy === hy + 2 ? 'z' : yy === hy + 5 ? 'U' : 'u'); }
+      return gr; });
+    if (o.wake && o.t != null) { const d = o.dir === -1 ? -1 : 1; g.fillStyle = '#E8E9EC'; for (let i = 0; i < 10; i++) { const ph = (o.t * 1.5 + i / 10) % 1; g.globalAlpha = (1 - ph) * 0.8 * (o.alpha == null ? 1 : o.alpha); const s = cell * 0.7; g.fillRect(x - d * (15 + ph * 14) * cell + Math.sin(i * 7) * cell, y + (hash(i) - 0.2) * cell * 2, s, s); } g.globalAlpha = 1; }
+    put(g, cv, x, y, cell, 15, 32, o);
+  }
+  // ---- здания (x = середина низа, y = земля) ----
+  // окна: lit 0..1 доля горящих (снизу вверх), out 0..1 доля погасших (по одному в случайном порядке), win - цвет горящих
+  function windows(g, list, o) {
+    const lit = o.lit == null ? 0 : o.lit, out = o.out || 0, n = list.length, wcol = wc(o.win || 'warm');
+    list.forEach((w, i) => { const on = (i + 1) / n <= lit + 1e-6 && hash(i * 17 + (o.seed || 0)) >= out;
+      g.fillStyle = on ? wcol : '#1C1F25'; g.fillRect(w[0], w[1], w[2], w[3]); if (on && o.glow !== false) glowC(g, w[0] + w[2] / 2, w[1] + w[3] / 2, w[2] * 1.3, wcol, 0.35); });
+  }
+  function house(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, cw = Math.round((o.w || 260) / cell), ch = Math.round((o.h || 220) / cell), rh = Math.ceil(cw / 2.6);
+    const cv = sprite('house:' + cw + 'x' + ch, cell, { a: o.col || 'beige', r: o.roof || 'red', d: '#6B4226' }, () => {
+      const gr = grid(cw + 2, ch + rh);
+      for (let i = 0; i < rh; i++) gr.r(Math.round(i * 1.3), rh - 1 - i, cw + 1 - Math.round(i * 1.3), rh - 1 - i, 'r');
+      gr.r(1, rh, cw, rh + ch - 1, 'a').r(1, rh, 1, rh + ch - 1, 'A').r(Math.floor(cw / 2), rh + ch - 6, Math.floor(cw / 2) + 2, rh + ch - 1, 'd'); return gr; });
+    put(g, cv, x, y, cell, (cw + 2) / 2, ch + rh, o);
+    if ((o.p == null || o.p >= 1) && (o.alpha == null || o.alpha > 0)) { const x0 = x - (cw + 2) / 2 * cell, wy = y - ch * cell + 3 * cell, ws = 3 * cell;
+      g.globalAlpha = o.alpha == null ? 1 : o.alpha; windows(g, [[x0 + 3 * cell, wy, ws, ws], [x0 + (cw - 4) * cell, wy, ws, ws]], o); g.globalAlpha = 1; }
+    return { top: y - (ch + rh) * cell };
+  }
+  // многоэтажка: floors, cols окон, built 0..1 стройка (этажи растут снизу, сверху каркас), lit/out окна
+  function tower(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, fl = o.floors || 5, cols = o.cols || 4, fh = 4, cw = cols * 4 + 2, built = o.built == null ? 1 : o.built;
+    const shown = Math.min(fl, Math.max(0, built * fl)), full = Math.floor(shown), H = fl * fh + 1;
+    const cv = sprite('tower:' + fl + 'x' + cols, cell, { a: o.col || 'concrete', t: o.roof || '#5C5F66' }, () => {
+      const gr = grid(cw, H); gr.r(0, 1, cw - 1, H - 1, 'a').r(0, 0, cw - 1, 0, 't').r(0, 1, 0, H - 1, 'A'); for (let f = 1; f < fl; f++) gr.r(0, f * fh + 1, cw - 1, f * fh + 1, 'A'); return gr; });
+    const x0 = Math.round(x - cw / 2 * cell), a = o.alpha == null ? 1 : o.alpha;
+    if (full > 0) { const hh = full * fh * cell + (full >= fl ? cell : 0); g.globalAlpha = a; g.drawImage(cv, 0, cv.height - hh - cv._pad, cv.width, hh + cv._pad, x0 - cv._pad, y - hh, cv.width, hh + cv._pad); g.globalAlpha = 1; }
+    if (shown < fl) { // каркас следующего этажа
+      const fy = y - (full + 1) * fh * cell, k = shown - full; g.fillStyle = wc(o.col || 'concrete'); g.globalAlpha = a * 0.75; const s = cell * 0.84;
+      for (let yy = 0; yy < fh; yy++) for (let xx = 0; xx < cw; xx++) { if ((xx % 4 === 0 || xx === cw - 1) && (fh - yy) / fh <= k + 0.01) g.fillRect(x0 + xx * cell, fy + yy * cell, s, s); }
+      g.globalAlpha = 1; }
+    const list = []; for (let f = 0; f < full; f++) for (let c = 0; c < cols; c++) list.push([x0 + (1 + c * 4 + 1) * cell, y - (f + 1) * fh * cell + 1.4 * cell, 2 * cell * 0.92, 2 * cell * 0.92]);
+    list.sort((p, q) => q[1] - p[1] || p[0] - q[0]); // снизу вверх
+    g.globalAlpha = a; windows(g, list, o); g.globalAlpha = 1;
+    return { top: y - shown * fh * cell, left: x0, w: cw * cell, floorH: fh * cell };
+  }
+  // магазин/кафе: витрина, полосатый навес (col, awning), вывеска sign (текст из темы)
+  function shop(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, cw = Math.round((o.w || 320) / cell), ch = Math.round((o.h || 200) / cell);
+    const cv = sprite('shop:' + cw + 'x' + ch + (o.cafe ? 'c' : ''), cell, { a: o.col || 'beige', s: o.awning || 'red', x: '#E8E9EC', g: '#9FD3FF', d: '#6B4226', w: '#A8743F' }, () => {
+      const gr = grid(cw, ch + 3); gr.r(0, 3, cw - 1, ch + 2, 'a').r(0, 3, 0, ch + 2, 'A');
+      for (let xx = 0; xx < cw; xx++) gr.r(xx, 0, xx, 2, Math.floor(xx / 2) % 2 ? 'x' : 's'); for (let xx = 0; xx < cw; xx += 2) gr.p(xx, 3, 's');
+      gr.r(2, 6, cw - 8, ch - 1, 'g').r(cw - 6, 6, cw - 3, ch + 2, 'd');
+      if (o.cafe) { gr.r(3, ch, 7, ch, 'w').r(5, ch + 1, 5, ch + 2, 'w'); } return gr; });
+    put(g, cv, x, y, cell, cw / 2, ch + 3, o);
+    if (o.sign) board(g, x - (cw / 2) * cell + cell, y - (ch + 3) * cell - cell * 7.4, { w: Math.min(cw * cell - cell * 2, 40 + o.sign.length * cell * 3.4), h: cell * 6.4, title: o.sign, size: cell * 4, plate: true, col: o.signCol, alpha: o.alpha, p: o.p });
+    return { top: y - (ch + 3) * cell };
+  }
+  const cafe = (g, x, y, o) => shop(g, x, y, Object.assign({ cafe: true, awning: 'green' }, o));
+  function school(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, cw = Math.round((o.w || 520) / cell), ch = Math.round((o.h || 260) / cell);
+    const cv = sprite('school:' + cw + 'x' + ch, cell, { a: o.col || 'orange', r: o.roof || '#5C5F66', d: '#6B4226', w: '#E8E9EC', f: o.flag || 'blue' }, () => {
+      const gr = grid(cw, ch + 9); gr.r(0, 9, cw - 1, ch + 8, 'a').r(0, 9, 0, ch + 8, 'A').r(0, 9, cw - 1, 9, 'r');
+      const c = Math.floor(cw / 2); gr.r(c - 4, 6, c + 4, 8, 'r').r(c - 3, ch + 3, c + 2, ch + 8, 'd').r(c, 0, c, 6, 'w').r(c + 1, 0, c + 4, 2, 'f'); return gr; });
+    put(g, cv, x, y, cell, cw / 2, ch + 9, o);
+    const x0 = x - cw / 2 * cell, list = [], c = Math.floor(cw / 2);
+    for (let r = 0; r < 2; r++) for (let i = 1; i < cw - 3; i += 5) { if (r === 1 && Math.abs(i + 1.5 - c) < 5) continue; list.push([x0 + i * cell + cell, y - ch * cell + (2 + r * 6) * cell + cell, 3 * cell, 3 * cell]); }
+    if (o.p == null || o.p >= 1) { g.globalAlpha = o.alpha == null ? 1 : o.alpha; windows(g, list, Object.assign({ lit: 0, glow: false }, o)); g.globalAlpha = 1;
+      if (o.sign) board(g, x - cw * cell * 0.3, y - (ch + 9) * cell + 11 * cell, { w: cw * cell * 0.6, h: cell * 4.4, title: o.sign, size: cell * 2.6, plate: true, center: true, alpha: o.alpha }); }
+    return { top: y - (ch + 9) * cell };
+  }
+  // башенный кран: h высота, jib длина стрелы (px), at 0..1 тележка по стреле, drop 0..1 трос вниз, load {w,h,col} плита. Возвращает {hook:{x,y}}
+  function crane(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 9, hc = Math.round((o.h || 620) / cell), jc = Math.round((o.jib || 560) / cell);
+    const cv = sprite('crane:' + hc + 'x' + jc, cell, { a: o.col || 'yellow', k: '#34373D', g: '#9FD3FF' }, () => {
+      const gr = grid(jc + 10, hc + 4); const mx = 7;
+      for (let yy = 4; yy < hc + 4; yy++) { gr.p(mx, yy, 'a'); gr.p(mx + 2, yy, 'a'); if (yy % 3 === 0) gr.p(mx + 1, yy, 'A'); }
+      gr.r(0, 3, jc + 9, 3, 'a').r(0, 4, mx + 2, 4, 'A'); for (let xx = mx + 3; xx < jc + 9; xx += 3) gr.p(xx, 4, 'A');
+      gr.r(mx, 0, mx + 2, 2, 'a').r(0, 5, 3, 7, 'k').r(mx + 3, 5, mx + 5, 7, 'a').p(mx + 4, 6, 'g').r(mx - 2, hc + 3, mx + 4, hc + 3, 'k'); return gr; });
+    put(g, cv, x, y, cell, 8, hc + 4, o);
+    const trolley = x + (2 + (o.at == null ? 0.7 : o.at) * (jc - 2)) * cell, top = y - (hc + 4) * cell + 4.5 * cell, len = (o.drop == null ? 0.4 : o.drop) * (hc - 8) * cell + 2 * cell;
+    g.globalAlpha = (o.alpha == null ? 1 : o.alpha) * (o.p == null ? 1 : clamp(o.p * 2 - 1)); g.fillStyle = '#C9CBD0'; g.fillRect(trolley - 1, top, 2, len); g.fillStyle = '#34373D'; g.fillRect(trolley - cell, top - cell * 0.5, cell * 2, cell);
+    const hook = { x: trolley, y: top + len };
+    if (o.load) { const lw = o.load.w || 180, lh = o.load.h || 26; g.fillStyle = 'rgba(201,203,208,0.8)'; g.fillRect(trolley - 1, hook.y, 2, 16); g.beginPath(); g.moveTo(trolley, hook.y); g.lineTo(trolley - lw / 2, hook.y + 30); g.moveTo(trolley, hook.y); g.lineTo(trolley + lw / 2, hook.y + 30); g.strokeStyle = 'rgba(201,203,208,0.8)'; g.lineWidth = 2; g.stroke();
+      const s = cell * 0.84, lc = wc(o.load.col || 'concrete'); g.fillStyle = lc; for (let yy = 0; yy < lh; yy += cell) for (let xx = 0; xx < lw; xx += cell) g.fillRect(trolley - lw / 2 + xx, hook.y + 30 + yy, Math.min(s, lw - xx), Math.min(s, lh - yy)); }
+    g.globalAlpha = 1; return { hook };
+  }
+  // вывеска / доска с текстом: title, lines ['строка' | ['слева','справа']], p 0..1 надпись пишется, chalk true - школьная доска мелом, stand - ножки
+  function board(g, x, y, o) {
+    o = o || {}; const w = o.w || 520, h = o.h || 380, a = o.alpha == null ? 1 : o.alpha, p = o.p == null ? 1 : o.p; if (a <= 0) return;
+    g.globalAlpha = a; const fr = wc(o.frame || (o.plate ? (o.col || '#16181C') : 'wood')), bg = o.plate ? wc(o.col || '#16181C') : (o.chalk === false ? '#16181C' : '#1F2B24');
+    if (o.stand) { g.fillStyle = wc('wood'); g.fillRect(x + w * 0.12, y + h - 6, 10, o.stand); g.fillRect(x + w * 0.88 - 10, y + h - 6, 10, o.stand); }
+    g.fillStyle = fr; g.fillRect(x - 8, y - 8, w + 16, h + 16); g.fillStyle = bg; g.fillRect(x, y, w, h);
+    if (!o.plate) { g.fillStyle = 'rgba(255,255,255,0.04)'; for (let i = 0; i < 6; i++) g.fillRect(x + hash(i) * w * 0.7, y + hash(i + 9) * h, w * 0.3, 2); }
+    const ink = wc(o.ink || (o.plate ? 'white' : '#EDEFE6')), sz = o.size || 44; g.fillStyle = ink; let yy = y + sz * 1.05 + (o.plate ? (h - sz * 1.3) / 2 - sz * 0.05 : 14);
+    const all = [o.title].concat(o.lines || []).filter(v => v != null), total = all.reduce((s, l) => s + (Array.isArray(l) ? l.join('').length : String(l).length), 0); let left = Math.floor(total * clamp(p) + 0.001);
+    all.forEach((l, i) => { const fs = i === 0 && o.title && !o.plate ? sz * 1.1 : sz; g.font = F(i === 0 && o.title ? 500 : 400, fs);
+      if (Array.isArray(l)) { const a1 = l[0].slice(0, Math.max(0, left)); left -= l[0].length; const b1 = l[1].slice(0, Math.max(0, left)); left -= l[1].length; g.textAlign = 'left'; g.fillText(a1, x + 30, yy); g.textAlign = 'right'; g.fillText(b1, x + w - 30, yy); g.textAlign = 'left'; }
+      else { const s = String(l).slice(0, Math.max(0, left)); left -= String(l).length; g.textAlign = o.center || o.plate ? 'center' : 'left'; g.fillText(s, o.center || o.plate ? x + w / 2 : x + 30, yy); g.textAlign = 'left'; }
+      yy += fs * 1.35; });
+    g.globalAlpha = 1;
+  }
+
+  // ---- природа ----
+  function tree(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 9, kind = o.kind || 'leaf', hc = Math.round((o.h || 300) / cell);
+    const cv = sprite('tree:' + kind + hc, cell, { a: o.col || (kind === 'pine' ? '#3FA45A' : 'green'), t: o.trunk || 'brown', f: o.fruit || 'red' }, () => {
+      const w = Math.round(hc * (kind === 'pine' ? 0.62 : 0.8)) | 1, gr = grid(w, hc), c = (w - 1) / 2;
+      if (kind === 'pine') { gr.r(c - 1, hc - 4, c + 1, hc - 1, 't'); const tiers = 3; for (let k = 0; k < tiers; k++) { const t0 = Math.round(k * (hc - 4) / (tiers + 0.6)), t1 = Math.round(t0 + (hc - 4) * 0.48); for (let yy = t0; yy <= Math.min(t1, hc - 4); yy++) { const hw = (yy - t0 + 1) * (w / 2) / (t1 - t0 + 1) * (0.6 + 0.4 * (k + 1) / tiers); gr.r(c - hw, yy, c + hw, yy, yy === t1 ? 'A' : 'a'); } } }
+      else if (kind === 'bush') { gr.e(c + 0.5, hc * 0.55, w / 2, hc * 0.45, 'a'); }
+      else { gr.r(c - 1, Math.round(hc * 0.5), c + 1, hc - 1, 't').r(c - 1, Math.round(hc * 0.5), c - 1, hc - 1, 'T'); gr.e(c + 0.5, hc * 0.34, w / 2, hc * 0.32, 'a'); gr.e(c * 0.55, hc * 0.45, w * 0.24, hc * 0.17, 'a'); gr.e(c * 1.45 + 1, hc * 0.45, w * 0.24, hc * 0.17, 'a');
+        for (let yy = 0; yy < hc; yy++) for (let xx = 0; xx < w; xx++) if (gr.get(xx, yy) === 'a' && (yy > hc * 0.5 || hash(xx * 13 + yy * 71) < 0.18)) gr.p(xx, yy, 'A'); }
+      if (o.fruit) for (let i = 0; i < 9; i++) { const xx = Math.floor(hash(i * 5) * w), yy = Math.floor(hash(i * 7) * hc * 0.6); if (gr.get(xx, yy)) gr.p(xx, yy, 'f'); }
+      return gr; });
+    const w = Math.round(hc * (kind === 'pine' ? 0.62 : 0.8)) | 1; put(g, cv, x, y, cell, w / 2, hc, o);
+    return { top: y - hc * cell };
+  }
+  function grass(g, x, y, w, o) {
+    o = o || {}; const cell = o.cell || 7, n = Math.round(w / cell);
+    const cv = sprite('grass:' + n, cell, { a: o.col || 'green' }, () => { const gr = grid(n, 4); for (let i = 0; i < n; i++) { const hh = 1 + Math.floor(hash(i * 3) * 3.4); gr.r(i, 4 - hh, i, 3, hash(i) < 0.3 ? 'A' : 'a'); } return gr; });
+    put(g, cv, x, y, cell, 0, 4, o);
+  }
+  // падающие листья: n, область x,y,w,h, cols - цвета (клён: rust/red/yellow)
+  function leaves(g, t, o) {
+    o = o || {}; const n = o.n || 18, cols = (o.cols || ['rust', 'red', 'yellow', 'orange']).map(wc), s = o.size || 12;
+    for (let i = 0; i < n; i++) { const sp = 0.12 + hash(i * 3) * 0.12, ph = (t * sp + hash(i)) % 1, xx = o.x + hash(i * 7) * o.w + Math.sin(t * 2 + i) * 30, yy = o.y + ph * o.h;
+      g.globalAlpha = (o.alpha == null ? 1 : o.alpha) * Math.min(1, (1 - ph) * 5); g.fillStyle = cols[i % cols.length]; g.fillRect(xx, yy, s, s); g.fillRect(xx + s, yy - s * 0.6, s * 0.7, s * 0.7); }
+    g.globalAlpha = 1;
+  }
+  // солнце: r радиус, col цвет (розовое: 'pink'), horizon - y линии горизонта (ниже не рисуется), rise 0..1 подъём (сдвиг вниз на 2r при 0)
+  function sun(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, rc = Math.round((o.r || 130) / cell), col = o.col || 'yellow', yy = y + (1 - (o.rise == null ? 1 : o.rise)) * rc * 2 * cell;
+    const cv = sprite('sun:' + rc, cell, { a: col }, () => { const gr = grid(rc * 2 + 1, rc * 2 + 1); gr.e(rc + 0.5, rc + 0.5, rc + 0.5, rc + 0.5, 'a'); for (let r = rc + 2; r < rc * 2 + 1; r += 3) gr.r(0, r, rc * 2, r, 0); return gr; });
+    g.save(); if (o.horizon != null) { g.beginPath(); g.rect(0, 0, W, o.horizon); g.clip(); }
+    glowC(g, x, yy, rc * cell * 2.4, col, (o.alpha == null ? 1 : o.alpha) * 0.55); put(g, cv, x, yy, cell, rc + 0.5, rc + 0.5, o); g.restore();
+  }
+  function moon(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 9, rc = Math.round((o.r || 80) / cell);
+    const cv = sprite('moon:' + rc + (o.full ? 'f' : ''), cell, { a: o.col || '#F2EBC8' }, () => { const gr = grid(rc * 2 + 1, rc * 2 + 1); gr.e(rc + 0.5, rc + 0.5, rc + 0.5, rc + 0.5, 'a'); if (!o.full) gr.e(rc * 1.55, rc * 0.8, rc * 0.95, rc * 0.95, 0); return gr; });
+    glowC(g, x, y, rc * cell * 2, o.col || '#F2EBC8', 0.3); put(g, cv, x, y, cell, rc + 0.5, rc + 0.5, o);
+  }
+  // звёзды: крестики из точек мерцают; n, x,y,w,h области, on 0..1 доля зажжённых (по одной), col
+  function stars(g, t, o) {
+    o = o || {}; const n = o.n || 30, on = o.on == null ? 1 : o.on, c = wc(o.col || '#F4F1D0'), s = o.size || 6;
+    for (let i = 0; i < n; i++) { if (hash(i * 11 + 3) > on) continue; const xx = o.x + hash(i * 3) * o.w, yy = o.y + hash(i * 5) * o.h, tw = 0.55 + 0.45 * Math.sin(t * (1.5 + hash(i) * 3) + i);
+      g.globalAlpha = tw * (o.alpha == null ? 1 : o.alpha); g.fillStyle = c; const big = hash(i * 7) < 0.3;
+      g.fillRect(xx, yy, s, s); if (big) { g.fillRect(xx - s * 1.2, yy, s, s); g.fillRect(xx + s * 1.2, yy, s, s); g.fillRect(xx, yy - s * 1.2, s, s); g.fillRect(xx, yy + s * 1.2, s, s); } }
+    g.globalAlpha = 1;
+  }
+  function cloud(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, wc2 = Math.round((o.w || 260) / cell);
+    const cv = sprite('cloud:' + wc2, cell, { a: o.col || '#C9CBD0' }, () => { const h = Math.round(wc2 * 0.42), gr = grid(wc2, h); gr.e(wc2 * 0.3, h * 0.65, wc2 * 0.26, h * 0.36, 'a').e(wc2 * 0.55, h * 0.45, wc2 * 0.3, h * 0.46, 'a').e(wc2 * 0.78, h * 0.68, wc2 * 0.22, h * 0.32, 'a').r(1, h - 1, wc2 - 2, h - 1, 'A'); return gr; });
+    put(g, cv, x, y, cell, wc2 / 2, Math.round(wc2 * 0.42) / 2, o);
+  }
+  // море: ряды бегущих штрихов-волн от y до y+h; col цвет, glint {x, col} - дорожка от солнца/луны
+  function sea(g, x, y, w, h, t, o) {
+    o = o || {}; const rows = o.rows || Math.round(h / 26), c = wc(o.col || 'sea'), cell = o.cell || 8, a = o.alpha == null ? 1 : o.alpha;
+    g.globalAlpha = a * 0.35; g.fillStyle = mix(c, '#08090C', 0.55); g.fillRect(x, y, w, h);
+    for (let r = 0; r < rows; r++) { const yy = y + 8 + r * (h - 10) / rows, k = r / rows, sp = (r % 2 ? 1 : -1) * (14 + r * 5), seg = 30 + k * 50;
+      g.fillStyle = r % 3 === 0 ? mix(c, '#FFFFFF', 0.3) : c; g.globalAlpha = a * (0.45 + 0.5 * k);
+      for (let xx = ((t * sp) % (seg * 2) + seg * 2) % (seg * 2) - seg * 2; xx < w; xx += seg * 2) { const x0 = Math.max(0, xx + hash(r * 9) * seg), x1 = Math.min(w, xx + hash(r * 9) * seg + seg * 0.9); if (x1 > x0) g.fillRect(x + x0, yy, x1 - x0, cell * (0.5 + k * 0.4)); } }
+    if (o.glint) { const gc = wc(o.glint.col || 'yellow'); g.fillStyle = gc; for (let r = 0; r < rows; r++) { const yy = y + 8 + r * (h - 10) / rows, hw = 30 + r * 12 * (0.7 + 0.3 * Math.sin(t * 3 + r)); g.globalAlpha = a * 0.75 * (1 - r / rows * 0.5); g.fillRect(o.glint.x - hw / 2, yy, hw, cell * 0.7); } }
+    g.globalAlpha = 1;
+  }
+  function hill(g, x, y, w, h, o) {
+    o = o || {}; const cell = o.cell || 10, cw = Math.round(w / cell), ch = Math.round(h / cell);
+    const cv = sprite('hill:' + cw + 'x' + ch, cell, { a: o.col || '#3E7F48' }, () => { const gr = grid(cw, ch); gr.e(cw / 2, ch, cw / 2, ch, 'a'); for (let i = 0; i < cw * ch * 0.06; i++) gr.get(Math.floor(hash(i) * cw), Math.floor(hash(i + 50) * ch)) && gr.p(Math.floor(hash(i) * cw), Math.floor(hash(i + 50) * ch), 'A'); return gr; });
+    put(g, cv, x, y, cell, cw / 2, ch, o);
+  }
+  // маяк: col стены, stripe полосы, on 0..1 огонь (луч крутится при on > 0)
+  function lighthouse(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 10, hc = Math.round((o.h || 460) / cell), on = o.on == null ? 1 : o.on;
+    const cv = sprite('lh:' + hc, cell, { a: o.col || 'white', b: o.stripe || 'red', k: '#34373D', l: '#5C5F66' }, () => {
+      const gr = grid(13, hc), c = 6; gr.r(c - 2, 0, c + 2, 1, 'b').r(c - 3, 2, c + 3, 2, 'k').r(c - 2, 3, c + 2, 6, 'l').r(c - 3, 7, c + 3, 7, 'k');
+      for (let yy = 8; yy < hc; yy++) { const hw = 2.5 + (yy - 8) / (hc - 8) * 3; gr.r(c - hw, yy, c + hw, yy, Math.floor((yy - 8) / 5) % 2 ? 'b' : 'a'); }
+      gr.r(c - 1, hc - 4, c + 1, hc - 1, 'k'); return gr; });
+    put(g, cv, x, y, cell, 6.5, hc, o);
+    if (on > 0 && (o.alpha == null || o.alpha > 0)) { const ly = y - (hc - 5) * cell, a = on * (o.alpha == null ? 1 : o.alpha), c = wc(o.light || 'warm');
+      g.globalAlpha = a; g.fillStyle = c; g.fillRect(x - 2 * cell + 2, ly - 2 * cell + 2, 4 * cell - 4, 4 * cell - 4); glowC(g, x, ly, cell * 9, c, a);
+      const ang = (o.t || 0) * 1.2, d = Math.cos(ang); g.globalAlpha = a * 0.22 * Math.abs(d); g.fillStyle = c; g.beginPath(); g.moveTo(x, ly); g.lineTo(x + d * 520, ly - 60); g.lineTo(x + d * 520, ly + 60); g.closePath(); g.fill(); g.globalAlpha = 1; }
+    return { top: y - hc * cell, light: { x, y: y - (hc - 5) * cell } };
+  }
+
+  // ---- улица ----
+  function lamp(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, hc = Math.round((o.h || 260) / cell), on = o.on == null ? 1 : o.on;
+    const cv = sprite('lamp:' + hc, cell, { a: o.col || '#5C5F66' }, () => { const gr = grid(5, hc); gr.r(2, 2, 2, hc - 1, 'a').r(1, hc - 2, 3, hc - 1, 'A').r(0, 0, 4, 1, 'a'); return gr; });
+    put(g, cv, x, y, cell, 2.5, hc, o);
+    if (on > 0) { const c = wc(o.light || 'warm'), ly = y - (hc - 2.5) * cell; g.globalAlpha = on * (o.alpha == null ? 1 : o.alpha); g.fillStyle = c; g.fillRect(x - 1.5 * cell, ly - cell * 0.5, 3 * cell, cell); glowC(g, x, ly, cell * 7, c, on); g.globalAlpha = 1; }
+  }
+  // гирлянда/фонарики между двумя точками: n лампочек, sag провис, cols цвета, on 0..1 зажигаются слева направо
+  function garland(g, x0, y0, x1, y1, o) {
+    o = o || {}; const n = o.n || 12, sag = o.sag == null ? 70 : o.sag, on = o.on == null ? 1 : o.on, cols = (o.cols || ['warm', 'red', 'lime', 'sky', 'pink']).map(wc), s = o.size || 14, a = o.alpha == null ? 1 : o.alpha;
+    g.globalAlpha = a * 0.5; g.fillStyle = '#5C5F66'; for (let i = 0; i <= 40; i++) { const p = i / 40; g.fillRect(lerp(x0, x1, p), lerp(y0, y1, p) + sag * 4 * p * (1 - p), 3, 3); }
+    for (let i = 0; i < n; i++) { const p = (i + 0.5) / n, xx = lerp(x0, x1, p), yy = lerp(y0, y1, p) + sag * 4 * p * (1 - p) + s * 0.6, lit = (i + 1) / n <= on + 1e-6, c = cols[i % cols.length];
+      g.globalAlpha = a; g.fillStyle = lit ? c : '#2A2D33'; g.fillRect(xx - s / 2, yy, s, s * 1.2); if (lit) glowC(g, xx, yy + s * 0.6, s * 2.6, c, a * (0.8 + 0.2 * Math.sin((o.t || 0) * 4 + i))); }
+    g.globalAlpha = 1;
+  }
+  function bench(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 8, cw = Math.round((o.w || 200) / cell);
+    const cv = sprite('bench:' + cw, cell, { a: o.col || 'wood', k: '#4A4D55' }, () => { const gr = grid(cw, 7); gr.r(0, 0, cw - 1, 1, 'a').r(0, 3, cw - 1, 3, 'a').r(1, 4, 1, 6, 'k').r(cw - 2, 4, cw - 2, 6, 'k'); return gr; });
+    put(g, cv, x, y, cell, cw / 2, 7, o); return { seat: y - 4 * cell };
+  }
+  // прилавок с товаром: goods [{col, n}] - горки круглых плодов/рыб; awning цвет навеса
+  function stall(g, x, y, o) {
+    o = o || {}; const cell = o.cell || 9, cw = Math.round((o.w || 420) / cell);
+    const cv = sprite('stall:' + cw, cell, { a: o.col || 'wood', s: o.awning || 'orange', x: '#E8E9EC', k: '#4A4D55' }, () => { const gr = grid(cw, 26); for (let xx = 0; xx < cw; xx++) gr.r(xx, 0, xx, 2, Math.floor(xx / 3) % 2 ? 'x' : 's'); gr.r(0, 3, 0, 25, 'k').r(cw - 1, 3, cw - 1, 25, 'k').r(0, 16, cw - 1, 17, 'a').r(1, 18, cw - 2, 25, 'A'); return gr; });
+    put(g, cv, x, y, cell, cw / 2, 26, o);
+    const goods = o.goods || [], gw = (cw - 2) * cell / Math.max(1, goods.length), top = y - 10 * cell;
+    goods.forEach((gd, i) => { const c = wc(gd.col || 'orange'), n = gd.n == null ? 6 : gd.n, cx = x - (cw - 2) * cell / 2 + gw * (i + 0.5), s = cell * (gd.fish ? 2.2 : 1.7);
+      g.globalAlpha = o.alpha == null ? 1 : o.alpha;
+      if (gd.fish) { for (let k = 0; k < Math.min(n, 4); k++) { g.fillStyle = k % 2 ? mix(c, '#000000', 0.2) : c; const fy = top - (k + 1) * cell * 1.1; const q = cell * 0.8, bx = cx - q * 4; g.fillRect(bx + q, fy - q, q * 5, q); g.fillRect(bx, fy, q * 7, q); g.fillRect(bx + q, fy + q, q * 5, q * 0.9); g.fillRect(bx + q * 7, fy - q * 1.2, q, q * 1.2); g.fillRect(bx + q * 7, fy + q, q, q * 1.2); g.fillRect(bx + q * 6.4, fy, q * 1.6, q); g.fillStyle = '#1A1C20'; g.fillRect(bx + q * 1.2, fy - q * 0.7, q * 0.6, q * 0.6); } }
+      else { let k = 0; for (let row = 0; k < n; row++) for (let j = 0; j < 4 - row && k < n; j++, k++) { g.fillStyle = (k * 7) % 5 === 0 ? mix(c, '#FFFFFF', 0.3) : c; g.fillRect(cx + (j - (3 - row) / 2) * s * 1.1 - s / 2, top - (row + 1) * s * 1.02, s, s); } }
+      if (gd.label) { g.font = F(500, cell * 4); g.textAlign = 'center'; g.fillStyle = '#16181C'; const tw = mw(g, gd.label) + cell * 2; g.fillRect(cx - tw / 2, y - 8.6 * cell, tw, cell * 5); g.fillStyle = C.wh; g.fillText(gd.label, cx, y - 4.8 * cell); g.textAlign = 'left'; }
+      g.globalAlpha = 1; });
+  }
+  // своя точечная иконка для dots/logo/morph: icon(id, cols, rows, (x,y) => 0|1|2) (2 - тусклая точка)
+  const ICN = {};
+  function icon(id, cols, rows, fn) { if (ICN[id]) return ICN[id]; const pts = [], r = rng(id.length * 7 + 3);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) { const v = fn(x + 0.5, y + 0.5); if (!v) continue; const q = r(); pts.push({ x: x + 0.5 - cols / 2, y: y + 0.5 - rows / 2, k: v === 2 ? 1 : q < 0.12 ? 1 : q < 0.17 ? 2 : 0 }); }
+    return ICN[id] = { pts, frag: [], rows }; }
+  function iconPts(ic, cx, cy, cell) { return ic.pts.map(p => ({ x: cx + p.x * cell, y: cy + p.y * cell })); }
+
   return { SANS, SERIF, MONO, C, TH, W, H, X0, X1,
     clamp, lerp, prog, eo, eio, ein, spring, rng, hash, F, life, count, fmt,
     prep, fit, wrap, tracked, trW, typeLines, lead, kicker, section, term,
     pixText, pixWidth, pixPoints, sprout, dots, sproutPts, scatter, morph, vortex, logo,
     corners, rr, figPanel, logPanel, stats, card, legend, ratioBar, segBar, brk, wordmark, ribbon,
-    setHud, hud, scene, outA, bars, frame, cutSounds };
+    setHud, hud, scene, outA, bars, frame, cutSounds,
+    WC, SKIN, HAIR, SHIRTS, mix, grid, sprite, put, glowC, figure, person, crowd, dog, cat, bird, birds, car, bus, bike, boat,
+    windows, house, tower, shop, cafe, school, crane, board, tree, grass, leaves, sun, moon, stars, cloud, sea, hill, lighthouse,
+    lamp, garland, bench, stall, icon, iconPts };
 })();

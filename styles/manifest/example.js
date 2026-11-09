@@ -82,7 +82,7 @@ function draw(t, k) {
   g.restore();
   if (i === 2) M.pile(g, STAMPS, t, 6.62, 0.085);
   if (i === 3) M.flash(g, t, 9.0, 0.3, 0.6);
-  M.hud(g, t, th, { a: i === 9 ? 1 - M.eo((t - CUTS[9] - 0.1) / 0.5) : 1 });
+  M.hud(g, t, th, { brand: 'ТИШИНА', a: i === 9 ? 1 - M.eo((t - CUTS[9] - 0.1) / 0.5) : 1 });
 }
 function sound(s) {
   s.play(0.03, 'pop_soft', 0.16); s.play(0.62, 'type', 0.08);

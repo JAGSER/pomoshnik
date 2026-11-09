@@ -264,7 +264,7 @@ function draw(t, k) {
   const g = C.begin(t, k), sc = C.cuts(t, CUTS);
   g.save(); SC[sc.i](g, t, sc); g.restore();
   const sw = C.switchAt(t, 10.02);
-  C.status(g, { time: C.clock(minutes(t)), on: sw.on, v: sw.v, dark: darkAt(t), a: C.eo(C.pr(t, .15, .55)) });
+  C.status(g, { time: C.clock(minutes(t)), label: 'фокус', on: sw.on, v: sw.v, dark: darkAt(t), a: C.eo(C.pr(t, .15, .55)) });
 }
 
 function sound(s) {

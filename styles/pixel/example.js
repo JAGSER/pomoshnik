@@ -215,7 +215,7 @@ const SC = [
 ];
 
 function draw(t, k) {
-  X.run(t, k, { cuts: CUTS, tr: TR, scenes: SC, irisAt: [90, 206], hud: (g, t) => X.hud(g, hudAt(t)) });
+  X.run(t, k, { cuts: CUTS, tr: TR, scenes: SC, irisAt: [90, 206], hud: (g, t) => X.hud(g, Object.assign({ lvL: 'УР', xpL: 'ОПЫТ', dayL: 'ДЕНЬ' }, hudAt(t))) });
 }
 
 function sound(s) {

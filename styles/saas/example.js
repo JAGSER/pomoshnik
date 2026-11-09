@@ -3,10 +3,11 @@ const {C,MONO,FT,rgba,clamp,lerp,prog,eo,eio,back,rub,countInt,typeOn,T,Tr,label
 steps,score,minibars,segbar,stat,glass,tabs,cursor,path,checkTile,icon,node,link,cam,play,sfx,cutSounds,fnt,rr}=SAAS;
 const TABS=['Чек','Месяц','Банк','Связи'];
 const TR1={type:'circle',x:540,y:1000,r:72};
+const RAIN=['молоко 89 ₽','хлеб 54 ₽','такси 412 ₽','кофе 290 ₽','аптека 640 ₽','кино 399 ₽','сыр 512 ₽','бензин 2 100 ₽','обед 450 ₽','связь 600 ₽','кешбэк 37 ₽','фрукты 318 ₽'];
 
 // 0. Хук: тёмный фон с дождём строк, «Стоп переплатам» (зачёркнуто), «до кассы.», круг-кнопка летит на слово
-function s0(g,lt,t,S){bgDark(g,t,{rain:1});g.save();const z=cam(g,lt,S.dur,{z:0.04,cy:900});
-icon(g,488,300,52,{p:prog(lt,0,0.45)});label(g,'Сверка',528,301,{size:24,color:'#C9BDFF',p:prog(lt,0.1,0.3)});
+function s0(g,lt,t,S){bgDark(g,t,{rain:1,words:RAIN});g.save();const z=cam(g,lt,S.dur,{z:0.04,cy:900});
+icon(g,488,300,52,{glyph:'receipt',p:prog(lt,0,0.45)});label(g,'Сверка',528,301,{size:24,color:'#C9BDFF',p:prog(lt,0.1,0.3)});
 const a=head(g,['Стоп','переплатам'],540,620,{size:160,maxW:880,dark:1,lt,delay:0.08,stagger:0.16,strike:'переплатам',strikeAt:0.9});
 const b=head(g,['до кассы.'],540,620+a.h,{size:a.sz,dark:1,lt,delay:1.25,stagger:0.12,key:['кассы.']});
 const k=b.box['кассы'];if(k){TR1.x=540+(k.x+k.w*0.62-540)*z;TR1.y=900+(k.y+a.sz*0.5-900)*z;}g.restore();}
@@ -22,7 +23,7 @@ const sp=lt<1.55?0:clamp((lt-1.55)/0.8*5,0,5);steps(g,x+72,y+300,w-144,['фот�
 g.fillStyle='#EEECF5';g.fillRect(x+40,y+400,w-80,2);
 const r=prog(lt,2.35,0.4);if(r>0){tag(g,'в норме',x+40,y+480,'green',{size:30,p:r});
 body(g,'Цены обычные, дублей нет. Можно платить.',x+40,y+535,{size:30,maxW:440,p:prog(lt,2.5,0.4)});
-const n=lt<2.95?countInt(lt,2.4,0.45,0,82):countInt(lt,2.95,0.25,82,85);g.save();g.globalAlpha*=eo(r);score(g,n,x+w-40,y+630,{size:176});g.restore();
+const n=lt<2.95?countInt(lt,2.4,0.45,0,82):countInt(lt,2.95,0.25,82,85);g.save();g.globalAlpha*=eo(r);score(g,n,x+w-40,y+630,{size:176,of:'/100'});g.restore();
 minibars(g,[['фото +10',0.25],['цены +40',0.9],['дубли +20',0.5],['сумма +15',0.35]],x+w-470,y+690,430,lt-2.6);}
 g.restore();
 chip(g,'0,7 с',x+w-14,y-6,'dark',{icon:'timer',size:24,align:'right',p:prog(lt,2.6,0.35)});
@@ -77,7 +78,7 @@ function s5(g,lt,t,S){bgLight(g,t,{cy:1050});g.save();cam(g,lt,S.dur,{cy:1050});
 label(g,'Работает с вашим',60,285,{p:prog(lt,0.1,0.3)});head(g,['К банку','и таблице.'],60,325,{align:'left',size:116,grey:[1],lt,delay:0.12});
 g.save();rise(g,prog(lt,0.12,0.6));win(g,60,620,960,880,'связи');const cx=540,cy=1070;
 NODES.forEach((n,i)=>link(g,cx,cy,cx+n[0],cy+n[1],prog(lt,0.6+i*0.08,0.35),t,{ph:i*0.17}));
-icon(g,cx,cy,150,{p:prog(lt,0.3,0.5),draw:prog(lt,0.45,0.6)});NODES.forEach((n,i)=>node(g,cx+n[0],cy+n[1],n[2],n[3],prog(lt,0.8+i*0.08,0.4)));
+icon(g,cx,cy,150,{glyph:'receipt',p:prog(lt,0.3,0.5),draw:prog(lt,0.45,0.6)});NODES.forEach((n,i)=>node(g,cx+n[0],cy+n[1],n[2],n[3],prog(lt,0.8+i*0.08,0.4)));
 const fp=prog(lt,1.6,0.4);if(fp>0){g.save();g.globalAlpha*=eo(fp);Tr(g,'подключение за 1 минуту',540,1458,20,C.mute,500,'center',MONO);g.restore();}
 g.restore();g.restore();}
 
@@ -92,7 +93,7 @@ const fp=prog(lt,1.5,0.4);if(fp>0){g.save();g.globalAlpha*=eo(fp)*0.9;Tr(g,'це
 function s7(g,lt,t,S){bgDark(g,t);g.save();cam(g,lt,S.dur,{z:0.02,cy:900});
 fnt(g,800,150,SAAS.F);const ww=SAAS.trW(g,'Сверка',-150*0.045),tot=140+34+ww,sl=eio(prog(lt,0.55,0.5));const ix=lerp(540,540-tot/2+70,sl);
 if(sl>0){g.save();g.beginPath();g.rect(ix+70,700,1000,240);g.clip();head(g,['Сверка'],lerp(ix+70-ww*0.6,540-tot/2+174,sl),740,{align:'left',size:150,dark:1,tr:-0.045});g.restore();}
-icon(g,ix,820,140,{p:prog(lt,0,0.5),draw:prog(lt,0.15,0.6)});
+icon(g,ix,820,140,{glyph:'receipt',p:prog(lt,0,0.5),draw:prog(lt,0.15,0.6)});
 head(g,['Каждый рубль','на месте.'],540,960,{size:72,dark:1,lt,delay:0.9,key:['рубль'],weight:700});
 const bp=prog(lt,1.25,0.4);if(bp>0){g.save();pop(g,bp,540,1180);SAAS.glow(g,540,1180,260,'#7A5CFF',0.35);g.fillStyle='#fff';rr(g,330,1138,420,84,42);g.fill();
 Tr(g,'Проверить чек',540,1181,32,C.ink,700,'center',MONO,380);g.restore();

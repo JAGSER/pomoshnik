@@ -106,7 +106,7 @@ function draw(t,k){
   P.stairs(g,t,CUTS[3],"dark","paper");
   P.stairs(g,t,CUTS[6],"dark","paper",{dir:1});
   P.iris(g,t,CUTS[8],{toRed:1});
-  P.hud(g,t,{theme:kind,chapter:CH[i],dur:k.duration});
+  P.hud(g,t,{theme:kind,label:"ДВОР / ЭССЕ 2026",chapter:CH[i],dur:k.duration});
 }
 
 function sound(s){

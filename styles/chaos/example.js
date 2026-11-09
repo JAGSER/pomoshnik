@@ -4,6 +4,7 @@ const L = CHAOS, C = L.C;
 const CUTS = [0, 2.6, 4.6, 7.6, 9.4, 11.0, 15.4, 18.2, 20.2, 22.6, 23.4, 24.2, 25.0, 25.8, 26.8];
 const KIND = ['ink', 'ink', 'ink', 'storm', 'ink', 'ink', 'ink', 'ink', 'ink', 'coral', 'paper', 'blue', 'ink', 'coral', 'paper'];
 const SNOOZE = [5.3, 5.9, 6.5, 7.9, 8.4, 8.9, 9.5];
+const CODE = ['const подъём = "06:00";', 'если (спит) {', '  громкость += 10;', 'пока (лежит) ждать(5);', 'отложено++;', 'вернуть "вставай";', 'проверить(одеяло);', 'сигнал.громче();'];
 const snoozed = t => SNOOZE.filter(x => t >= x).length;
 
 const S = [
@@ -53,7 +54,7 @@ const S = [
     const T = ['06:00', '06:05', '06:10', '06:15', '06:20', '06:25'], SUB = ['подъём', 'подъём!', 'точно встаю', 'ну всё', 'последний', 'серьёзно'];
     for (let i = 0; i < 6; i++) {
       const c = i % 2, r = (i / 2) | 0, a = L.eo((u - 0.15 - i * 0.08) / 0.25), dk = u - 0.9 - i * 0.22;
-      L.note(g, 64 + c * 486, 530 + r * 270, 466, 244, T[i], SUB[i], { a, dead: dk > 0, strike: dk / 0.18 });
+      L.note(g, 64 + c * 486, 530 + r * 270, 466, 244, T[i], SUB[i], { a, dead: dk > 0, strike: dk / 0.18, app: 'будильник' });
     }
     const n = Math.min(7, 1 + Math.max(0, Math.floor((u - 0.9) / 0.22)));
     L.poster(g, u, [{ s: 'ОТЛОЖИТЬ ×' + (u > 0.9 ? n : 1), c: 'bone', at: 0.5, size: 200 }], { y: 1430, seed: 4 });
@@ -89,7 +90,7 @@ function draw(t, k) {
   const g = k.g, { i, u } = L.scene(t, CUTS, k.duration);
   let kind = KIND[i];
   if (kind === 'storm') kind = L.stormBg(u);
-  L.bg(g, kind, t, { code: i === 5 ? 0.3 : i === 2 ? 0.22 : 0, ghost: kind === 'ink' && i < 9 ? 'Б' : null });
+  L.bg(g, kind, t, { code: i === 5 ? 0.3 : i === 2 ? 0.22 : 0, codeLines: CODE, ghost: kind === 'ink' && i < 9 ? 'Б' : null });
   g.save(); L.cam(g, u);
   S[i](g, u, t);
   g.restore();

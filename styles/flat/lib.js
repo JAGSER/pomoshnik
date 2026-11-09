@@ -553,11 +553,371 @@ const FLAT = (() => {
     g.restore();
   }
 
+  // ---------- типовые объекты: люди, дома, деревья, транспорт, животные, небо, улица ----------
+  // Всё рисуется от точки на земле (x — центр, y — низ), цвет каждой части — параметром.
+  const dk = (c, a = 0.2) => mix(c, '#000000', a), lite = (c, a = 0.3) => mix(c, '#FFFFFF', a);
+  const SKIN = ['#F1C7A4', '#DFA67D', '#B97A52', '#8A5636'], HAIR = ['#3A2A20', '#6B4226', '#C9873E', '#1E1A18', '#A3542F'];
+  const CLOTH = ['#B85C3C', '#E3A94B', '#5D8BBE', '#7FAE6A', '#D9573B', '#8E9B5C', '#2F5888', '#ECC2A2', '#9FB3CF', '#C98A57'];
+  const D2R = PI / 180;
+  // позы: [legB, legF, armB, armF, lean]; ph — фаза шага/танца (секунды × частота)
+  function poseOf(pose, ph, t) {
+    const s = Math.sin(ph * TAU), c = Math.cos(ph * TAU), up = Math.max(0, s), dn = Math.max(0, -s);
+    switch (pose) {
+      case 'walk': return [[-26 * s, -8 - 26 * up], [26 * s, -8 - 26 * dn], [24 * s, 14], [-24 * s, 14], 3];
+      case 'run': return [[-48 * s, -20 - 60 * up], [48 * s, -20 - 60 * dn], [44 * s, 80], [-44 * s, 80], 13];
+      case 'wave': return [[-5, 0], [5, 0], [-10, 8], [150 + 14 * Math.sin(t * 9), 22], 0];
+      case 'cheer': return [[-6, 0], [6, 0], [-158 + 10 * Math.sin(t * 7), -10], [158 + 10 * Math.sin(t * 7 + 1), 10], 0];
+      case 'point': return [[-5, 0], [5, 0], [-10, 8], [92, 0], 2];
+      case 'hold': return [[-5, 0], [5, 0], [22, 72], [32, 70], 0];
+      case 'shout': return [[-6, 0], [6, 0], [-10, 8], [120 + 10 * Math.sin(t * 6), 30], 6];
+      case 'dance': return [[-14 - 16 * s, -14], [20 + 22 * s, -26 * up], [-140 + 30 * c, -30], [140 + 30 * s, 30], 9 * s];
+      case 'sit': return [[86, -84], [92, -92], [20, 40], [36, 46], 0];
+      case 'read': return [[86, -84], [92, -92], [30, 74], [44, 70], 4];
+      case 'ride': return [[58 - 26 * s, -64 + 22 * s], [58 + 26 * s, -64 - 22 * s], [62, 18], [68, 14], 14];
+      default: return [[-5, 0], [5, 0], [-8, 6], [8, -6], 0];
+    }
+  }
+  // человек: (x,y) — точка между стоп на земле. o: h (рост px, ребёнок ~0.65 взрослого), age 'adult'|'kid'|'old', dir ±1,
+  // pose stand|walk|run|wave|cheer|point|hold|shout|dance|sit|read|ride, t, ph (фаза шага, по умолчанию t*1.6),
+  // skin hair shirt pants shoes, hs (причёска short|long|bun|bald|scarf), scarf (цвет платка), helmet (цвет каски), cap (цвет кепки),
+  // dress (юбка до колен), apron, bag (цвет рюкзака), glasses, mouth 'open', limbs {legB,legF,armB,armF,lean} поверх позы.
+  // Возвращает мировые точки {hand, hand2, head, top} — чтобы вложить предмет в руку.
+  function human(g, x, y, o = {}) {
+    const age = o.age || 'adult', kid = age === 'kid', old = age === 'old', t = o.t || 0;
+    const L1 = kid ? 48 : 62, L2 = kid ? 48 : 62, TO = kid ? 70 : old ? 86 : 92, HR = kid ? 34 : 29, A1 = kid ? 38 : 50, A2 = kid ? 36 : 46;
+    const LW = kid ? 21 : 24, AW = kid ? 15 : 17, BW = kid ? 46 : 52, T = L1 + L2 + TO + 8 + 2 * HR + 6;
+    const Hh = o.h || (kid ? 200 : old ? 285 : 300), k = Hh / T, dir = o.dir || 1, pose = o.pose || 'stand';
+    const ps = poseOf(pose, o.ph == null ? t * 1.6 : o.ph, t), lm = o.limbs || {};
+    const legB = lm.legB || ps[0], legF = lm.legF || ps[1], armB = lm.armB || ps[2], armF = lm.armF || ps[3];
+    const lean = ((lm.lean == null ? ps[4] : lm.lean) + (old ? 9 : 0)) * D2R;
+    const skin = o.skin || SKIN[0], hair = o.hair || (old ? '#D8D4CC' : HAIR[0]), shirt = o.shirt || C.terra, pants = o.pants || (kid ? C.deep : C.slate), shoes = o.shoes || C.ink;
+    const sit = pose === 'sit' || pose === 'read' || pose === 'ride', hipY = sit ? -L2 - 4 : -(L1 + L2) + (pose === 'run' ? 10 : pose === 'walk' ? 3 : 0);
+    const X = (lx) => x + lx * k * dir, Y = (ly) => y + ly * k;
+    g.save(); g.translate(x, y); g.scale(k * dir, k); g.lineCap = 'round'; g.lineJoin = 'round';
+    const limb = (x0, y0, v, l1, l2, lw, col, end, er) => {
+      const A = v[0] * D2R, B = (v[0] + v[1]) * D2R, x1 = x0 + Math.sin(A) * l1, y1 = y0 + Math.cos(A) * l1, x2 = x1 + Math.sin(B) * l2, y2 = y1 + Math.cos(B) * l2;
+      g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      if (end) { g.fillStyle = end; g.beginPath(); g.arc(x2, y2, er, 0, TAU); g.fill(); }
+      return [x2, y2];
+    };
+    const sx = Math.sin(lean) * TO, sy = hipY - Math.cos(lean) * TO, shX = sx * 0.94, shY = sy + 10;
+    const hx = sx + Math.sin(lean) * (8 + HR), hy = sy - Math.cos(lean) * (8 + HR);
+    if (o.bag) { g.save(); g.translate(sx * 0.5 - BW * 0.62, (hipY + sy) / 2); g.rotate(lean); box(g, -18, -TO * 0.36, 36, TO * 0.66, { r: 10, fill: o.bag, lw: 4 }); g.restore(); }
+    limb(0, hipY, legB, L1, L2, LW, dk(pants, 0.22), shoes, LW * 0.55);
+    const h2 = limb(shX, shY, armB, A1, A2, AW, dk(shirt, 0.22), skin, AW * 0.62);
+    limb(0, hipY, legF, L1, L2, LW, pants, shoes, LW * 0.55);
+    g.strokeStyle = shirt; g.lineWidth = BW; g.beginPath(); g.moveTo(0, hipY - 6); g.lineTo(sx * 0.9, sy + BW * 0.3); g.stroke();
+    if (o.dress) { const dc = o.dress === true ? shirt : o.dress; g.fillStyle = dc; g.beginPath(); g.moveTo(-BW * 0.5, hipY - 30); g.lineTo(BW * 0.5, hipY - 30); g.lineTo(BW * 0.95, hipY + L1 * 0.85); g.lineTo(-BW * 0.95, hipY + L1 * 0.85); g.closePath(); g.fill(); }
+    if (o.apron) { g.save(); g.translate(0, hipY); g.rotate(lean); g.fillStyle = o.apron; g.beginPath(); rr(g, -BW * 0.42, -TO * 0.58, BW * 0.84, TO * 0.58 + L1 * 0.62, 10); g.fill(); g.restore(); }
+    disc(g, sx + Math.sin(lean) * 5, sy - Math.cos(lean) * 5, BW * 0.2, { fill: skin, stroke: null });
+    // голова и причёска
+    const hs = o.hs || (o.scarf ? 'scarf' : old ? 'bun' : 'short');
+    if (hs === 'long') { g.fillStyle = hair; g.beginPath(); rr(g, hx - HR * 1.08, hy - HR * 0.2, HR * 1.25, HR * 1.75, HR * 0.4); g.fill(); }
+    if (hs === 'bun') disc(g, hx - HR * 0.85, hy - HR * 0.75, HR * 0.42, { fill: hair, stroke: null });
+    disc(g, hx, hy, HR, { fill: skin, stroke: null });
+    if (hs !== 'bald') {
+      g.fillStyle = hs === 'scarf' ? o.scarf || C.red : hair; g.beginPath();
+      if (hs === 'scarf') { g.arc(hx, hy, HR * 1.1, PI * 0.92, PI * 2.08); g.lineTo(hx - HR * 1.05, hy + HR * 0.75); g.closePath(); }
+      else { g.arc(hx, hy, HR * 1.04, PI * 0.95, PI * 2.02); g.quadraticCurveTo(hx, hy - HR * 0.35, hx - HR * 0.85, hy + HR * 0.2); g.closePath(); }
+      g.fill();
+    }
+    if (o.helmet) { g.fillStyle = o.helmet; g.beginPath(); g.arc(hx, hy - HR * 0.15, HR * 1.12, PI, TAU); g.closePath(); g.fill(); g.fillRect(hx - HR * 1.3, hy - HR * 0.22, HR * 2.6, HR * 0.28); g.fillStyle = dk(o.helmet, 0.15); g.fillRect(hx - HR * 0.12, hy - HR * 1.25, HR * 0.24, HR * 1.05); }
+    if (o.cap) { g.fillStyle = o.cap; g.beginPath(); g.arc(hx, hy - HR * 0.1, HR * 1.05, PI, TAU); g.closePath(); g.fill(); g.fillRect(hx, hy - HR * 0.3, HR * 1.5, HR * 0.24); }
+    g.fillStyle = C.ink; g.beginPath(); g.arc(hx + HR * 0.48, hy - HR * 0.02, HR * 0.12, 0, TAU); g.fill();
+    if (o.glasses) ring(g, hx + HR * 0.48, hy - HR * 0.02, HR * 0.3, { lw: 3, col: C.ink });
+    if (o.mouth === 'open' || pose === 'shout') { g.fillStyle = C.rust; g.beginPath(); g.ellipse(hx + HR * 0.52, hy + HR * 0.42, HR * 0.15, HR * 0.2, 0, 0, TAU); g.fill(); }
+    else { g.strokeStyle = dk(skin, 0.45); g.lineWidth = 3; g.beginPath(); g.arc(hx + HR * 0.5, hy + HR * 0.28, HR * 0.22, 0.2, 1.4); g.stroke(); }
+    const h1 = limb(shX, shY, armF, A1, A2, AW, shirt, skin, AW * 0.62);
+    g.restore();
+    return { hand: [X(h1[0]), Y(h1[1])], hand2: [X(h2[0]), Y(h2[1])], head: [X(hx), Y(hy)], top: Y(hy - HR * 1.1), k };
+  }
+  // группа людей, не сливаются: разные одежда, кожа, волосы, рост, шаг; n человек между x0 и x1 на земле y.
+  // o: h, pose, t, kids (доля детей 0…1), shirts [цвета], seed, dir, opts(i) — свои параметры i-му
+  function crowd(g, x0, x1, y, n, o = {}) {
+    const r = rnd(o.seed || 41), sh = o.shirts || CLOTH, out = [];
+    const ppl = []; for (let i = 0; i < n; i++) {
+      const kid = r() < (o.kids || 0), age = kid ? 'kid' : r() < (o.old || 0) ? 'old' : 'adult', h = (o.h || 280) * (kid ? 0.66 : 0.9 + r() * 0.18);
+      const x = n === 1 ? (x0 + x1) / 2 : lerp(x0, x1, i / (n - 1)) + (r() - 0.5) * (x1 - x0) / n * 0.3;
+      ppl.push({ x, y: y + (i % 2) * 10, age, h, dir: o.dir || (r() < 0.5 ? -1 : 1), shirt: sh[(i + Math.floor(r() * 3)) % sh.length], pants: [C.slate, C.deep, C.woodD, C.navy][Math.floor(r() * 4)], skin: SKIN[Math.floor(r() * 3)], hair: HAIR[Math.floor(r() * HAIR.length)], hs: r() < 0.45 ? 'long' : 'short', ph: r() });
+    }
+    ppl.sort((a, b) => a.y - b.y).forEach((p, i) => out.push(human(g, p.x, p.y, Object.assign({ age: p.age, h: p.h, dir: p.dir, shirt: p.shirt, pants: p.pants, skin: p.skin, hair: p.hair, hs: p.hs, pose: o.pose, t: o.t, ph: (o.t || 0) * (o.f || 1.6) + p.ph }, o.opts ? o.opts(i) : {}))));
+    return out;
+  }
+
+  // ---------- здания: (x,y) — низ по центру ----------
+  // окно: lit 0…1 (горит), day — дневное стекло
+  function win(g, x, y, w, h, lit, o = {}) {
+    box(g, x, y, w, h, { r: 4, fill: lit > 0 ? mix(o.off || C.sky, o.on || C.goldL, lit) : o.off || C.sky, lw: 4 });
+    if (o.frame !== false) seg(g, x + w / 2, y + 4, x + w / 2, y + h - 4, { lw: 3, col: C.ink });
+  }
+  // жилой дом со скатной крышей. o: wall roof door win (цвет стекла) lit (0…1 или массив по окнам) chimney
+  function house(g, x, y, w = 260, h = 220, o = {}) {
+    const wall = o.wall || C.cream, roof = o.roof || C.terra;
+    if (o.chimney !== false) box(g, x + w * 0.2, y - h - h * 0.48, w * 0.12, h * 0.36, { r: 4, fill: dk(roof, 0.15), lw: 4 });
+    box(g, x - w / 2, y - h, w, h, { r: 6, fill: wall, shade: dk(wall, 0.1), sw: 0.18, lw: 5 });
+    poly(g, [[x - w / 2 - w * 0.1, y - h + 4], [x, y - h - h * 0.62], [x + w / 2 + w * 0.1, y - h + 4]], { r: 8, fill: roof, shade: dk(roof, 0.18), lw: 5 });
+    const ww = w * 0.24, wh = h * 0.3, lit = o.lit || 0, L = (i) => (Array.isArray(lit) ? lit[i] || 0 : lit);
+    win(g, x - w * 0.38, y - h * 0.78, ww, wh, L(0), { off: o.win, on: o.light }); win(g, x + w * 0.14, y - h * 0.78, ww, wh, L(1), { off: o.win, on: o.light });
+    box(g, x - w * 0.11, y - h * 0.42, w * 0.22, h * 0.42, { r: 6, fill: o.door || C.woodD, lw: 4 });
+  }
+  // многоэтажка cols×rows окон. o: wall roof win (стекло днём) light lit (0…1 доля горящих, гаснут по одному;
+  // или функция (i,j)→0…1), grow 0…1 — стройка (видна часть этажей), cw ch — размер окна, gap, door
+  function block(g, x, y, cols = 4, rows = 5, o = {}) {
+    const cw = o.cw || 58, ch = o.ch || 66, gx = o.gap || 30, gy = o.gapY || 34, w = cols * cw + (cols + 1) * gx, fh = ch + gy;
+    const shown = o.grow == null ? rows : Math.max(0, Math.min(rows, o.grow * rows)), full = Math.floor(shown), part = shown - full, h = gy + fh * shown + 30;
+    const wall = o.wall || C.paper; if (shown <= 0) return { w, h: 0, top: y };
+    box(g, x - w / 2, y - h, w, h, { r: 6, fill: wall, shade: dk(wall, 0.1), sw: 0.14, lw: 5 });
+    const n = cols * rows;
+    for (let j = 0; j < Math.ceil(shown); j++) for (let i = 0; i < cols; i++) {
+      const idx = j * cols + i, wy = y - 30 - fh * (j + 1) + gy * 0.5 + 6;
+      let l = 0; if (typeof o.lit === 'function') l = o.lit(i, j); else if (o.lit) { const rank = hash(idx * 7.3 + 1.1); l = clamp((o.lit - rank) * n * 0.6 + 0.5); }
+      if (j === full && part < 0.9) continue;
+      win(g, x - w / 2 + gx + i * (cw + gx), wy, cw, ch, l, { off: o.win, on: o.light, frame: false });
+    }
+    if (shown >= rows) box(g, x - w / 2 - 10, y - h - 18, w + 20, 22, { r: 6, fill: o.roof || C.slate, lw: 5 });
+    if (o.door !== false) box(g, x - 34, y - 30 - Math.min(fh, 96) + 30, 68, Math.min(fh, 96), { r: 6, fill: o.door || C.woodD, lw: 4 });
+    return { w, h, top: y - h };
+  }
+  // вывеска-доска: lines — строка ('\n' перенос) или массив; o: kind 'chalk'|'wood'|'paper', fill ink size legs frame
+  function sign(g, x, y, w, h, lines, o = {}) {
+    const kind = o.kind || 'wood', fill = o.fill || (kind === 'chalk' ? '#2E3B36' : kind === 'paper' ? C.paper : C.woodL), ink = o.ink || (kind === 'chalk' ? '#F4F1EA' : C.inkN);
+    if (o.legs) { seg(g, x - w * 0.38, y + h / 2, x - w * 0.46, y + h / 2 + o.legs, { lw: 12, col: C.woodD }); seg(g, x + w * 0.38, y + h / 2, x + w * 0.46, y + h / 2 + o.legs, { lw: 12, col: C.woodD }); }
+    box(g, x - w / 2, y - h / 2, w, h, { r: 10, fill: o.frame || (kind === 'chalk' ? C.woodD : dk(fill, 0.15)), lw: 5 });
+    box(g, x - w / 2 + 12, y - h / 2 + 12, w - 24, h - 24, { r: 6, fill, stroke: null });
+    const ls = Array.isArray(lines) ? lines : String(lines || '').split('\n'), n = ls.length; if (!n || !ls[0]) return;
+    let sz = o.size || Math.min(h * 0.62 / n, 64); g.save(); for (const l of ls) sz = Math.min(sz, fit(g, l, sz, w - 48, 800));
+    g.font = font(sz, 800, o.fam || 'sans'); g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle';
+    ls.forEach((l, i) => g.fillText(l, x, y + (i - (n - 1) / 2) * sz * 1.18 + sz * 0.05)); g.restore();
+  }
+  // магазин или кафе: навес в полоску и вывеска над дверью (текст только из o.sign). o: kind 'shop'|'cafe', wall awning awning2 signFill win lit
+  function shop(g, x, y, w = 360, h = 300, o = {}) {
+    const wall = o.wall || C.cream, aw = o.awning || C.red, aw2 = o.awning2 || C.paper, cafe = o.kind === 'cafe';
+    box(g, x - w / 2, y - h, w, h, { r: 6, fill: wall, shade: dk(wall, 0.1), sw: 0.14, lw: 5 });
+    box(g, x - w / 2 - 8, y - h - 14, w + 16, 22, { r: 6, fill: o.roof || C.slate, lw: 5 });
+    if (o.sign) sign(g, x, y - h + 46, w * 0.78, 66, o.sign, { fill: o.signFill || C.paper, ink: o.signInk, size: o.signSize });
+    const ay = y - h + 92, n = Math.max(4, Math.round(w / 56)), sw = (w + 24) / n;
+    g.beginPath(); g.moveTo(x - w / 2 - 12, ay); g.lineTo(x + w / 2 + 12, ay); for (let i = n - 1; i >= 0; i--) g.arc(x - w / 2 - 12 + sw * (i + 0.5), ay + 40, sw / 2, 0, PI); g.closePath(); g.fillStyle = aw2; g.fill();
+    g.save(); g.clip(); g.fillStyle = aw; for (let i = 0; i < n; i += 2) g.fillRect(x - w / 2 - 12 + sw * i, ay - 4, sw, 80); g.restore(); fs(g, null, { lw: 5 });
+    win(g, x - w * 0.42, y - h * 0.5, w * 0.36, h * 0.3, o.lit || 0, { off: o.win, on: o.light });
+    box(g, x + w * 0.08, y - h * 0.52, w * 0.3, h * 0.52, { r: 6, fill: o.door || C.woodD, lw: 4 });
+    if (cafe) { const tx = x - w * 0.24; seg(g, tx, y - 70, tx, y, { lw: 7, col: C.ink }); box(g, tx - 50, y - 78, 100, 14, { r: 6, fill: C.woodL, lw: 4 }); box(g, tx - 18, y - 106, 28, 28, { r: 6, fill: C.paper, lw: 4 }); }
+  }
+  // школа или любое общественное здание (библиотека, ратуша): фронтон, часы, колонны, вывеска o.sign
+  function school(g, x, y, w = 560, h = 340, o = {}) {
+    const wall = o.wall || C.peach, roof = o.roof || C.rust;
+    box(g, x - w / 2, y - h, w, h, { r: 6, fill: wall, shade: dk(wall, 0.1), sw: 0.12, lw: 5 });
+    poly(g, [[x - w * 0.24, y - h + 4], [x, y - h - h * 0.34], [x + w * 0.24, y - h + 4]], { r: 6, fill: roof, lw: 5 });
+    if (o.clock !== false) { disc(g, x, y - h - h * 0.1, 26, { fill: C.paper, lw: 4 }); seg(g, x, y - h - h * 0.1, x, y - h - h * 0.1 - 16, { lw: 4, col: C.ink }); seg(g, x, y - h - h * 0.1, x + 11, y - h - h * 0.1, { lw: 4, col: C.ink }); }
+    if (o.flag) { seg(g, x + w * 0.42, y - h, x + w * 0.42, y - h - 120, { lw: 6, col: C.ink }); poly(g, [[x + w * 0.42, y - h - 120], [x + w * 0.42 + 70, y - h - 100], [x + w * 0.42, y - h - 80]], { fill: o.flag, lw: 4 }); }
+    if (o.sign) sign(g, x, y - h + 50, w * 0.6, 62, o.sign, { fill: C.paper, size: o.signSize });
+    const cw = w * 0.11, row = (yy) => [-0.4, -0.26, 0.15, 0.29].forEach((f) => win(g, x + w * f, yy, cw, h * 0.2, o.lit || 0, { off: o.win, on: o.light }));
+    row(y - h * 0.7); row(y - h * 0.38);
+    box(g, x - w * 0.09, y - h * 0.44, w * 0.18, h * 0.44, { r: 6, fill: o.door || C.woodD, lw: 4 });
+    box(g, x - w * 0.16, y - 16, w * 0.32, 16, { r: 4, fill: C.steel, lw: 4 });
+  }
+
+  // ---------- растения ----------
+  // дерево. kind 'leaf' (лиственное) | 'oak' (раскидистый дуб) | 'pine' (ель) | 'round'; o: col (крона) trunk sway (рад) seed
+  function tree(g, x, y, s = 1, o = {}) {
+    const kind = o.kind || 'leaf', col = o.col || (kind === 'pine' ? C.oliveD : C.green), tr = o.trunk || C.woodD, d = dk(col, 0.16);
+    g.save(); g.translate(x, y); g.scale(s, s); if (o.sway) g.rotate(o.sway);
+    if (kind === 'pine') {
+      box(g, -16, -60, 32, 62, { r: 4, fill: tr, lw: 4 });
+      [[-60, 150, 110], [-140, 120, 100], [-212, 88, 90]].forEach(([yy, hw, hh]) => poly(g, [[-hw, yy], [0, yy - hh * 1.3], [hw, yy]], { r: 8, fill: col, shade: d, sw: 0.35, lw: 5 }));
+    } else {
+      const oak = kind === 'oak', tw = oak ? 52 : 34, th = oak ? 150 : 170;
+      poly(g, [[-tw / 2, 0], [-tw * 0.36, -th], [tw * 0.36, -th], [tw / 2, 0]], { r: 4, fill: tr, shade: dk(tr, 0.2), sw: 0.3, lw: 5 });
+      if (oak) { seg(g, 0, -th + 20, -70, -th - 30, { lw: 18, col: tr }); seg(g, 0, -th + 30, 76, -th - 20, { lw: 16, col: tr }); }
+      const B = oak ? [[-110, -th - 40, 92], [100, -th - 30, 88], [0, -th - 110, 112], [-60, -th - 150, 80], [70, -th - 140, 84]] : kind === 'round' ? [[0, -th - 90, 125]] : [[-62, -th - 40, 74], [62, -th - 40, 74], [0, -th - 110, 96]];
+      g.beginPath(); B.forEach(([bx, by, br]) => { g.moveTo(bx + br, by); g.arc(bx, by, br, 0, TAU); }); g.fillStyle = col; g.fill();
+      g.save(); g.clip(); g.fillStyle = d; B.forEach(([bx, by, br]) => { g.beginPath(); g.arc(bx + br * 0.35, by + br * 0.3, br * 0.85, 0, TAU); g.fill(); }); g.fillStyle = col; B.forEach(([bx, by, br]) => { g.beginPath(); g.arc(bx - br * 0.12, by - br * 0.12, br * 0.82, 0, TAU); g.fill(); }); g.restore();
+      g.strokeStyle = C.ink; g.lineWidth = 5; B.forEach(([bx, by, br]) => { g.beginPath(); g.arc(bx, by, br, 0, TAU); g.stroke(); });
+      g.fillStyle = col; B.forEach(([bx, by, br]) => { g.beginPath(); g.arc(bx, by, br - 2.5, 0, TAU); g.fill(); });
+      g.fillStyle = d; B.forEach(([bx, by, br]) => { g.beginPath(); g.arc(bx + br * 0.42, by + br * 0.36, br * 0.36, 0, TAU); g.fill(); });
+    }
+    g.restore();
+  }
+  // куст
+  function bush(g, x, y, s = 1, o = {}) { const col = o.col || C.green; g.beginPath(); [[-50, -30, 44], [0, -50, 54], [52, -28, 42]].forEach(([a, b, r]) => { g.moveTo(x + (a + r) * s, y + b * s); g.arc(x + a * s, y + b * s, r * s, 0, TAU); }); g.fillStyle = col; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 5; g.stroke(); g.fill(); box(g, x - 96 * s, y - 6, 192 * s, 8, { r: 4, fill: dk(col, 0.2), stroke: null }); }
+  // трава: пучки по линии y от x0 до x1. o: col h step t (колышется)
+  function grass(g, x0, x1, y, o = {}) {
+    const col = o.col || C.green, h = o.h || 34, st = o.step || 46, t = o.t || 0; g.fillStyle = col;
+    for (let x = x0, i = 0; x < x1; x += st, i++) { const sw = Math.sin(t * 1.8 + i * 0.7) * h * 0.15, hh = h * (0.7 + hash(i) * 0.5); g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x - 8 + sw, y - hh); g.lineTo(x, y - 4); g.lineTo(x + 6 + sw, y - hh * 0.8); g.lineTo(x + 12, y); g.closePath(); g.fill(); }
+  }
+  // лист: kind 'maple' (кленовый) | 'oval'; (x,y) центр, rot рад
+  function leaf(g, x, y, s = 1, o = {}) {
+    g.save(); g.translate(x, y); g.rotate(o.rot || 0); g.scale(s, s); g.beginPath();
+    if (o.kind === 'oval') { g.ellipse(0, 0, 14, 28, 0, 0, TAU); }
+    else { const P2 = [[0, -34], [8, -14], [26, -22], [20, -4], [34, 4], [14, 10], [16, 26], [0, 16], [-16, 26], [-14, 10], [-34, 4], [-20, -4], [-26, -22], [-8, -14]]; g.moveTo(P2[0][0], P2[0][1]); for (const p of P2) g.lineTo(p[0], p[1]); g.closePath(); }
+    g.fillStyle = o.col || C.gold; g.fill(); g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke(); seg(g, 0, 30, 0, -8, { lw: 3, col: C.ink }); g.restore();
+  }
+  // падающие листья в прямоугольнике; o: n cols seed speed s
+  function leaves(g, t, x0, x1, y0, y1, o = {}) {
+    const n = o.n || 14, r = rnd(o.seed || 31), cols = o.cols || [C.gold, C.red, C.terra, C.goldL];
+    for (let i = 0; i < n; i++) { const bx = x0 + r() * (x1 - x0), ph = r(), sp = (o.speed || 120) * (0.6 + r() * 0.6), H0 = y1 - y0, yy = y0 + (((t * sp) / H0 + ph) % 1) * H0; leaf(g, bx + Math.sin(t * 1.6 + i) * 40, yy, (o.s || 1) * (0.7 + r() * 0.5), { col: cols[i % cols.length], rot: t * 1.4 + i }); }
+  }
+
+  // ---------- транспорт: (x,y) — земля под центром, dir ±1 — куда едет, t — для колёс ----------
+  function wheel(g, x, y, r, rot) { disc(g, x, y, r, { fill: C.ink, stroke: null }); disc(g, x, y, r * 0.5, { fill: C.steel, lw: 3 }); seg(g, x, y, x + Math.cos(rot) * r * 0.48, y + Math.sin(rot) * r * 0.48, { lw: 4, col: C.ink }); }
+  function car(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.red, dir = o.dir || 1, rot = (o.t || 0) * 9 * dir;
+    g.save(); g.translate(x, y); g.scale(s * dir, s);
+    poly(g, [[-120, -96], [-62, -96], [-34, -150], [52, -150], [86, -96], [138, -90], [146, -34], [-146, -34], [-146, -86]], { r: 14, fill: col, shade: dk(col, 0.18), side: 'b', sw: 0.3, lw: 5 });
+    poly(g, [[-26, -140], [10, -140], [10, -100], [-50, -100]], { r: 4, fill: o.glass || C.sky, lw: 4 }); poly(g, [[22, -140], [46, -140], [70, -100], [22, -100]], { r: 4, fill: o.glass || C.sky, lw: 4 });
+    disc(g, 136, -72, 9, { fill: C.goldL, lw: 3 }); g.restore();
+    wheel(g, x - 84 * s * dir, y - 30 * s, 30 * s, rot); wheel(g, x + 84 * s * dir, y - 30 * s, 30 * s, rot);
+  }
+  // автобус. o: col num (текст номера, напр. '3') len (длина, 1 = 520 px) dir t people (силуэты в окнах: true)
+  function bus(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.blue, dir = o.dir || 1, L = 520 * (o.len || 1), rot = (o.t || 0) * 8 * dir;
+    g.save(); g.translate(x, y); g.scale(s * dir, s);
+    box(g, -L / 2, -250, L, 210, { r: 26, fill: col, shade: dk(col, 0.18), side: 'b', sw: 0.22, lw: 5 });
+    box(g, -L / 2 + 6, -116, L - 12, 14, { r: 6, fill: lite(col, 0.55), stroke: null });
+    const nw = Math.max(3, Math.floor((L - 140) / 92)), ww = (L - 150) / nw;
+    for (let i = 0; i < nw; i++) { const wx = -L / 2 + 24 + i * ww; box(g, wx, -228, ww - 16, 78, { r: 8, fill: o.glass || C.sky, lw: 4 }); if (o.people) disc(g, wx + ww / 2 - 8, -176, 16, { fill: dk(o.glass || C.sky, 0.3), stroke: null }); }
+    box(g, L / 2 - 104, -228, 70, 176, { r: 8, fill: o.glass || C.sky, lw: 4 }); seg(g, L / 2 - 69, -224, L / 2 - 69, -56, { lw: 4, col: C.ink });
+    box(g, L / 2 - 24, -246, 18, 176, { r: 6, fill: lite(col, 0.35), lw: 3 });
+    disc(g, L / 2 - 6, -66, 10, { fill: C.goldL, lw: 3 });
+    if (o.num != null) { g.save(); g.scale(dir, 1); const nx = dir * (L / 2 - 120); box(g, nx - 50, -300, 100, 54, { r: 10, fill: C.goldL, lw: 4 }); g.font = font(36, 900); g.fillStyle = C.inkN; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(o.num), nx, -272); g.restore(); }
+    g.restore();
+    wheel(g, x - (L / 2 - 110) * s * dir, y - 38 * s, 38 * s, rot); wheel(g, x + (L / 2 - 120) * s * dir, y - 38 * s, 38 * s, rot);
+  }
+  // велосипед с седоком. o: col (рама) dir t + параметры человека в o.rider {shirt pants skin hair helmet …}
+  function bike(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.red, dir = o.dir || 1, rot = (o.t || 0) * 10, R = 50;
+    const P = (lx, ly) => [x + lx * s * dir, y + ly * s];
+    const [bx, by] = P(-80, -R), [fx, fy] = P(80, -R), [sx2, sy2] = P(-24, -120), [hx, hy] = P(56, -140), [cx, cy] = P(0, -R);
+    for (const [wx, wy] of [[bx, by], [fx, fy]]) { ring(g, wx, wy, R * s - 5 * s, { lw: 10 * s, col: C.ink }); for (let i = 0; i < 3; i++) { const a = rot + (i * PI) / 3; seg(g, wx - Math.cos(a) * R * s * 0.8, wy - Math.sin(a) * R * s * 0.8, wx + Math.cos(a) * R * s * 0.8, wy + Math.sin(a) * R * s * 0.8, { lw: 3, col: C.slate }); } disc(g, wx, wy, 7 * s, { fill: C.steel, lw: 3 }); }
+    const fr = { lw: 9 * s, col }; seg(g, bx, by, cx, cy, fr); seg(g, cx, cy, sx2, sy2, fr); seg(g, bx, by, sx2, sy2, fr); seg(g, sx2, sy2, hx, hy, fr); seg(g, cx, cy, hx, hy, fr); seg(g, hx, hy, fx, fy, fr);
+    seg(g, sx2 - 18 * s * dir, sy2 - 6 * s, sx2 + 14 * s * dir, sy2 - 6 * s, { lw: 10 * s, col: C.ink }); seg(g, hx, hy, hx + 14 * s * dir, hy - 26 * s, { lw: 8 * s, col: C.ink });
+    if (o.rider !== false) { const r0 = o.rider || {}; return human(g, sx2 - 6 * s * dir, sy2 + 74 * s, Object.assign({ h: 270 * s, dir, pose: 'ride', ph: (o.t || 0) * 1.4 }, r0)); }
+  }
+  // лодка/катер на воде: (x,y) — ватерлиния по центру. o: col (корпус) stripe cabin (цвет рубки, false — без) motor (подвесной мотор) run 0…1 (бурун) dir t mast flag
+  function boat(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.blue, dir = o.dir || 1, t = o.t || 0, bob = Math.sin(t * 2.2 + x * 0.01) * 5, run = o.run || 0;
+    g.save(); g.translate(x, y + bob); g.scale(s * dir, s); g.rotate(Math.sin(t * 1.7 + x) * 0.025 - run * 0.03);
+    if (run > 0) { g.globalAlpha *= run; for (let i = 0; i < 3; i++) { const q = ((t * 1.6 + i / 3) % 1); seg(g, -200 - q * 160, 10 + i * 6, -260 - q * 200, 10 + i * 6, { lw: 6 * (1 - q), col: C.white }); } puffs(g, (t * 1.2) % 0.8, -210, -10, { n: 4, r: 14, dist: 60, ang: PI, spread: 1.2, col: C.white }); g.globalAlpha /= run; }
+    if (o.motor !== false && o.motor) { box(g, -230, -64, 44, 70, { r: 10, fill: C.slate, lw: 4 }); seg(g, -208, 6, -208, 40, { lw: 8, col: C.ink }); }
+    if (o.mast) { seg(g, 20, -40, 20, -260, { lw: 7, col: C.ink }); if (o.flag) poly(g, [[20, -260], [80, -240], [20, -220]], { fill: o.flag, lw: 4 }); }
+    if (o.cabin !== false) { box(g, -90, -130, 130, 92, { r: 10, fill: o.cabin || C.paper, lw: 5 }); box(g, -74, -112, 40, 34, { r: 5, fill: C.sky, lw: 3 }); box(g, -22, -112, 40, 34, { r: 5, fill: C.sky, lw: 3 }); box(g, -100, -146, 150, 20, { r: 6, fill: o.roof || C.red, lw: 4 }); }
+    poly(g, [[-200, -50], [210, -54], [160, 28], [-180, 28]], { r: 10, fill: col, shade: dk(col, 0.2), side: 'b', sw: 0.35, lw: 5 });
+    seg(g, -180, -26, 180, -28, { lw: 8, col: o.stripe || C.paper });
+    g.restore(); return [x, y + bob];
+  }
+
+  // ---------- животные ----------
+  // собака. o: col (шерсть) pose 'stand'|'run'|'sit'|'sleep' dir t ear (цвет ушей) collar
+  function dog(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.woodL, d = dk(col, 0.22), dir = o.dir || 1, t = o.t || 0, pose = o.pose || 'stand';
+    g.save(); g.translate(x, y); g.scale(s * dir, s); g.lineCap = 'round';
+    if (pose === 'sleep') {
+      const br = 1 + 0.03 * Math.sin(t * 2.2);
+      g.save(); g.scale(1, br); g.beginPath(); g.ellipse(0, -46, 110, 50, 0, 0, TAU); fs(g, col, { lw: 5 }); g.restore();
+      g.beginPath(); g.ellipse(-30, -70, 60, 26, 0.05, PI, TAU); g.fillStyle = d; g.fill();
+      seg(g, -100, -30, -150, -14, { lw: 18, col }); disc(g, 90, -48, 40, { fill: col, lw: 5 }); g.beginPath(); g.ellipse(124, -40, 26, 18, 0, 0, TAU); fs(g, col, { lw: 4 });
+      g.beginPath(); g.ellipse(76, -78, 18, 34, -0.6, 0, TAU); fs(g, o.ear || d, { lw: 4 }); disc(g, 146, -44, 8, { fill: C.ink, stroke: null });
+      g.strokeStyle = C.ink; g.lineWidth = 4; g.beginPath(); g.arc(100, -54, 9, 0.2, PI - 0.2); g.stroke();
+      for (let i = 0; i < 3; i++) { const q = ((t * 0.6 + i / 3) % 1), zx = 150 + q * 60, zy = -110 - q * 110, zs = 10 + q * 10; g.globalAlpha = 1 - q; seg(g, zx - zs, zy - zs, zx + zs, zy - zs, { lw: 4, col: C.inkN }); seg(g, zx + zs, zy - zs, zx - zs, zy + zs, { lw: 4, col: C.inkN }); seg(g, zx - zs, zy + zs, zx + zs, zy + zs, { lw: 4, col: C.inkN }); g.globalAlpha = 1; }
+      g.restore(); return;
+    }
+    const run = pose === 'run', sit = pose === 'sit', ph = Math.sin(t * (run ? 14 : 3)), wag = Math.sin(t * 12) * 0.5;
+    const leg = (lx, a) => { seg(g, lx, -60, lx + Math.sin(a) * 50, -60 + Math.cos(a) * 58, { lw: 16, col: d }); };
+    g.save(); g.translate(-90, sit ? -40 : -84); g.rotate(-0.9 + wag); seg(g, 0, 0, -50, -40, { lw: 14, col: d }); g.restore();
+    if (sit) { g.beginPath(); g.ellipse(-30, -50, 80, 52, -0.5, 0, TAU); fs(g, col, { lw: 5 }); leg(50, 0); }
+    else { leg(-70, run ? ph * 0.7 : 0.1); leg(60, run ? -ph * 0.7 : -0.1); g.beginPath(); g.ellipse(0, -96, 110, 44, 0, 0, TAU); fs(g, col, { lw: 5 }); leg(-46, run ? -ph * 0.7 : -0.1); leg(84, run ? ph * 0.7 : 0.1); }
+    const hy = sit ? -150 : -146, hx = sit ? 50 : 104;
+    disc(g, hx, hy, 46, { fill: col, lw: 5 }); g.beginPath(); g.ellipse(hx + 40, hy + 14, 32, 22, 0, 0, TAU); fs(g, col, { lw: 4 });
+    g.beginPath(); g.ellipse(hx - 16, hy - 6, 18, 38, 0.4, 0, TAU); fs(g, o.ear || d, { lw: 4 });
+    disc(g, hx + 72, hy + 8, 9, { fill: C.ink, stroke: null }); disc(g, hx + 18, hy - 10, 6.5, { fill: C.ink, stroke: null });
+    if (o.collar) seg(g, hx - 30, hy + 32, hx + 4, hy + 46, { lw: 9, col: o.collar });
+    g.restore();
+  }
+  // кошка. o: col pose 'sit'|'walk'|'sleep' dir t
+  function cat(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.slate, d = dk(col, 0.22), dir = o.dir || 1, t = o.t || 0, pose = o.pose || 'sit';
+    g.save(); g.translate(x, y); g.scale(s * dir, s); g.lineCap = 'round';
+    if (pose === 'sleep') { g.beginPath(); g.ellipse(0, -34, 80, 36, 0, 0, TAU); fs(g, col, { lw: 5 }); seg(g, -70, -14, 60, -6, { lw: 12, col: d }); disc(g, 56, -48, 30, { fill: col, lw: 5 }); poly(g, [[40, -70], [46, -96], [62, -74]], { fill: col, lw: 4 }); g.strokeStyle = C.ink; g.lineWidth = 4; g.beginPath(); g.arc(66, -50, 7, 0.2, PI - 0.2); g.stroke(); g.restore(); return; }
+    const sw = Math.sin(t * 2.5) * 0.25;
+    g.save(); g.translate(-46, -20); g.rotate(sw); g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(-60, -10, -70, -90, -30, -120); g.lineWidth = 13; g.strokeStyle = d; g.stroke(); g.restore();
+    if (pose === 'walk') { const ph = Math.sin(t * 8); [[-40, ph], [40, -ph]].forEach(([lx, a]) => seg(g, lx, -40, lx + a * 18, 0, { lw: 13, col: d })); g.beginPath(); g.ellipse(0, -60, 70, 30, 0, 0, TAU); fs(g, col, { lw: 5 }); [[-28, -ph], [56, ph]].forEach(([lx, a]) => seg(g, lx, -40, lx + a * 18, 0, { lw: 13, col })); }
+    else { g.beginPath(); g.ellipse(0, -56, 50, 60, 0, 0, TAU); fs(g, col, { lw: 5 }); seg(g, 20, -30, 24, -2, { lw: 13, col: d }); }
+    const hx = pose === 'walk' ? 72 : 14, hy = pose === 'walk' ? -96 : -130;
+    poly(g, [[hx - 32, hy - 14], [hx - 26, hy - 56], [hx - 4, hy - 30]], { fill: col, lw: 4 }); poly(g, [[hx + 6, hy - 30], [hx + 26, hy - 56], [hx + 32, hy - 14]], { fill: col, lw: 4 });
+    disc(g, hx, hy, 36, { fill: col, lw: 5 }); disc(g, hx - 12, hy - 4, 5.5, { fill: C.ink, stroke: null }); disc(g, hx + 14, hy - 4, 5.5, { fill: C.ink, stroke: null });
+    poly(g, [[hx - 4, hy + 8], [hx + 6, hy + 8], [hx + 1, hy + 14]], { fill: C.rust, stroke: null });
+    g.restore();
+  }
+  // птица: fly — летит (машет крыльями), иначе сидит. o: col (тело) wing (крыло) tip (кончики) beak dir t
+  function bird(g, x, y, s = 1, o = {}) {
+    const col = o.col || C.white, wing = o.wing || C.steel, dir = o.dir || 1, t = o.t || 0;
+    g.save(); g.translate(x, y); g.scale(s * dir, s);
+    if (o.fly !== false) {
+      const f = Math.sin(t * (o.flap || 9) + x * 0.05), wy = -f * 34;
+      g.beginPath(); g.moveTo(-6, -4); g.quadraticCurveTo(-34, wy - 12, -70, wy + 6); g.quadraticCurveTo(-34, wy + 6, -4, 6); fs(g, wing, { lw: 4 });
+      g.beginPath(); g.ellipse(0, 0, 34, 13, 0, 0, TAU); fs(g, col, { lw: 4 }); poly(g, [[-30, -4], [-50, -12], [-46, 6]], { fill: col, lw: 3 });
+      disc(g, 34, -8, 12, { fill: col, lw: 4 }); poly(g, [[44, -10], [60, -6], [44, -2]], { fill: o.beak || C.gold, lw: 3 }); disc(g, 37, -11, 2.6, { fill: C.ink, stroke: null });
+      g.beginPath(); g.moveTo(6, -4); g.quadraticCurveTo(-18, wy - 20, -46, wy - 6); g.quadraticCurveTo(-16, wy - 2, 10, 6); fs(g, wing, { lw: 4 }); seg(g, -46, wy - 6, -36, wy - 9, { lw: 7, col: o.tip || C.ink });
+    } else {
+      seg(g, -4, 14, -4, 34, { lw: 4, col: o.beak || C.gold }); seg(g, 8, 14, 8, 34, { lw: 4, col: o.beak || C.gold });
+      g.beginPath(); g.ellipse(0, 0, 30, 20, -0.2, 0, TAU); fs(g, col, { lw: 4 }); g.beginPath(); g.ellipse(-8, -2, 22, 11, -0.2, 0, TAU); fs(g, wing, { lw: 3 });
+      disc(g, 24, -20, 13, { fill: col, lw: 4 }); poly(g, [[34, -22], [50, -18], [34, -14]], { fill: o.beak || C.gold, lw: 3 }); disc(g, 27, -23, 2.6, { fill: C.ink, stroke: null });
+    }
+    g.restore();
+  }
+  // стая: n птиц вокруг (x,y) в разбросе w×h, кружат. o: как bird + seed r (радиус круга)
+  function flock(g, t, x, y, n = 5, o = {}) {
+    const r = rnd(o.seed || 17); for (let i = 0; i < n; i++) { const a = t * (0.5 + r() * 0.4) + r() * TAU, rx = (o.r || 200) * (0.5 + r() * 0.6), ry = rx * 0.32; const dir = -Math.sin(a) >= 0 ? 1 : -1; bird(g, x + Math.cos(a) * rx, y + Math.sin(a) * ry, (o.s || 0.9) * (0.75 + r() * 0.4), Object.assign({}, o, { dir, t: t + i })); }
+  }
+
+  // ---------- небо и природа ----------
+  // солнце: col (любой цвет: розовое, оранжевое…) rays (число лучей, 0 — без) t
+  function sun(g, x, y, r = 90, o = {}) {
+    const col = o.col || C.gold, n = o.rays == null ? 10 : o.rays;
+    if (n) { g.save(); g.translate(x, y); g.rotate((o.t || 0) * 0.15); for (let i = 0; i < n; i++) { const a = (i / n) * TAU; seg(g, Math.cos(a) * r * 1.22, Math.sin(a) * r * 1.22, Math.cos(a) * r * 1.5, Math.sin(a) * r * 1.5, { lw: 9, col: o.ray || col }); } g.restore(); }
+    disc(g, x, y, r, { fill: col, shade: dk(col, 0.1), sw: 0.25, lw: o.lw || 5, stroke: o.stroke });
+  }
+  // луна-серп (phase 0 — полная, 0.6 — тонкий серп) o: col
+  function moon(g, x, y, r = 60, o = {}) {
+    const ph = o.phase == null ? 0.45 : o.phase, col = o.col || '#F4EBC8';
+    g.save(); g.beginPath(); g.arc(x, y, r, 0, TAU); g.clip(); g.beginPath(); g.arc(x, y, r, 0, TAU);
+    if (ph > 0) { const ix = x + r * (0.25 + ph * 1.2), iy = y - r * 0.3; g.moveTo(ix + r, iy); g.arc(ix, iy, r, 0, TAU); }
+    g.fillStyle = col; g.fill('evenodd'); g.restore();
+    if (ph <= 0) { disc(g, x - r * 0.3, y - r * 0.2, r * 0.16, { fill: dk(col, 0.1), stroke: null }); disc(g, x + r * 0.25, y + r * 0.3, r * 0.12, { fill: dk(col, 0.1), stroke: null }); }
+  }
+  // море: полоса воды от y вниз на h, волнистый верх, светлые гребни. o: col col2 (полоса глубже) amp t alpha
+  function sea(g, t, y, o = {}) {
+    const h = o.h || H - y, col = o.col || C.blue, amp = o.amp || 12, wl = o.wl || 160, ph = (t || 0) * (o.speed || 60);
+    g.save(); g.globalAlpha *= o.alpha == null ? 1 : o.alpha; g.beginPath(); g.moveTo(-10, y + h);
+    for (let x = -10; x <= W + 20; x += 20) g.lineTo(x, y + Math.sin((x + ph) / wl * TAU) * amp);
+    g.lineTo(W + 20, y + h); g.closePath(); g.fillStyle = col; g.fill(); if (o.line !== false) { g.lineWidth = 5; g.strokeStyle = C.ink; g.stroke(); }
+    g.fillStyle = o.col2 || dk(col, 0.14); g.fillRect(-10, y + h * 0.5, W + 30, h * 0.5);
+    g.strokeStyle = lite(col, 0.5); g.lineWidth = 6; g.lineCap = 'round';
+    for (let i = 0; i < 9; i++) { const yy = y + 40 + (i % 3) * h * 0.18 + Math.floor(i / 3) * 18, xx = ((hash(i) * W + ph * (0.6 + (i % 3) * 0.3)) % (W + 200)) - 100; g.beginPath(); g.moveTo(xx, yy); g.quadraticCurveTo(xx + 30, yy - 10, xx + 60, yy); g.stroke(); }
+    g.restore();
+  }
+
+  // ---------- улица ----------
+  // фонарь: (x,y) — низ столба, h — высота, on 0…1, col (столб), light (цвет огня)
+  function lamp(g, x, y, h = 360, o = {}) {
+    const on = o.on || 0, col = o.col || C.slate, light = o.light || C.goldL;
+    if (on > 0) { g.save(); g.globalAlpha *= on * 0.28; disc(g, x, y - h + 20, 110, { fill: light, stroke: null }); g.globalAlpha /= 0.28 * on; g.restore(); }
+    box(g, x - 22, y - 26, 44, 26, { r: 6, fill: col, lw: 4 }); seg(g, x, y - 20, x, y - h + 60, { lw: 14, col: C.ink }); seg(g, x, y - 20, x, y - h + 60, { lw: 6, col });
+    poly(g, [[x - 32, y - h + 60], [x + 32, y - h + 60], [x + 24, y - h - 10], [x - 24, y - h - 10]], { r: 4, fill: on > 0 ? mix(C.steel, light, on) : C.steel, lw: 5 });
+    poly(g, [[x - 40, y - h - 8], [x, y - h - 44], [x + 40, y - h - 8]], { r: 4, fill: col, lw: 5 });
+  }
+  // гирлянда между точками; on 0…1 — лампочки загораются по очереди слева направо. o: sag n cols t
+  function garland(g, x0, y0, x1, y1, o = {}) {
+    const n = o.n || 12, sag = o.sag == null ? 80 : o.sag, on = o.on == null ? 1 : o.on, cols = o.cols || [C.goldL, C.red, C.green, C.sky, C.gold];
+    const P = (u) => [lerp(x0, x1, u), lerp(y0, y1, u) + sag * 4 * u * (1 - u)];
+    g.beginPath(); for (let i = 0; i <= 24; i++) { const [px, py] = P(i / 24); i ? g.lineTo(px, py) : g.moveTo(px, py); } g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
+    for (let i = 0; i < n; i++) { const u = (i + 0.5) / n, [px, py] = P(u), q = clamp((on * (n + 2) - i) / 2), c = cols[i % cols.length]; seg(g, px, py, px, py + 10, { lw: 4, col: C.ink }); if (q > 0) { g.save(); g.globalAlpha *= 0.3 * q; disc(g, px, py + 26, 26, { fill: c, stroke: null }); g.restore(); } g.beginPath(); g.ellipse(px, py + 24, 11, 15, 0, 0, TAU); fs(g, q > 0 ? mix(C.slate, c, q) : C.slate, { lw: 3 }); }
+  }
+
   // ---------- текст ----------
   // раскладка: '*слово' — ключевое, '~' — неразрывный пробел, '|' — перенос; ужимает кегль под maxW/maxLines
   function lay(g, text, size, o = {}) {
     const maxW = o.maxW || 940, maxL = o.maxLines || 3, minS = o.min || 40, wt = o.weight || 800, lh = o.lh || 1.1;
-    const toks = String(text).split(/\s+/).filter(Boolean).map((s) => (s === '|' ? { br: true } : { key: s[0] === '*', s: s.replace(/^\*/, '').replace(/~/g, ' ') }));
+    const toks = String(text).replace(/\|/g, ' | ').split(/\s+/).filter(Boolean).map((s) => (s === '|' ? { br: true } : { key: s[0] === '*', s: s.replace(/^\*/, '').replace(/~/g, ' ') }));
     let sz = size, lines;
     for (let it = 0; it < 14; it++) {
       g.font = font(sz, wt, o.fam || 'sans'); const sp = g.measureText(' ').width, kp = sz * 0.16; lines = []; let cur = null, widest = 0;
@@ -727,6 +1087,7 @@ const FLAT = (() => {
     rr, rpoly, shadeIn, fs, box, disc, ring, seg, poly, curve,
     flame, rocket, dotRing, burst, pulse, sparkle, puffs, bits, waves, cord,
     screen, keypad, grill, lens, dial, bell, gauge, ruler, bubble, icon, person,
+    human, crowd, win, house, block, sign, shop, school, tree, bush, grass, leaf, leaves, wheel, car, bus, bike, boat, dog, cat, bird, flock, sun, moon, sea, lamp, garland,
     lay, words, title, fit, label, hud, counter, stamp, tag, timeline, morph, wipe,
   };
 })();

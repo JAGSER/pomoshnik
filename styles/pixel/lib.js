@@ -135,6 +135,12 @@ const PIXEL = (() => {
     warn: ['......G......', '.....GGG.....', '.....GKG.....', '....GGKGG....', '....GGKGG....', '...GGGKGGG...', '...GGGKGGG...', '..GGGGGGGGG..', '..GGGGKGGGG..', '.GGGGGGGGGGG.', 'GGGGGGGGGGGGG'],
     hand: ['...MM......', '...MM......', '...MM......', '...MMMMM...', '...MMMMMMM.', 'MM.MMMMMMMM', 'MMMMMMMMMMM', '.MMMMMMMMMM', '.MMMMMMMMM.', '..MMMMMMMM.', '...MMMMMM..'],
     bolt: ['...GG', '..GG.', '.GG..', 'GGGGG', '..GG.', '.GG..', 'GG...'],
+    fish: ['....AAA.....', '..AAAAAAA..A', '.AKAAAAAAAAA', 'AAAAAAAAAAA.', '.aaaaaaa..aa', '...aaaa.....'],
+    flat: ['..DDDDDD..', '.DDKDDKDD.', 'DDDDDDDDDD', 'DdDDdDDdDD', '.dDDDDDDd.', '..dddddd..', '....dd....', '...d..d...'],
+    peach: ['....N...', '...NN...', '.OOPOOO.', 'OOPOOOOO', 'OPOOOOOO', 'OOOOOOOo', '.OOOOOo.', '..oooo..'],
+    apple: ['....D...', '...DN...', '.HHHHHH.', 'HH4HHHHH', 'H4HHHHHH', 'HHHHHHHh', '.HHHHHh.', '..hhhh..'],
+    bread: ['..MMMMMM..', '.MDMMDMMM.', 'MMMMMMMMMM', 'MmmmmmmmMM'],
+    note: ['...KK', '...KK', '...K.', '...K.', '.KKK.', 'KKKK.', '.KK..'],
     book: ['UUUUUUUUU.', 'U5UUUUUUUu', 'UUUUUUUUUu', 'UUUGGGUUUu', 'UUUUUUUUUu', 'UUUUUUUUUu', 'MMMMMMMMMu', '.uuuuuuuuu'],
   };
   function artCv(name, sc = 1, flip = false) { return cached('art' + name + sc + flip, () => { const rows = ART[name], w = Math.max(...rows.map((r) => r.length)), g = grid(w * sc, rows.length * sc); gart(g, rows, 0, 0, sc); return bake(flip ? gflip(g) : g); }); }
@@ -170,7 +176,7 @@ const PIXEL = (() => {
     '<': '...#|..#.|.#..|#...|.#..|..#.|...#|....', '>': '#...|.#..|..#.|...#|..#.|.#..|#...|....', '▶': '#...|##..|###.|####|###.|##..|#...|....',
     '▼': '.....|.....|#####|.###.|..#..|.....|.....|.....', '♥': '.....|.#.#.|#####|#####|#####|.###.|..#..|.....', '★': '..#..|..#..|#####|.###.|.###.|.#.#.|#...#|.....',
     '✓': '.....|....#|...##|#.##.|###..|.#...|.....|.....', '✕': '#...#|##.##|.###.|..#..|.###.|##.##|#...#|.....', '↑': '..#..|.###.|#.#.#|..#..|..#..|..#..|..#..|.....',
-    '→': '.....|...#.|....#|#####|....#|...#.|.....|.....', '·': '.|.|.|.|#|.|.|.', '№': '#..#..|##.#..|#.##..|#..#.#|#..#..|#..#.#|......|......',
+    '→': '.....|...#.|....#|#####|....#|...#.|.....|.....', '·': '.|.|.|.|#|.|.|.', '№': '#..#..|##.#..|#.##..|#..#.#|#..#..|#..#.#|......|......', '₽': '.####.|.#...#|.#...#|.####.|.#....|####..|.#....|.#....',
   };
   const LAT = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', '—': '-', '–': '-' };
   const GLY = new Map();
@@ -186,7 +192,7 @@ const PIXEL = (() => {
   };
   const STY = new Map();
   function sty(o) {
-    const s = o.s || 1, b = o.bold != null ? +!!o.bold : s >= 2 ? 1 : 0, col = o.col || 'w', e = o.ext === false ? 0 : s >= 2 ? s : 1, key = s + '|' + b + '|' + col + '|' + e;
+    const s = o.s || 1, b = o.bold != null ? +!!o.bold : s >= 2 ? 1 : 0, col = o.col || 'w', e = o.ext === false ? 0 : s >= 2 ? s : 1, key = s + '|' + b + '|' + (typeof col === 'object' ? col.f1 + col.f2 + col.ext : col) + '|' + e;
     let st = STY.get(key); if (st) return st;
     const base = typeof col === 'object' ? col : TS[col] || TS.w;
     st = { s, b, e, key, f1: base.f1, f2: base.f2, out: base.out === null ? null : base.out || P.ink, ext: s >= 2 ? base.ext || P.ink : base.out === null ? null : P.ink, glyphs: new Map() };
@@ -350,8 +356,9 @@ const PIXEL = (() => {
     spr(c, cv, x - r - 1, y - r - 1);
   }
   function sun(c, x, y, t, o = {}) {
-    const r = o.r || 10; for (let i = 0; i < 8; i++) { const a = i * 0.785 + Math.floor(t * 4) * 0.2, l = r + 4 + (i % 2) * 3; line(c, x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2), x + Math.cos(a) * l, y + Math.sin(a) * l, P.f1); }
-    disc(c, x, y, r + 1, P.f2); disc(c, x, y, r, P.f1); disc(c, x - 2, y - 2, r - 4, P.f0);
+    const r = o.r || 10, cc = o.col ? colr(o.col) : null, c0 = cc ? tone(cc, 0.6) : P.f0, c1 = cc || P.f1, c2 = cc ? tone(cc, -0.2) : P.f2;
+    if (o.rays !== false) for (let i = 0; i < 8; i++) { const a = i * 0.785 + Math.floor(t * 4) * 0.2, l = r + 4 + (i % 2) * 3; line(c, x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2), x + Math.cos(a) * l, y + Math.sin(a) * l, c1); }
+    disc(c, x, y, r + 1, c2); disc(c, x, y, r, c1); disc(c, x - 2, y - 2, r - 4, c0);
   }
   function cloud(c, x, y, o = {}) {
     const w = o.w || 34, k = o.seed || 1, cv = cached('cl' + w + k + (o.col || ''), () => {
@@ -418,7 +425,7 @@ const PIXEL = (() => {
     sky(c, pal);
     if (o.stars !== false) stars(c, t, { n: o.n || 70, y1: gy - 40, seed: o.seed || 3, dim: pal === 'day' || pal === 'dawn' });
     if (o.moon !== false && pal !== 'day') moon(c, o.mx ?? 136, o.my ?? 150, { r: o.mr || 12, halo: o.halo });
-    if (o.sun) sun(c, o.sun[0], o.sun[1], t);
+    if (o.sun) sun(c, o.sun[0], o.sun[1], t, { col: o.sunCol });
     if (o.hills !== false) {
       const sc = (o.scroll || 0);
       hills(c, t, { y: gy - 14, h: 30, col: hc[0], seed: 4, k: 0.9, scroll: sc * 0.25, fill: 16 });
@@ -426,7 +433,7 @@ const PIXEL = (() => {
       hills(c, t, { y: gy, h: 22, col: hc[1], seed: 9, k: 0.8, trees: true, scroll: sc * 0.5, fill: 2 });
     }
     if (o.mid) o.mid(c);
-    if (o.wall !== false) wall(c, gy, { scroll: o.scroll, gaps: o.gaps });
+    if (o.ground) ground(c, gy, { kind: o.ground, scroll: o.scroll, gaps: o.gaps }); else if (o.wall !== false) wall(c, gy, { scroll: o.scroll, gaps: o.gaps });
   }
 
   // ---------- эффекты (всё по t, без накопления) ----------
@@ -620,14 +627,358 @@ const PIXEL = (() => {
     const sh = s.show ?? 1; if (sh <= 0) return; const t = s.t || 0, oy = -ri((1 - eb(sh)) * 34);
     panel(c, 10, 18 + oy, 104, 30); panel(c, 116, 18 + oy, 54, 30);
     const lf = (s.lvT ?? 9) < 0.7, lc = lf && blink(t, 8) ? 'w' : 'y';
-    text(c, 'УР', 16, 23 + oy, { col: 'y' }); text(c, String(s.lv ?? 1), 33, 22 + oy, { s: 2, col: lc, al: 'c' });
+    text(c, s.lvL || '', 16, 23 + oy, { col: 'y' }); text(c, String(s.lv ?? 1), 33, 22 + oy, { s: 2, col: lc, al: 'c' });
     if (lf) for (let i = 0; i < 3; i++) sparkle(c, 33 + (i - 1) * 12, 20 + oy + (i % 2) * 18, ((s.lvT || 0) * 2.2 + i * 0.3) % 1, P.f0);
-    text(c, 'ОПЫТ', 47, 23 + oy, { col: 'd' });
+    text(c, s.xpL || '', 47, 23 + oy, { col: 'd' });
     const xf = (s.xpT ?? 9) < 0.3 && blink(t, 10); bar(c, 47, 34 + oy, 62, 7, s.xp ?? 0, { seg: 8, flash: xf });
     const hp = s.hp ?? 3, mx = s.max ?? 3, ht = s.hpT ?? 9;
     for (let i = 0; i < mx; i++) { const hx = 131 + i * 12, hy = 26 + oy; if (i < hp) icon(c, 'heart', hx, hy); else if (i === ri(hp) && ht < 0.7) { const q = ht / 0.7; if (Math.floor(ht * 14) % 2) { spr(c, artCv('heart'), hx - 5 - ri(q * 4), hy - 5 + ri(q * q * 10)); } } else icon(c, 'heart0', hx, hy); }
     if (s.danger && hp >= 1 && blink(t, 3)) icon(c, 'heart0', 131 + (ri(hp) - 1) * 12, 26 + oy);
-    text(c, 'ДЕНЬ', 121, 34 + oy, { col: 'd' }); num(c, s.day ?? 0, 165, 34 + oy, { pad: 2, roll: true, col: s.dayCol || 'w', al: 'r' });
+    text(c, s.dayL || '', 121, 34 + oy, { col: 'd' }); num(c, s.day ?? 0, 165, 34 + oy, { pad: 2, roll: true, col: s.dayCol || 'w', al: 'r' });
+  }
+
+  // ---------- типовые объекты: люди, дома, деревья, транспорт, животные, природа, улица ----------
+  // цвет любого объекта: '#rrggbb' или имя из NC; из него строится своя тройка тонов (тень/основа/свет) в языке спрайтов
+  const NC = { red: '#e8384e', pink: '#ff7aa8', rose: '#ff9ab8', orange: '#ff8f2e', yellow: '#ffd23a', gold: '#ffcc45', green: '#4ec47a', dkgreen: '#2f8a4e',
+    blue: '#3b6dd8', navy: '#2a3a8a', sky: '#6cc4ff', cyan: '#62e6ff', violet: '#8d5cff', purple: '#9a3aa8', white: '#f4f2ff', gray: '#9a96b8', grey: '#9a96b8',
+    dkgray: '#5c5878', black: '#2a2640', brown: '#8a5530', ginger: '#e07a2a', beige: '#ecdfb8', cream: '#fff0c8', silver: '#c8c8dc', blond: '#f0cf6a', skin: '#f2c29a', tan: '#c88a5a', dark: '#7a4a2a' };
+  const colr = (c, d) => { c = typeof c === 'string' && c ? c : d; if (!c || typeof c !== 'string') return c; if (NC[c]) return NC[c]; return c.length === 4 ? '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c; };
+  const mix = (a, b, k) => { const p = hex(a), q = hex(b); return '#' + [0, 1, 2].map((j) => ri(p[j] + (q[j] - p[j]) * k).toString(16).padStart(2, '0')).join(''); };
+  const MT = new Map();
+  function mat(col) { col = colr(col); let i = MT.get(col); if (i == null) { RAMP.push([mix(col, '#120d26', 0.4), col, mix(col, '#fff6dc', 0.42)]); i = RAMP.length - 1; MT.set(col, i); } return i; }
+  const tone = (col, k) => (k < 0 ? mix(colr(col), '#120d26', -k) : mix(colr(col), '#fff6dc', k));
+  function gline(g, x0, y0, x1, y1, m, s = 0, wd = 1) { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1); for (let i = 0; i <= n; i++) grect(g, ri(lerp(x0, x1, i / n)), ri(lerp(y0, y1, i / n)), wd, wd, m, s); }
+  function gdisc(g, cx, cy, r, m, s = 0) { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (i * i + j * j <= r * r + r * 0.8) gset(g, cx + i, cy + j, m, s); }
+  function gscale(g, k) { if (k <= 1) return g; const o = grid(g.w * k, g.h * k); for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) { const i = ((y / k) | 0) * g.w + ((x / k) | 0); o.m[y * o.w + x] = g.m[i]; o.s[y * o.w + x] = g.s[i]; } return o; }
+  const sbake = (key, sc, dir, fn) => cached(key + '|' + sc + '|' + dir, () => { let g = fn(); if (sc > 1) g = gscale(g, sc); if (dir < 0) g = gflip(g); return bake(g); });
+  function sput(c, cv, x, y, dy = 0) { const l = ri(x) - (cv.width >> 1), t = ri(y) - cv.height + 1 + dy; spr(c, cv, l, t); return { l, t, w: cv.width, h: cv.height }; }
+  const gpt = (b, gw, gx, gy, sc, dir) => { let X = gx * sc + (sc >> 1); if (dir < 0) X = gw * sc - 1 - X; return [b.l + 1 + X, b.t + 1 + gy * sc + (sc >> 1)]; };
+
+  // человек: x — центр, y — земля. age adult|kid|old; pose stand walk run wave cheer dance shout hold read sit
+  const AGES = { adult: [8, 8, 8, 10, 9, 8], kid: [7, 7, 6, 7, 6, 6], old: [8, 8, 8, 10, 8, 8] }; // голова w h, торс w h, ноги, рука
+  const PN = { stand: 1, walk: 4, run: 4, wave: 2, cheer: 2, dance: 4, shout: 2, hold: 1, read: 1, sit: 1 };
+  const PF = { walk: 7, run: 11, wave: 4, cheer: 5, dance: 5, shout: 5 };
+  function personGrid(q, pose, f) {
+    const [hw, hh, tw, th, lh, al] = AGES[q.age], W = 26, cx = 13, top = 3, H = top + hh + th + lh, g = grid(W, H), kid = q.age === 'kid';
+    const sk = mat(q.skin), hr = mat(q.hair), sh = mat(q.shirt), pa = mat(q.pants), so = mat(q.shoes), K = 16, ty = top + hh, ly = ty + th, x0 = cx - (tw >> 1), x1 = x0 + tw, hx = cx - (hw >> 1), lw = kid ? 2 : 3;
+    const sit = pose === 'sit';
+    const leg = (x, lift, len = lh) => { grect(g, x, ly, lw, len - lift - 2, pa); grect(g, x, ly + len - lift - 2, lw, 2, so); };
+    let lL = 0, lR = 0, dL = 0, dR = 0;
+    if (pose === 'walk') [[dL, dR, lL, lR]] = [[[-1, 1, 0, 0], [0, 0, 2, 0], [1, -1, 0, 0], [0, 0, 0, 2]][f]];
+    if (pose === 'run') [[dL, dR, lL, lR]] = [[[-2, 2, 0, 1], [0, 0, 3, 0], [2, -2, 1, 0], [0, 0, 0, 3]][f]];
+    if (pose === 'dance') [[dL, dR, lL, lR]] = [[[0, 0, 0, 0], [-2, 0, 3, 0], [0, 0, 0, 0], [0, 2, 0, 3]][f]];
+    if (sit) { const k = lh >> 1; grect(g, x0 - 1, ly, tw + 2, 3, pa); leg(cx - lw, 0, lh - k + 2); leg(cx + 1, 0, lh - k + 2); }
+    else { leg(cx - lw + dL, lL); leg(cx + 1 + dR, lR); }
+    if (q.dress) for (let j = 0; j < (lh >> 1) + 1; j++) grect(g, x0 - (j >> 1), ly + j, tw + 2 * (j >> 1), 1, sh);
+    grect(g, x0, ty, tw, th, sh); grect(g, x0 + 1, ty, tw - 2, 1, sh, 3);
+    if (q.apron) { const am = mat(q.apron); grect(g, x0 + 1, ty + 3, tw - 2, th - 3 + (sit ? 0 : 3), am); grect(g, x0 + 1, ty, 1, 3, am, 1); grect(g, x1 - 2, ty, 1, 3, am, 1); }
+    if (q.bag) { const bm = mat(q.bag); grect(g, x1, ty + 1, 3, th - 2, bm); grect(g, x0 + 1, ty, 1, 4, bm, 1); grect(g, x1 - 2, ty, 1, 4, bm, 1); }
+    let hand = [x1 + 1, ty + al - 1];
+    const arm = (side, k) => {
+      const xa = side < 0 ? x0 - 2 : x1, out = side < 0 ? -1 : 1;
+      if (k === 'down') { grect(g, xa, ty + 1, 2, al - 2, sh); grect(g, xa, ty + al - 1, 2, 2, sk); return [xa + 1, ty + al]; }
+      if (k === 'up') { const xu = xa + out; grect(g, xu, ty + 3 - al, 2, al - 1, sh); grect(g, xu, ty + 1 - al, 2, 2, sk); return [xu + 1, ty + 1 - al]; }
+      if (k === 'out') { const xs = side < 0 ? x0 - al : x1; grect(g, xs, ty + 1, al, 2, sh); grect(g, side < 0 ? xs : xs + al - 2, ty + 1, 2, 2, sk); return [side < 0 ? xs : xs + al - 1, ty + 2]; }
+      if (k === 'diag') { let X = xa, Y = ty + 1; for (let i = 0; i < al - 3; i++) { grect(g, X, Y, 2, 2, sh); X += out; Y -= 1; } grect(g, X, Y - 1, 2, 2, sk); return [X + 1, Y - 1]; }
+      if (k === 'hold') { grect(g, xa, ty + 1, 2, (th >> 1) + 1, sh); grect(g, side < 0 ? xa + 1 : xa - 1, ty + (th >> 1) + 1, 2, 2, sk); return [side < 0 ? xa + 2 : xa, ty + (th >> 1) + 2]; }
+      if (k === 'mouth') { grect(g, xa, ty - 2, 2, 4, sh); grect(g, xa - 1, ty - 3, 2, 2, sk); return [xa, ty - 3]; }
+      return hand;
+    };
+    const A = { stand: ['down', 'down'], walk: f % 2 ? ['down', 'down'] : ['down', 'down'], run: ['out', 'diag'], wave: ['down', f ? 'diag' : 'up'], cheer: f ? ['diag', 'diag'] : ['up', 'up'],
+      dance: [['up', 'diag'], ['out', 'out'], ['diag', 'up'], ['up', 'up']][f], shout: [f ? 'diag' : 'out', 'mouth'], hold: ['down', 'hold'], read: ['hold', 'hold'], sit: ['down', 'down'] }[pose];
+    if (pose === 'run' && f >= 2) A.reverse();
+    arm(-1, A[0]); hand = arm(1, A[1]);
+    if (pose === 'read') hand = [cx, ty + (th >> 1) + 2];
+    grect(g, hx, top, hw, hh, sk); [[hx, top], [hx + hw - 1, top], [hx, top + hh - 1], [hx + hw - 1, top + hh - 1]].forEach(([a, b]) => gset(g, a, b, 0));
+    const st = q.style;
+    if (st === 'long') { grect(g, hx - 1, top + 1, 1, hh + 3, hr); grect(g, hx + hw, top + 1, 1, hh + 3, hr); }
+    if (st !== 'none') { grect(g, hx, top, hw, 2, hr); gset(g, hx, top + 2, hr); gset(g, hx + hw - 1, top + 2, hr); gset(g, hx + 1, top - 1 + 0, 0); }
+    if (st === 'bun') grect(g, cx - 2, top - 2, 4, 2, hr);
+    if (st === 'curly') { grect(g, hx - 1, top - 1, hw + 2, 3, hr); gset(g, hx - 1, top + 3, hr); gset(g, hx + hw, top + 3, hr); }
+    const ey = top + (hh >> 1);
+    if (q.glasses) grect(g, hx + 1, ey, hw - 2, 1, mat('#c8c8dc'), 2);
+    gset(g, hx + 2, ey, K, 2); gset(g, hx + hw - 3, ey, K, 2);
+    if (kid) { gset(g, hx + 1, ey + 1, mat('#ff9ab8'), 2); gset(g, hx + hw - 2, ey + 1, mat('#ff9ab8'), 2); }
+    if (pose === 'shout' || q.mouth === 'o') grect(g, cx - 1, top + hh - 3, 2, 2, mat('#7a1a2a'), 2); else grect(g, cx - 1, top + hh - 2, 2, 1, sk, 1);
+    const hm = mat(q.hatCol);
+    if (q.hat === 'helmet') { grect(g, hx - 1, top - 1, hw + 2, 3, hm); grect(g, hx - 2, top + 2, hw + 4, 1, hm, 1); }
+    else if (q.hat === 'cap') { grect(g, hx, top - 1, hw, 3, hm); grect(g, cx, top + 1, (hw >> 1) + 3, 1, hm, 1); }
+    else if (q.hat === 'scarf') { grect(g, hx - 1, top - 1, hw + 2, 3, hm); grect(g, hx - 1, top + 2, 1, hh - 2, hm); grect(g, hx + hw, top + 2, 1, hh - 2, hm); grect(g, cx - 1, top + hh, 2, 2, hm, 1); }
+    else if (q.hat === 'beanie') { grect(g, hx - 1, top - 2, hw + 2, 4, hm); gset(g, cx, top - 3, hm, 3); }
+    g.hand = hand; g.cx = cx; return g;
+  }
+  function person(c, x, y, o = {}) {
+    const pose = PN[o.pose] ? o.pose : 'stand', n = PN[pose], t = o.t || 0, f = n > 1 ? fr(t + (o.ph || 0), o.fps || PF[pose] || 6, n) : 0, dir = o.dir === -1 ? -1 : 1, sc = o.sc || 1, age = AGES[o.age] ? o.age : 'adult';
+    const q = { age, skin: colr(o.skin, 'skin'), hair: colr(o.hair, age === 'old' ? '#e2deec' : '#5a3420'), shirt: colr(o.shirt, 'blue'), pants: colr(o.pants, '#3f3c6e'), shoes: colr(o.shoes, '#3c2217'),
+      hat: o.hat || '', hatCol: colr(o.hatCol, o.hat === 'scarf' ? 'red' : 'yellow'), style: o.style || (age === 'old' ? 'bun' : 'short'), bag: o.bag ? colr(o.bag, 'red') : '', apron: o.apron ? colr(o.apron, 'white') : '',
+      dress: !!o.dress, glasses: o.glasses ?? age === 'old', mouth: o.mouth || '' };
+    const key = 'pp' + q.age + q.skin + q.hair + q.shirt + q.pants + q.shoes + q.hat + q.hatCol + q.style + q.bag + q.apron + q.dress + q.glasses + q.mouth + pose + f;
+    let gref = null; const cv = sbake(key, sc, dir, () => (gref = personGrid(q, pose, f)));
+    const meta = cached('pm' + key, () => gref || personGrid(q, pose, f));
+    const bob = (pose === 'run' || pose === 'dance' || pose === 'cheer') && f % 2 ? -1 : 0, k = pose === 'sit' ? (AGES[age][4] >> 1) - 2 : 0;
+    if (o.shadow !== false && !k) ddisc(c, x, y + 1, 5 * sc, 1, P.ink, 7);
+    const b = sput(c, cv, x, y, (bob + k) * sc), h = gpt(b, 26, meta.hand[0], meta.hand[1], sc, dir);
+    const it = o.item || (pose === 'read' ? 'book' : ''); if (it) icon(c, it, h[0], h[1] - 2, { sc: o.isc || sc, flip: dir < 0 });
+    return { x: ri(x), y: b.t + 3 * sc, top: b.t + 1 + 3 * sc, hx: h[0], hy: h[1] };
+  }
+  // толпа: n разных людей в ряд от x0 до x1; poses — список поз по очереди; each(i) — свои параметры i-го
+  function crowd(c, x0, x1, y, t, o = {}) {
+    const n = o.n || 5, r = rnd(o.seed || 5), SH = ['red', 'blue', 'green', 'yellow', 'violet', 'orange', 'pink', 'sky', 'cream'], HR = ['#5a3420', '#2a2640', '#f0cf6a', '#a8401e', '#3c2217', '#e2deec'], PA = ['#3f3c6e', '#2a3a8a', '#5c5878', '#6a3e28'];
+    const poses = o.poses || [o.pose || 'stand'], res = [];
+    for (let i = 0; i < n; i++) {
+      const a = r(), b = r(), d = r(), e = r(), ph = r(), dr = r(), age = o.ages ? o.ages[i % o.ages.length] : a < 0.22 ? 'kid' : a > 0.88 ? 'old' : 'adult';
+      const p = Object.assign({ age, pose: poses[i % poses.length], t, ph: ph * 2, shirt: SH[(b * SH.length) | 0], hair: age === 'old' ? '' : HR[(d * 5) | 0], pants: PA[(e * 4) | 0], dress: age !== 'kid' && e > 0.6, style: e > 0.6 ? 'long' : '', dir: o.dir || (dr < 0.5 ? 1 : -1) }, o.each ? o.each(i) : {});
+      res.push(person(c, n > 1 ? lerp(x0, x1, i / (n - 1)) : (x0 + x1) / 2, y, p));
+    }
+    return res;
+  }
+
+  // окна, которые горят/гаснут: lit 0…1 — доля горящих (порядок по seed), каждое окно со своей задержкой
+  function wins(c, b, L, o) {
+    const lit = o.lit ?? 0, seed = o.seed || 1, fc = colr(o.light, P.f1);
+    for (let i = 0; i < L.length; i++) { const w = L[i]; if (hash(i * 7.31 + seed) < lit) { const X = b.l + 1 + w[0], Y = b.t + 1 + w[1]; rect(c, X, Y, w[2], w[3], fc); rect(c, X, Y, w[2], 1, P.f0); if (w[2] > 4) rect(c, X + (w[2] >> 1), Y, 1, w[3], w[4]); } }
+  }
+  function winG(g, X, Y, w, h, gl, fr_, list, fcol) { grect(g, X - 1, Y - 1, w + 2, h + 2, fr_); grect(g, X, Y, w, h, gl); if (w > 4) grect(g, X + (w >> 1), Y, 1, h, fr_); grect(g, X, Y, 1, 1, gl, 3); list.push([X, Y, w, h, fcol]); }
+  // дом: x — центр, y — земля; wall roof door glass; lit 0…1
+  function house(c, x, y, o = {}) {
+    const w = o.w || 30, h = o.h || 20, wall = colr(o.wall, 'beige'), roof = colr(o.roof, 'red'), gls = colr(o.glass, '#3f3c6e'), door = colr(o.door, 'brown');
+    const S_ = cached('hs' + w + h + wall + roof + gls + door, () => {
+      const rh = ri(w * 0.38), g = grid(w + 4, h + rh), wm = mat(wall), rm = mat(roof), fm = mat(tone(wall, 0.5)), L = [];
+      grect(g, w - 6, 1, 3, rh, mat('#a8302e'));
+      for (let j = 0; j < rh; j++) { const hw = ri(((w + 4) / 2) * (j + 1) / rh); grect(g, ri((w + 4) / 2) - hw, j, hw * 2, 1, rm, j === rh - 1 ? 1 : 0); }
+      grect(g, 2, rh, w, h, wm); const dx = 2 + ri(w * 0.66); grect(g, dx, rh + h - 11, 6, 11, mat(door)); gset(g, dx + 4, rh + h - 6, 5, 3);
+      for (let X = 5; X + 7 <= dx - 1; X += 10) winG(g, X, rh + 5, 7, 6, mat(gls), fm, L, tone(wall, 0.5));
+      if (h >= 26) winG(g, dx - 1, rh + 3, 7, 5, mat(gls), fm, L, tone(wall, 0.5));
+      return { cv: bake(g), L };
+    });
+    const b = sput(c, S_.cv, x, y); wins(c, b, S_.L, o); return { l: b.l, t: b.t, w: b.w, h: b.h };
+  }
+  // многоэтажка: fl этажей, cols окон в ряд; build 0…1 — стройка (виден низ, сверху каркас); вернёт верх построенного
+  function tower(c, x, y, o = {}) {
+    const fl = o.fl || 5, cols = o.cols || 3, wall = colr(o.wall, '#c8c4dc'), gls = colr(o.glass, '#3f3c6e'), fh = 11, w = cols * 9 + 5, h = fl * fh + 4;
+    const S_ = cached('tw' + fl + cols + wall + gls, () => {
+      const g = grid(w, h), wm = mat(wall), fm = mat(tone(wall, 0.45)), L = [];
+      grect(g, 0, 4, w, h - 4, wm); grect(g, 0, 2, w, 2, mat(tone(wall, -0.25))); for (let i = 0; i < w; i += 4) grect(g, i, 0, 2, 2, mat(tone(wall, -0.25)));
+      for (let j = 0; j < fl; j++) { grect(g, 0, 4 + j * fh, w, 1, wm, 1); for (let i = 0; i < cols; i++) { const X = 4 + i * 9, Y = 7 + j * fh; if (j === fl - 1 && i === (cols >> 1)) continue; winG(g, X, Y, 5, 6, mat(gls), fm, L, tone(wall, 0.45)); } }
+      const dx = 4 + (cols >> 1) * 9; grect(g, dx - 1, h - 9, 7, 9, mat('#6a3e28')); grect(g, dx - 2, h - 10, 9, 1, mat(tone(wall, -0.3)));
+      return { cv: bake(g), L };
+    });
+    const bd = cl(o.build ?? 1), shown = ri((h + 2) * bd), l = ri(x) - (S_.cv.width >> 1), t = ri(y) - S_.cv.height + 1, b = { l, t };
+    if (bd >= 1) { spr(c, S_.cv, l, t); wins(c, b, S_.L, o); }
+    else {
+      clip(c, [[l, t + S_.cv.height - shown, S_.cv.width, shown]], () => { spr(c, S_.cv, l, t); wins(c, b, S_.L, o); });
+      const top = t + S_.cv.height - shown; for (let i = 0; i < 2; i++) { const Y = top - (i + 1) * fh; if (Y < t) break; rect(c, l, Y, S_.cv.width, 1, P.st1); for (let X = l; X < l + S_.cv.width; X += 9) rect(c, X, Y, 1, fh, P.st1); line(c, l, Y + fh, l + 9, Y, P.st2); }
+    }
+    return { l, t, w: S_.cv.width, h: S_.cv.height, top: bd >= 1 ? t : t + S_.cv.height - shown };
+  }
+  function signPlate(c, cx, y, str, o = {}) { if (!str) return; const s = o.s || 1, w = tw(str, s) + 8, h = 9 * s + 5; rect(c, cx - (w >> 1) - 1, y - 1, w + 2, h + 2, P.ink); rect(c, cx - (w >> 1), y, w, h, colr(o.bg, P.ui)); rect(c, cx - (w >> 1), y, w, 1, tone(colr(o.bg, P.ui), 0.3)); text(c, str, cx, y + 3, { s, col: o.col || 'y', al: 'c' }); }
+  // магазин/кафе: awning полосы aw/aw2, sign — вывеска (текст только из параметра), tables — столик у входа (кафе)
+  function shop(c, x, y, o = {}) {
+    const w = o.w || 46, h = o.h || 38, wall = colr(o.wall, 'cream'), aw = colr(o.aw, 'red'), aw2 = colr(o.aw2, 'white'), gls = colr(o.glass, '#5c92ec');
+    const S_ = cached('sh' + w + h + wall + aw + aw2 + gls, () => {
+      const g = grid(w, h), wm = mat(wall), fm = mat(tone(wall, -0.3)), am = mat(aw), am2 = mat(aw2), L = [];
+      grect(g, 0, 0, w, h, wm); grect(g, 0, 0, w, 2, fm);
+      const dx = (w >> 1) - 3; grect(g, dx, h - 14, 7, 14, mat('#6a3e28')); grect(g, dx + 1, h - 13, 5, 5, mat(gls)); gset(g, dx + 5, h - 6, 5, 3);
+      winG(g, 3, h - 13, dx - 6, 10, mat(gls), fm, L, tone(wall, -0.3)); winG(g, dx + 10, h - 13, w - dx - 13, 10, mat(gls), fm, L, tone(wall, -0.3));
+      const ay = h - 20; for (let X = 0; X < w; X++) { const m = ((X / 4) | 0) % 2 ? am2 : am; grect(g, X, ay, 1, 4, m); if (X % 4 !== 3) gset(g, X, ay + 4, m, 1); }
+      return { cv: bake(g), L, ay };
+    });
+    const b = sput(c, S_.cv, x, y); wins(c, b, S_.L, o); signPlate(c, x, b.t + 3, o.sign, o);
+    if (o.tables) table(c, x + (w >> 1) + 9, y, { umbrella: aw });
+    return { l: b.l, t: b.t, w: b.w, h: b.h };
+  }
+  const cafe = (c, x, y, o = {}) => shop(c, x, y, Object.assign({ aw: 'blue', aw2: 'white', tables: true }, o));
+  // школа: fl этажей, портик с колоннами, вывеска sign
+  function school(c, x, y, o = {}) {
+    const w = o.w || 70, fl = o.fl || 2, wall = colr(o.wall, '#e8b878'), roof = colr(o.roof, '#a8302e'), gls = colr(o.glass, '#5c92ec'), h = fl * 13 + 6;
+    const S_ = cached('sc' + w + fl + wall + roof + gls, () => {
+      const g = grid(w, h + 10), wm = mat(wall), fm = mat('#f4f2ff'), L = [], cx = w >> 1;
+      for (let j = 0; j < 10; j++) { const hw = ri(13 * (j + 1) / 10); grect(g, cx - hw, j, hw * 2, 1, mat(roof)); }
+      grect(g, 0, 10, w, h, wm); grect(g, 0, 10, w, 3, mat(roof));
+      for (let j = 0; j < fl; j++) for (let X = 4; X + 6 < w - 2; X += 9) { if (Math.abs(X + 3 - cx) < 11) continue; winG(g, X, 16 + j * 13, 6, 7, mat(gls), fm, L, '#f4f2ff'); }
+      grect(g, cx - 10, 10, 20, h, mat(tone(wall, 0.25))); for (const X of [cx - 9, cx - 4, cx + 3, cx + 8]) grect(g, X, 16, 2, h - 6, fm);
+      grect(g, cx - 3, h, 7, 10, mat('#6a3e28')); grect(g, cx - 12, h + 8, 24, 2, mat('#9a96b8'));
+      return { cv: bake(g), L };
+    });
+    const b = sput(c, S_.cv, x, y); wins(c, b, S_.L, o); signPlate(c, x, b.t + 12, o.sign, o); return { l: b.l, t: b.t, w: b.w, h: b.h };
+  }
+  // прилавок рынка: goods — имена значков на прилавке; mid(c) — нарисовать продавца между навесом и прилавком
+  function stall(c, x, y, o = {}) {
+    const w = o.w || 44, aw = colr(o.aw, 'red'), aw2 = colr(o.aw2, 'white'), wood = colr(o.col, 'brown');
+    const back = cached('stb' + w + aw + aw2, () => { const g = grid(w, 34), am = mat(aw), am2 = mat(aw2), pm = mat('#6a3e28'); grect(g, 1, 6, 2, 28, pm); grect(g, w - 3, 6, 2, 28, pm); for (let X = 0; X < w; X++) { const m = ((X / 4) | 0) % 2 ? am2 : am; grect(g, X, 0, 1, 6, m); if (X % 4 !== 3) gset(g, X, 6, m, 1); } return bake(g); });
+    const front = cached('stf' + w + wood, () => { const g = grid(w, 13), wm = mat(wood); grect(g, 0, 0, w, 13, wm); grect(g, 0, 0, w, 2, mat(tone(wood, 0.35))); for (let X = 6; X < w; X += 8) grect(g, X, 3, 1, 10, wm, 1); return bake(g); });
+    const b = sput(c, back, x, y); if (o.mid) o.mid(c); sput(c, front, x, y);
+    const gs = o.goods || []; gs.forEach((n, i) => icon(c, n, ri(x - w / 2 + (w * (i + 0.5)) / gs.length), y - 15, { sc: o.gsc || 1 }));
+    return { l: b.l, t: b.t, w: b.w, top: y - 13 };
+  }
+  function table(c, x, y, o = {}) { const cv = cached('tb' + (o.umbrella || '') + (o.col || ''), () => { const g = grid(18, o.umbrella ? 30 : 12), tm = mat(colr(o.col, 'white')), H = g.h; grect(g, 2, H - 10, 14, 2, tm); grect(g, 8, H - 8, 2, 8, mat('#5c5878')); grect(g, 5, H - 1, 8, 1, mat('#5c5878')); if (o.umbrella) { const um = mat(colr(o.umbrella)); grect(g, 8, 4, 1, H - 14, mat('#9a96b8')); for (let j = 0; j < 5; j++) grect(g, 8 - 2 - j * 2, j, 5 + j * 4, 1, um, j === 4 ? 1 : 0); } return bake(g); }); sput(c, cv, x, y); if (o.item) icon(c, o.item, x, y - 12); }
+  function bench(c, x, y, o = {}) { const w = o.w || 24, cv = cached('bn' + w + (o.col || ''), () => { const g = grid(w, 10), m = mat(colr(o.col, 'brown')), k = mat('#3d3a55'); grect(g, 0, 0, w, 2, m); grect(g, 0, 4, w, 2, m); grect(g, 2, 6, 2, 4, k); grect(g, w - 4, 6, 2, 4, k); return bake(g); }); sput(c, cv, x, y); }
+  function shelf(c, x, y, w, h, o = {}) { const cv = cached('sf' + w + h + (o.seed || 1), () => { const g = grid(w, h), r = rnd(o.seed || 1), BK = ['red', 'blue', 'green', 'yellow', 'violet', 'orange', 'cream', 'sky'].map(mat); grect(g, 0, 0, w, h, mat('#6a3e28')); for (let Y = 2; Y + 12 <= h; Y += 13) { let X = 2; while (X < w - 3) { const bw = 2 + ((r() * 3) | 0), bh = 7 + ((r() * 4) | 0); grect(g, X, Y + 11 - bh, Math.min(bw, w - 2 - X), bh, BK[(r() * BK.length) | 0]); X += bw; } grect(g, 0, Y + 11, w, 2, mat('#8a5530'), 3); } return bake(g); }); spr(c, cv, ri(x), ri(y)); }
+
+  // деревья: kind leaf (лиственное) | oak (дуб, крона шире) | pine (ель) | palm; h, col, trunk; t — покачивание
+  function tree(c, x, y, o = {}) {
+    const kind = o.kind || 'leaf', h = o.h || (kind === 'pine' ? 36 : kind === 'oak' ? 40 : 32), col = colr(o.col, kind === 'pine' ? '#2f8a4e' : '#4ec47a'), tr = colr(o.trunk, '#6a3e28'), f = o.t != null ? fr(o.t + x * 0.07, 1.4, 2) : 0, sd = o.seed || 1;
+    const cv = sbake('tr' + kind + h + col + tr + f + sd, 1, 1, () => {
+      const w = kind === 'oak' ? ri(h * 1.05) : kind === 'pine' ? ri(h * 0.62) : kind === 'palm' ? ri(h * 0.9) : ri(h * 0.78), g = grid(w, h), cm = mat(col), tm = mat(tr), r = rnd(sd), cx = w >> 1;
+      if (kind === 'pine') { grect(g, cx - 1, h - 5, 3, 5, tm); for (let k = 0; k < 4; k++) { const y0 = ri(k * h * 0.2), th = ri(h * 0.34), sh = k < 2 ? f : 0; for (let j = 0; j < th && y0 + j < h - 4; j++) { const hw = ri(((j + 1) / th) * (w / 2) * (0.5 + 0.17 * k)); grect(g, cx - hw + sh, y0 + j, hw * 2 + 1, 1, cm, j === th - 1 ? 1 : 0); } } }
+      else if (kind === 'palm') { gline(g, cx + 3, h - 1, cx, ri(h * 0.25), tm, 0, 2); for (let k = 0; k < 6; k++) { const a = -2.6 + k * 0.85 + f * 0.08; gline(g, cx, ri(h * 0.25), ri(cx + Math.cos(a) * w * 0.48), ri(h * 0.25 + Math.sin(a) * h * 0.12 + Math.abs(Math.cos(a)) * h * 0.18), cm, 0, 2); } }
+      else {
+        const oak = kind === 'oak', ty = ri(h * (oak ? 0.5 : 0.55)); grect(g, cx - (oak ? 2 : 1), ty, oak ? 5 : 3, h - ty, tm); if (oak) { gline(g, cx, ty + 4, cx - 7, ty - 2, tm); gline(g, cx, ty + 3, cx + 7, ty - 3, tm); grect(g, cx - 4, h - 2, 9, 2, tm); }
+        const R = ri(h * (oak ? 0.2 : 0.22)), n = oak ? 8 : 5; for (let i = 0; i < n; i++) { const a = (i / n) * 6.28 + r(), d = i === 0 ? 0 : R * 0.9; gdisc(g, ri(cx + Math.cos(a) * d * (oak ? 1.5 : 1.1)) + f, ri(h * (oak ? 0.32 : 0.33) + Math.sin(a) * d * 0.8), R, cm); }
+        for (let i = 0; i < w * h * 0.08; i++) { const X = (r() * w) | 0, Y = (r() * h * 0.7) | 0; if (g.m[Y * w + X] === cm) gset(g, X, Y, cm, Y < h * 0.3 && X < cx ? 3 : 1); }
+      }
+      return g;
+    });
+    sput(c, cv, x, y);
+  }
+  function grass(c, x, y, w, o = {}) { const col = colr(o.col, '#4ec47a'), hh = o.h || 4, f = o.t != null ? fr(o.t, 2, 2) : 0, cv = cached('gr' + w + col + hh + f, () => { const g = grid(w, hh + 2), m = mat(col); grect(g, 0, hh, w, 2, m); for (let X = 0; X < w; X += 2) { const bh = 1 + ((hash(X * 3.1) * hh) | 0); grect(g, X + (bh > 2 ? f : 0), hh - bh, 1, bh, m, 3); } return bake(g, { out: null }); }); spr(c, cv, ri(x), ri(y) - hh - 1); }
+  function bush(c, x, y, o = {}) { const w = o.w || 16, col = colr(o.col, '#3aa860'); sput(c, sbake('bu' + w + col + (o.flowers || ''), 1, 1, () => { const g = grid(w, ri(w * 0.6)), m = mat(col), r = rnd(w); for (let i = 0; i < 4; i++) gdisc(g, ri(w * (0.25 + 0.5 * i / 3)), ri(g.h * 0.6 - r() * 2), ri(g.h * 0.42), m); if (o.flowers) for (let i = 0; i < w / 3; i++) gset(g, (r() * w) | 0, (r() * g.h * 0.7) | 0, mat(colr(o.flowers)), 2); return g; }), x, y); }
+  // падающие листья в прямоугольнике x,y,w,h; cols — цвета; rest — сколько лежит на земле (нижний край)
+  function leaves(c, t, x, y, w, h, o = {}) {
+    const n = o.n || 12, cols = (o.cols || ['orange', 'red', 'yellow']).map((k) => colr(k)), r = rnd(o.seed || 9);
+    for (let i = 0; i < n; i++) { const x0 = r() * w, sp = 0.18 + r() * 0.2, ph = r(), q = (t * sp + ph) % 1, X = x + x0 + Math.sin(t * 2.4 + i) * 4, Y = y + q * h, col = cols[i % cols.length]; rect(c, X, Y, 2, fr(t + i * 0.3, 4, 2) ? 1 : 2, col); px(c, X + 1, Y - 1, tone(col, -0.3)); }
+    for (let i = 0; i < (o.rest || 0); i++) { const col = cols[i % cols.length]; rect(c, x + r() * w, y + h - (r() * 2 | 0), 2, 1, col); }
+  }
+
+  // транспорт: x — центр, y — земля (низ колёс); col, dir, t, move (колёса крутятся)
+  function wheel(g, cx, cy, r, f) { gdisc(g, cx, cy, r, 16); gdisc(g, cx, cy, r - 2, 20, 2); gset(g, cx, cy, 16, 2); const a = f * 0.8; gset(g, ri(cx + Math.cos(a) * (r - 2)), ri(cy + Math.sin(a) * (r - 2)), 16, 2); }
+  function car(c, x, y, o = {}) {
+    const col = colr(o.col, 'red'), dir = o.dir === -1 ? -1 : 1, f = o.move ? fr(o.t || 0, 10, 4) : 0, sc = o.sc || 1;
+    sput(c, sbake('car' + col + f, sc, dir, () => { const g = grid(32, 15), m = mat(col), gl = mat('#a6cdfb'); grect(g, 0, 6, 32, 6, m); gset(g, 0, 6, 0); grect(g, 7, 1, 16, 6, m); grect(g, 9, 2, 6, 4, gl); grect(g, 16, 2, 6, 4, gl); for (let j = 1; j < 6; j++) gset(g, 22 + j, j + 1, j < 5 ? gl : m); grect(g, 22, 1, 1, 6, m); gset(g, 31, 7, mat('#ffe46a'), 2); gset(g, 0, 7, mat('#e8384e'), 2); grect(g, 0, 11, 32, 1, m, 1); wheel(g, 7, 12, 3, f); wheel(g, 24, 12, 3, f); return g; }), x, y);
+  }
+  function bus(c, x, y, o = {}) {
+    const col = colr(o.col, 'blue'), col2 = colr(o.col2, 'white'), dir = o.dir === -1 ? -1 : 1, f = o.move ? fr(o.t || 0, 10, 4) : 0, pax = o.pax ?? 3;
+    const cv = sbake('bus' + col + col2 + f + pax, 1, dir, () => {
+      const g = grid(66, 30), m = mat(col), m2 = mat(col2), gl = mat('#a6cdfb'), sk = mat('skin'), hr = mat('#5a3420');
+      grect(g, 0, 2, 66, 22, m); [[0, 2], [65, 2], [0, 23]].forEach(([a, b]) => gset(g, a, b, 0)); grect(g, 0, 15, 66, 2, m2); grect(g, 0, 21, 66, 3, m, 1);
+      for (let i = 0; i < 5; i++) { const X = 4 + i * 9; grect(g, X, 5, 7, 8, gl); if (i < pax) { grect(g, X + 2, 9, 3, 4, sk); grect(g, X + 2, 8, 3, 1, hr); } }
+      grect(g, 50, 5, 6, 16, gl); grect(g, 52, 5, 1, 16, m, 1); grect(g, 59, 4, 6, 11, gl); gset(g, 65, 19, mat('#ffe46a'), 2); gset(g, 0, 19, mat('#e8384e'), 2);
+      wheel(g, 12, 24, 4, f); wheel(g, 54, 24, 4, f); return g;
+    });
+    const b = sput(c, cv, x, y);
+    if (o.num != null) { const s = String(o.num), wv = tw(s) + 6, X = dir > 0 ? b.l + 1 + 38 : b.l + 1 + 27, Y = b.t + 1 + 14; rect(c, X - (wv >> 1) - 1, Y - 2, wv + 2, 12, P.ink); rect(c, X - (wv >> 1), Y - 1, wv, 10, '#ffe46a'); text(c, s, X, Y, { col: 'k', al: 'c' }); }
+    return b;
+  }
+  // велосипедист: цвета человека (shirt hair pants skin hat hatCol) + col рамы
+  function bike(c, x, y, o = {}) {
+    const dir = o.dir === -1 ? -1 : 1, f = fr(o.t || 0, o.move === false ? 0.001 : 9, 4), q = [colr(o.col, 'red'), colr(o.shirt, 'green'), colr(o.hair, '#5a3420'), colr(o.pants, '#3f3c6e'), colr(o.skin, 'skin'), o.hat || '', colr(o.hatCol, 'yellow')];
+    sput(c, sbake('bk' + q.join() + f, o.sc || 1, dir, () => {
+      const g = grid(32, 32), fm = mat(q[0]), sh = mat(q[1]), hr = mat(q[2]), pa = mat(q[3]), sk = mat(q[4]);
+      const wl = (cx) => { for (let a = 0; a < 6.28; a += 0.2) gset(g, ri(cx + Math.cos(a) * 5), ri(25 + Math.sin(a) * 5), 16); gset(g, cx, 25, 20); const s = f * 0.8; gline(g, cx, 25, ri(cx + Math.cos(s) * 4), ri(25 + Math.sin(s) * 4), 20); };
+      wl(6); wl(25); gline(g, 6, 25, 14, 25, fm); gline(g, 14, 25, 11, 16, fm); gline(g, 11, 17, 22, 17, fm); gline(g, 14, 25, 22, 17, fm); gline(g, 22, 15, 25, 25, fm); grect(g, 20, 13, 4, 1, 20); grect(g, 9, 15, 5, 1, 16);
+      const pa_ = f * 1.57, px_ = ri(14 + Math.cos(pa_) * 3), py_ = ri(25 + Math.sin(pa_) * 3), qx = ri(14 - Math.cos(pa_) * 3), qy = ri(25 - Math.sin(pa_) * 3);
+      gline(g, 12, 14, ri((12 + qx) / 2 + 3), ri((14 + qy) / 2 - 1), pa, 1, 2); gline(g, ri((12 + qx) / 2 + 3), ri((14 + qy) / 2 - 1), qx, qy, pa, 1, 2);
+      gline(g, 12, 14, 15, 6, sh, 0, 3); gline(g, 16, 8, 21, 13, sh, 0, 2); grect(g, 21, 12, 2, 2, sk);
+      gline(g, 12, 14, ri((12 + px_) / 2 + 3), ri((14 + py_) / 2 - 1), pa, 0, 2); gline(g, ri((12 + px_) / 2 + 3), ri((14 + py_) / 2 - 1), px_, py_, pa, 0, 2); grect(g, px_ - 1, py_, 3, 1, 16);
+      grect(g, 14, 0, 6, 6, sk); grect(g, 14, 0, 6, 2, hr); gset(g, 14, 2, hr); gset(g, 18, 3, 16, 2);
+      if (q[5] === 'helmet' || q[5] === 'cap') { grect(g, 13, -1 + 0, 8, 2, mat(q[6])); }
+      return g;
+    }), x, y);
+  }
+  // лодка: y — линия воды; crew — список параметров людей на борту; motor — дым мотора; move — бурун за кормой
+  function boat(c, x, y, t, o = {}) {
+    const col = colr(o.col, 'red'), col2 = colr(o.col2, 'white'), dir = o.dir === -1 ? -1 : 1, len = o.len || 40, bob = ri(Math.sin(t * 2.3 + x * 0.3) * 1), Y = y + bob;
+    const cab = o.cabin !== false, cv = sbake('bt' + col + col2 + len + cab, 1, dir, () => { const g = grid(len, 16), m = mat(col), m2 = mat(col2); for (let j = 0; j < 8; j++) grect(g, ri(j * 0.5), 8 + j, len - ri(j * 0.5) - j * 2, 1, m, j === 7 ? 1 : 0); grect(g, 0, 8, len, 2, m2); if (cab) { const cx0 = ri(len * 0.5); grect(g, cx0, 0, ri(len * 0.3), 8, m2); grect(g, cx0 + 2, 2, 4, 3, mat('#5c92ec')); grect(g, cx0 + 7, 2, 4, 3, mat('#5c92ec')); grect(g, cx0 - 1, 0, ri(len * 0.3) + 2, 1, m, 1); } return g; });
+    const crew = o.crew || []; crew.forEach((p, i) => person(c, x + (dir > 0 ? -len * 0.32 + i * 9 : len * 0.32 - i * 9), Y + 1, Object.assign({ t, shadow: false, dir }, p)));
+    const b = sput(c, cv, x, Y + 2);
+    if (o.motor) { const mx = dir > 0 ? b.l - 2 : b.l + b.w + 1; rect(c, mx - 2, Y - 8, 5, 7, P.ink); rect(c, mx - 1, Y - 7, 3, 5, '#5c5878'); smoke(c, mx, Y - 9, t); }
+    if (o.move) for (let i = 0; i < 4; i++) { const wx = dir > 0 ? b.l - 4 - i * 6 - ((t * 20) % 6) : b.l + b.w + 4 + i * 6 + ((t * 20) % 6); rect(c, wx, y + 2 + (i % 2), 4 - (i >> 1), 1, '#e8f4ff'); }
+    return b;
+  }
+
+  // животные: x — центр, y — земля; col; pose stand|walk|run|sit|sleep; dir; t
+  function dog(c, x, y, o = {}) {
+    const col = colr(o.col, 'ginger'), pose = o.pose || 'stand', dir = o.dir === -1 ? -1 : 1, t = o.t || 0, f = pose === 'walk' || pose === 'run' ? fr(t, pose === 'run' ? 12 : 7, 4) : fr(t, 3, 2), sc = o.sc || 1;
+    const b = sput(c, sbake('dg' + col + pose + f, sc, dir, () => {
+      const g = grid(24, 16), m = mat(col), be = mat(tone(col, 0.55)), K = 16, ear = mat(tone(col, -0.35));
+      if (pose === 'sleep') { grect(g, 3, 9, 13, 7, m); grect(g, 4, 14, 11, 2, be); grect(g, 0, 12, 4, 2, m); grect(g, 0, 11, 2, 1, m, 3); grect(g, 13, 4, 7, 8, m); grect(g, 19, 8, 4, 4, m); gset(g, 22, 8, K, 2); grect(g, 13, 4, 3, 6, ear); grect(g, 17, 7, 2, 1, K, 2); grect(g, 15, 13, 8, 3, be); return g; }
+      if (pose === 'sit') { grect(g, 7, 6, 8, 8, m); grect(g, 5, 11, 7, 5, m); grect(g, 13, 10, 2, 6, m); grect(g, 13, 1, 7, 6, m); grect(g, 19, 3, 3, 3, m); gset(g, 21, 3, K, 2); gset(g, 17, 3, K, 2); grect(g, 13, 1, 3, 4, ear); grect(g, 10, 8, 4, 5, be); grect(g, 3, 13 - f, 3, 2, m); return g; }
+      const lg = pose === 'stand' ? [0, 0, 0, 0] : [[1, -1, -1, 1], [0, 0, 0, 0], [-1, 1, 1, -1], [0, 0, 0, 0]][f];
+      [[5, 0], [8, 1], [14, 2], [17, 3]].forEach(([X, i]) => grect(g, X + lg[i], 11, 2, 5, m, i % 2 ? 0 : 1));
+      grect(g, 4, 5, 16, 7, m); grect(g, 6, 10, 12, 2, be); grect(g, 16, 1, 6, 7, m); grect(g, 21, 4, 3, 3, m); gset(g, 23, 4, K, 2); gset(g, 19, 3, K, 2); grect(g, 16, 1, 3, 5, ear); grect(g, 22, 7, 1, 1, mat('#ff7aa8'), 2);
+      const tl = [[2, 4], [1, 3], [1, 2]]; tl.forEach(([X, Y]) => gset(g, X + (f % 2 && pose !== 'run' ? 1 : 0), Y, m)); grect(g, 2, 5, 2, 2, m);
+      return g;
+    }), x, y);
+    if (pose === 'sleep' && o.zzz !== false) for (let i = 0; i < 3; i++) { const a = (t * 0.7 + i / 3) % 1, X = ri((dir > 0 ? b.l + b.w - 4 : b.l + 4) + a * 8 * dir), Y = ri(b.t - 2 - a * 14), s = 1 + (i === 2 ? 1 : 0); if (a < 0.9) { rect(c, X, Y, 3 * s, 1, P.uiL); px(c, X + s, Y + 1, P.uiL); rect(c, X, Y + 2, 3 * s, 1, P.uiL); } }
+    return b;
+  }
+  function cat(c, x, y, o = {}) {
+    const col = colr(o.col, 'gray'), pose = o.pose || 'sit', dir = o.dir === -1 ? -1 : 1, f = fr(o.t || 0, pose === 'walk' ? 7 : 2, pose === 'walk' ? 4 : 2);
+    return sput(c, sbake('ct' + col + pose + f, o.sc || 1, dir, () => {
+      const g = grid(18, 14), m = mat(col), K = 16, be = mat(tone(col, 0.5));
+      if (pose === 'walk') { const lg = [[1, -1], [0, 0], [-1, 1], [0, 0]][f]; [[3, 0], [6, 1], [10, 1], [13, 0]].forEach(([X, i]) => grect(g, X + lg[i], 10, 1, 4, m)); grect(g, 2, 6, 13, 5, m); grect(g, 12, 2, 6, 5, m); gset(g, 12, 1, m); gset(g, 17, 1, m); gset(g, 16, 4, K, 2); gset(g, 14, 4, K, 2); gline(g, 2, 6, 0, 1, m); return g; }
+      grect(g, 5, 6, 7, 8, m); grect(g, 6, 9, 4, 5, be); grect(g, 5, 1, 7, 6, m); gset(g, 5, 0, m); gset(g, 11, 0, m); gset(g, 7, 3, K, 2); gset(g, 10, 3, K, 2); gset(g, 8, 5, mat('#ff7aa8'), 2); gline(g, 12, 13, 15, 11 - f, m); gline(g, 15, 11 - f, 15, 7 - f, m); return g;
+    }), x, y);
+  }
+  // птица (чайка): x,y — центр; fly — машет крыльями
+  function bird(c, x, y, t, o = {}) {
+    const col = colr(o.col, 'white'), f = o.fly === false ? 2 : fr(t + x * 0.13, o.fps || 5, 2), dir = o.dir === -1 ? -1 : 1, sc = o.sc || 1;
+    const cv = sbake('bd' + col + f, sc, dir, () => { const g = grid(11, 6), m = mat(col), wg = mat(tone(col, -0.25)), bk = mat('#ffa82a');
+      if (f === 0) { gline(g, 0, 0, 4, 3, wg); gline(g, 10, 0, 6, 3, wg); grect(g, 4, 3, 4, 2, m); gset(g, 8, 3, bk, 2); }
+      else if (f === 1) { gline(g, 0, 4, 4, 3, wg); gline(g, 10, 4, 6, 3, wg); grect(g, 4, 2, 4, 2, m); gset(g, 8, 2, bk, 2); }
+      else { grect(g, 3, 1, 5, 3, m); grect(g, 2, 2, 4, 2, wg); grect(g, 7, 0, 2, 2, m); gset(g, 9, 1, bk, 2); gset(g, 4, 4, bk); gset(g, 6, 4, bk); }
+      return g; });
+    spr(c, cv, ri(x) - (cv.width >> 1), ri(y) - (cv.height >> 1));
+  }
+
+  // природа: море от y вниз; col; glint [x, col] — дорожка от солнца/луны
+  function sea(c, y, t, o = {}) {
+    const col = colr(o.col, '#2f6ad0'), h = o.h ?? BH - y, lt = tone(col, 0.45), dk = tone(col, -0.3);
+    rect(c, 0, y, BW, h, col); rect(c, 0, y, BW, 1, lt); dith(c, 0, y + ri(h * 0.45), BW, h - ri(h * 0.45), dk, 6);
+    for (let j = 0; j * 5 + 3 < h; j++) { const Y = y + 3 + j * 5, sp = (j % 2 ? 1 : -1) * (6 + j), r = rnd(j + 3); for (let i = 0; i < 5; i++) { const X = ((r() * 220 + t * sp) % 220 + 220) % 220 - 20, L = 3 + ((r() * 6) | 0); rect(c, X, Y, L, 1, lt); } }
+    if (o.glint) { const [gx, gc] = o.glint; for (let j = 0; j * 3 < Math.min(h, 60); j++) { const w = ri(lerp(10, 3, (j * 3) / 60) + Math.sin(t * 3 + j) * 1.5); if ((j + Math.floor(t * 4)) % 3) rect(c, gx - (w >> 1), y + 1 + j * 3, w, 1, colr(gc)); } }
+  }
+  // уличные мелочи: фонарь (on 0…1), гирлянда (on — доля зажжённых слева направо), доска с текстом
+  function lamp(c, x, y, t, o = {}) {
+    const h = o.h || 36, on = o.on ?? 1, col = colr(o.col, '#3d3a55'), lc = colr(o.light, P.f1);
+    if (on > 0) glow(c, x + 4, y - h + 4, ri(12 + 3 * on), lc, 0.4 * on);
+    rect(c, x - 1, y - h, 3, h, P.ink); rect(c, x, y - h + 1, 1, h - 1, col); rect(c, x - 2, y - 3, 5, 3, P.ink); rect(c, x, y - h - 1, 6, 2, P.ink); rect(c, x + 3, y - h, 4, 4, P.ink); rect(c, x + 4, y - h + 1, 2, 2, on > 0 ? P.f0 : '#5c5878');
+  }
+  function garland(c, x0, y0, x1, y1, t, o = {}) {
+    const sag = o.sag ?? 8, n = o.n || 9, on = o.on ?? 1, cols = (o.cols || ['red', 'yellow', 'green', 'sky', 'pink']).map((k) => colr(k)), P_ = (q) => [lerp(x0, x1, q), lerp(y0, y1, q) + sag * 4 * q * (1 - q)];
+    let prev = P_(0); for (let i = 1; i <= 24; i++) { const p = P_(i / 24); line(c, prev[0], prev[1], p[0], p[1], P.ink); prev = p; }
+    for (let i = 0; i < n; i++) { const q = (i + 0.5) / n, [X, Y] = P_(q), lit = q < on, cc = cols[i % cols.length]; rect(c, X, Y + 1, 1, 1, P.ink); if (lit) { if (hash(i + Math.floor(t * 3)) > 0.15) glow(c, X, Y + 3, 4, cc, 0.5); rect(c, X - 1, Y + 2, 3, 3, P.ink); rect(c, X, Y + 2, 1, 3, cc); px(c, X, Y + 2, P.f0); } else { rect(c, X - 1, Y + 2, 3, 3, P.ink); px(c, X, Y + 3, '#5c5878'); } }
+  }
+  // доска/табличка: x,y — левый верх; str — строки через '|'; kind chalk (мел) | wood | plate; stand — ножки до земли gy
+  const CHALK = { f1: '#f6f4ec', f2: '#dcd8cc', out: null };
+  function board(c, x, y, w, h, str, o = {}) {
+    const kind = o.kind || 'chalk', s = o.s || 1, fr_ = kind === 'plate' ? P.ink : '#8a5530', bg = colr(o.bg, kind === 'chalk' ? '#2f5a40' : kind === 'wood' ? '#c88a4a' : '#fff0c8');
+    if (o.stand) { const gy = o.stand === true ? GY : o.stand; rect(c, x + 3, y + h, 2, gy - y - h, P.ink); rect(c, x + w - 5, y + h, 2, gy - y - h, P.ink); }
+    rect(c, x, y, w, h, P.ink); rect(c, x + 1, y + 1, w - 2, h - 2, fr_); rect(c, x + 3, y + 3, w - 6, h - 6, bg); if (kind === 'chalk') dith(c, x + 3, y + 3, w - 6, h - 6, '#4a7a5a', 2);
+    const lines = String(str || '').split('|'), lh = 11 * s, top = y + ri((h - lines.length * lh) / 2) + 1;
+    lines.forEach((ln, i) => text(c, ln, x + w / 2, top + i * lh, { s, col: kind === 'chalk' ? CHALK : o.col || 'k', al: 'c', n: o.n != null ? Math.max(0, o.n - lines.slice(0, i).join('').length) : null }));
+  }
+  // строительный кран: x — центр башни, y — земля; h, arm, col; hook 0…1 — длина троса; at 0…1 — тележка по стреле; load — плита
+  function crane(c, x, y, t, o = {}) {
+    const h = o.h || 120, arm = o.arm || 70, col = colr(o.col, 'yellow'), dir = o.dir === -1 ? -1 : 1, K = 16;
+    const cv = sbake('cr' + h + arm + col, 1, dir, () => { const g = grid(arm + 28, h), m = mat(col), x0 = 22; for (let Y = 12; Y < h; Y++) { gset(g, x0, Y, m); gset(g, x0 + 5, Y, m); } for (let Y = 14; Y < h - 6; Y += 6) { gline(g, x0, Y, x0 + 5, Y + 6, m, 1); gline(g, x0 + 5, Y, x0, Y + 6, m, 1); } grect(g, x0 - 2, h - 3, 10, 3, mat('#5c5878'));
+      for (let X = 0; X < arm + 28; X++) { gset(g, X, 6, m); gset(g, X, 10, m); if (X % 6 === 0) gline(g, X, 6, X + 3, 10, m, 1); } grect(g, 2, 4, 10, 9, mat('#5c5878')); grect(g, x0 + 1, 10, 6, 7, m); grect(g, x0 + 3, 12, 3, 3, mat('#a6cdfb')); gline(g, x0 + 2, 0, 0, 6, K); gline(g, x0 + 2, 0, arm + 27, 6, K); grect(g, x0 + 1, 0, 3, 6, m); return g; });
+    const W_ = arm + 28, l = dir > 0 ? ri(x) - 25 : ri(x) - (W_ - 25) + 1, b = { l, t: ri(y) - cv.height + 1, w: cv.width }; spr(c, cv, b.l, b.t); const hxw = 27 + ri((arm - 4) * (o.at ?? 0.8)), hx = dir > 0 ? b.l + 1 + hxw : b.l + W_ - hxw, ty = b.t + 1 + 11, hy = ty + ri((h - 20) * cl(o.hook ?? 0.5));
+    rect(c, hx - 2, ty - 1, 5, 2, P.ink); rect(c, hx, ty, 1, hy - ty, P.ink); rect(c, hx - 1, hy, 3, 2, P.ink);
+    if (o.load) { const lw = o.lw || 22, sw = ri(Math.sin(t * 1.5) * 1); line(c, hx, hy + 2, hx - (lw >> 1) + 2 + sw, hy + 7, P.ink); line(c, hx, hy + 2, hx + (lw >> 1) - 2 + sw, hy + 7, P.ink); rect(c, hx - (lw >> 1) + sw, hy + 7, lw, 5, P.ink); rect(c, hx - (lw >> 1) + 1 + sw, hy + 8, lw - 2, 3, typeof o.load === 'string' && o.load[0] === '#' ? o.load : '#b8b4d8'); rect(c, hx - (lw >> 1) + 1 + sw, hy + 8, lw - 2, 1, '#e0dcf0'); }
+    return { hx, hy, top: b.t };
+  }
+  // земля вместо стены: kind road (дорога с разметкой) | street (тротуар + дорога) | grass | sand | pave (плитка) | floor (деревянный пол) | wall (стена замка)
+  function ground(c, y = GY, o = {}) {
+    const kind = o.kind || 'street'; if (kind === 'wall') return wall(c, y, o);
+    const h = BH - y, col = colr(o.col, ''), cv = cached('gd' + kind + h + col, () => {
+      const cv_ = new OffscreenCanvas(96, h + 2), x = cv_.getContext('2d'), r = rnd(11), sp = (n, a, b) => { for (let i = 0; i < n; i++) rect(x, (r() * 96) | 0, a + ((r() * (b - a)) | 0), 1, 1, i % 2 ? '#2c2941' : '#68657f'); };
+      const road = (Y) => { rect(x, 0, Y, 96, h - Y + 2, '#3d3a55'); rect(x, 0, Y, 96, 2, '#9a96b8'); rect(x, 0, Y + 2, 96, 1, '#2c2941'); sp(120, Y + 3, h); for (let X = 0; X < 96; X += 24) rect(x, X, Y + 14, 12, 2, '#e8e0b0'); };
+      if (kind === 'road') road(0);
+      else if (kind === 'street') { rect(x, 0, 0, 96, 9, colr(col, '#b8b4d0')); for (let X = 0; X < 96; X += 8) rect(x, X, 0, 1, 9, '#8a87a6'); rect(x, 0, 0, 96, 1, '#e0dcf0'); rect(x, 0, 9, 96, 2, '#68657f'); road(11); }
+      else if (kind === 'grass') { rect(x, 0, 0, 96, h + 2, colr(col, '#3aa860')); rect(x, 0, 0, 96, 1, '#a8f0b0'); for (let i = 0; i < 160; i++) rect(x, (r() * 96) | 0, 1 + ((r() * h) | 0), 1, 1, i % 3 ? '#2f8a4e' : '#68e08a'); for (let Y = 30; Y < h; Y++) dith(x, 0, Y, 96, 1, '#1f5a3a', ri(cl((Y - 30) / 40) * 12)); }
+      else if (kind === 'sand') { rect(x, 0, 0, 96, h + 2, colr(col, '#ecd29a')); rect(x, 0, 0, 96, 1, '#fff0c8'); for (let i = 0; i < 160; i++) rect(x, (r() * 96) | 0, 1 + ((r() * h) | 0), 1, 1, i % 2 ? '#c8a868' : '#fff0c8'); }
+      else if (kind === 'pave') { rect(x, 0, 0, 96, h + 2, colr(col, '#b8a4c8')); for (let Y = 0; Y < h; Y += 6) { rect(x, 0, Y, 96, 1, '#7a6a90'); for (let X = (Y / 6) % 2 ? 0 : 6; X < 96; X += 12) rect(x, X, Y, 1, 6, '#7a6a90'); } rect(x, 0, 0, 96, 1, '#e8dcf0'); }
+      else if (kind === 'floor') { rect(x, 0, 0, 96, h + 2, colr(col, '#a8683a')); for (let Y = 0; Y < h; Y += 5) { rect(x, 0, Y, 96, 1, '#6a3e28'); for (let X = ((Y / 5) * 17) % 32; X < 96; X += 32) rect(x, X, Y, 1, 5, '#6a3e28'); } rect(x, 0, 0, 96, 2, '#5a3420'); }
+      for (let Y = 40; Y < h; Y++) dith(x, 0, Y, 96, 1, P.pit, ri(cl((Y - 40) / 50) * 10));
+      return cv_;
+    });
+    const off = ((Math.floor(o.scroll || 0) % 96) + 96) % 96; for (let X = -off; X < BW; X += 96) spr(c, cv, X, y);
+  }
+  // город-силуэт на горизонте: n домов, col; lit — доля горящих окон
+  function skyline(c, y, t, o = {}) {
+    const col = colr(o.col, '#2a2150'), n = o.n || 9, r = rnd(o.seed || 4), lit = o.lit ?? 0.5, wc_ = colr(o.light, P.f1);
+    let X = -4; for (let i = 0; i < n * 3 && X < BW; i++) { const w = 14 + ((r() * 14) | 0), h = 18 + ((r() * 40) | 0); rect(c, X, y - h, w, h, col); rect(c, X, y - h, w, 1, tone(col, 0.2)); for (let yy = y - h + 4; yy < y - 4; yy += 6) for (let xx = X + 3; xx < X + w - 3; xx += 5) if (hash(xx * 1.7 + yy * 3.1 + (o.seed || 4)) < lit) rect(c, xx, yy, 2, 3, wc_); X += w + 1; }
   }
 
   // ---------- кадр, камера, склейки ----------
@@ -675,6 +1026,8 @@ const PIXEL = (() => {
     text, tw, layout, words, title, stamp, popup, banner, panel, bar, button, num, dialog,
     sky, stars, moon, sun, cloud, hills, castle, wall, backdrop,
     flame, smoke, glow, burst, sparkle, twinkles, magic, shock, beam, rays, aura, bolt, rain, fireflies, dust, speed,
+    NC, colr, tone, mat, person, crowd, house, tower, shop, cafe, school, stall, table, bench, shelf, tree, grass, bush, leaves,
+    car, bus, bike, boat, dog, cat, bird, sea, lamp, garland, board, crane, ground, skyline,
     hero, chest, orb, bubble, clip, block, flag, hourglass, torch, cell, hud,
     begin, show, cuts, run, shakeOf,
   };

@@ -140,7 +140,7 @@ const SC = [
     const tc = s.w('Приходите'), up = -200 * S.sp(lt - tc, 'soft');
     g.save(); g.translate(0, up);
     S.serif(g, 'кофейня', 96, 640, 88, { lt, t0: s.w('Кофейня'), col: P.cream, out: tc });
-    S.lockup(g, 540, 860, 210, 'Зерно', { lt, t0: s.w('Зерно') - .1, col: P.ink, mark: P.ink, groove: P.red, max: 900 });
+    S.lockup(g, 540, 860, 210, 'Зерно', { lt, t0: s.w('Зерно') - .1, col: P.ink, shape: 'bean', mark: P.ink, groove: P.red, max: 900 });
     S.rule(g, 96, 950, 984, S.pr(lt, s.w('Зерно') + .3, s.w('Зерно') + .8), { col: P.ink, bl: 'САДОВАЯ 15', br: '08:00-22:00' });
     g.restore();
     if (lt > tc) { const py = S.lerp(1960, 1080, S.sp(lt - tc, 'snap')); g.fillStyle = P.cream; g.fillRect(96, py, 888, 520);

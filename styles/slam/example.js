@@ -38,7 +38,7 @@ function S2(g, lt, sc, t) {
   else S.pixText(g, '95%', DX, DY, DC, { mode: 'cluster', glow: 0.3, p: Math.min(1, out * 1.2), seed: 3 });
   S.typeLines(g, 'работы делает|автоматика.', DX, 1000, lt, 0.55, { size: 92, cps: 30, alpha: out, cursorUntil: 1.6 });
   if (lt > 1.5) { g.globalAlpha = S.clamp((lt - 1.5) / 0.2) * out; g.font = S.F(500, 56); g.fillStyle = C.grey; g.textAlign = 'right'; g.fillText('5% - это вы.', 1000, 1190); g.textAlign = 'left'; g.globalAlpha = 1; }
-  g.globalAlpha = out; S.ratioBar(g, DX, 1270, 918, 0.95, S.prog(lt, 0.9, 1.9), { restP: S.prog(lt, 1.9, 2.1) }); g.globalAlpha = 1;
+  g.globalAlpha = out; S.ratioBar(g, DX, 1270, 918, 0.95, S.prog(lt, 0.9, 1.9), { restP: S.prog(lt, 1.9, 2.1), a: 'АВТО', b: 'ВЫ' }); g.globalAlpha = 1;
   S.kicker(g, 'урожай без дежурства у грядок.', DX, 1420, lt, 2.0, { alpha: out });
 }
 

@@ -251,7 +251,7 @@ function draw(t, k) {
   if (!WT) { WT = words(k); SC = build(); }
   const s = B.play(g, t, SC), sb = k.sub(t), dark = [3, 4, 6, 7].includes(s.i);
   const f = jf(t), lp = f >= 1 ? Math.floor(f + 1e-6) : 0, li = LOOPS.filter(x => t >= x).length - 1;
-  B.journey(g, 928, 210, 62, f, { loops: lp, lt: li >= 0 ? t - LOOPS[li] : 1 });
+  B.journey(g, 928, 210, 62, f, { icons: ['wave', 'vapor', 'cloud', 'rain'], runner: 'drop', loops: lp, lt: li >= 0 ? t - LOOPS[li] : 1 });
   B.pageNo(g, sb.i + 1, t - sb.t0, { col: dark ? '#E9E3F2' : P.grey });
   B.end(g);
 }

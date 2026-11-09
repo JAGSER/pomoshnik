@@ -11,7 +11,7 @@ function draw(t, k) {
   if (i === 4) { F.top(g, 'КОПИЛКА'); g.fillStyle = C.yellow; g.font = F.font(26, 800, 'mono'); g.textAlign = 'left'; g.fillText('СИЛА ВРЕМЕНИ', 80, 330); F.word(g, 'ДЕНЬГИ', 440, t, CUTS[i] + 0.1); F.word(g, 'РАБОТАЮТ', 560, t, CUTS[i] + 0.25); F.curve(g, t, CUTS[i] + 0.3, { max: 4.3, ticks: ['0', '5', '10', '15 ЛЕТ'] }); }
   if (i === 5) { F.burst(g, t); g.fillStyle = '#FFF4C4'; g.beginPath(); g.arc(540, 860, 300 * F.sp(lt / 0.5), 0, 7); g.fill(); F.flame(g, 540, 820, 1.6 * F.sp((lt - 0.1) / 0.5), t); g.save(); g.globalAlpha *= F.eo((lt - 0.4) / 0.4); g.fillStyle = C.ink; g.font = F.font(80, 900); g.textAlign = 'center'; g.fillText('КОПИЛКА', 540, 1260); g.restore(); }
   if (i === 6) { F.top(g, 'КОПИЛКА'); g.fillStyle = C.muted; g.font = F.font(26, 700, 'mono'); g.textAlign = 'center'; g.fillText('ПОДУШКА ЗА ГОД', 540, 360); g.fillStyle = C.yellow; g.font = F.font(110, 900); g.fillText('НАЧНИ СЕЙЧАС', 540, 480);
-    F.profile(g, 'Копилка', 'Бюджет · подушка · рост', [['18 тыс.', 'подписчиков'], ['240', 'разборов'], ['3 года', 'в эфире']], lt > 1.6, t, CUTS[i] + 0.3, { line: 'Спокойно, по шагам, на годы.' });
+    F.profile(g, 'Копилка', 'Бюджет · подушка · рост', [['18 тыс.', 'подписчиков'], ['240', 'разборов'], ['3 года', 'в эфире']], lt > 1.6, t, CUTS[i] + 0.3, { line: 'Спокойно, по шагам, на годы.', btn: ['Подписаться', 'Вы подписаны'], icon: (g, x, y) => F.flame(g, x, y, 0.5, t) });
     F.cursor(g, F.mix(860, 830, F.eio((lt - 0.8) / 0.6)), F.mix(1300, 690, F.eio((lt - 0.8) / 0.6)), lt > 1.45 && lt < 1.7 ? (lt - 1.45) / 0.25 : 0, 0.85); }
   g.restore();
 }

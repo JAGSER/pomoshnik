@@ -563,15 +563,12 @@ const ISO = (() => {
       q.beginPath(); q.arc(0, 0, 21 * s, 0, PI2); q.fillStyle = '#151827'; q.fill(); q.beginPath(); q.arc(0, 0, 9 * s, 0, PI2); q.fillStyle = '#6C7286'; q.fill();
       q.strokeStyle = '#2E3350'; q.lineWidth = 3 * s; q.beginPath(); q.moveTo(Math.cos(spin) * 9 * s, Math.sin(spin) * 9 * s); q.lineTo(-Math.cos(spin) * 9 * s, -Math.sin(spin) * 9 * s); q.stroke(); }));
   }
-  function building(g, x, y, z, w, d, h, o = {}) { // дом квартала: тёмные грани, сетка окон (часть горит), кромка крыши
-    if (h <= 1) return; block(g, x, y, z, w, d, h, { top: o.top || '#2C3252', left: o.left || '#20253F', right: o.right || '#181B31' });
-    const sd = o.seed || 1, lit = o.lit ?? .3, gx = 24, gz = 26, ww = 11, wh = 13, nx = Math.floor((w - 10) / gx), ny = Math.floor((d - 10) / gx), nz = Math.floor((h - 16) / gz);
-    for (let pass = 0; pass < 2; pass++) { g.beginPath(); let any = false;
-      for (let k = 0; k < nz; k++) { const zz = z + 10 + k * gz;
-        for (let i = 0; i < nx; i++) if ((hash(sd * 13.1 + i * 7.3 + k * 3.7) < lit) === !!pass) { qL(g, x + 5 + i * gx + (gx - ww) / 2, y + d, zz, ww, wh); any = true; }
-        for (let j = 0; j < ny; j++) if ((hash(sd * 17.9 + j * 5.1 + k * 2.3 + 40) < lit) === !!pass) { qR(g, x + w, y + 5 + j * gx + (gx - ww) / 2, zz, ww, wh); any = true; } }
-      if (any) { g.fillStyle = pass ? (o.win || 'rgba(246,182,90,.85)') : '#2A3052'; g.fill(); } }
-    if (o.edge) { g.beginPath(); qTop(g, x, y, z + h, w, d); g.strokeStyle = o.edge; g.lineWidth = 2 * V.s; g.stroke(); }
+  function building(g, x, y, z, w, d, h, o = {}) { // многоэтажка: сетка окон; o.col стены, o.lit доля горящих, o.off 0…1 доля погасших (гаснут по одному), o.floors этажей, o.grow 0…1 (растёт по этажам), o.win, o.edge, o.seed
+    const nz0 = o.floors || Math.floor((h - 16) / 26), gz = o.floors ? (h - 16) / o.floors : 26, gr = o.grow ?? 1, nz = Math.floor(nz0 * cl(gr) + 1e-6), hh = gr >= 1 ? h : nz * gz + (nz ? 8 : 0);
+    if (hh <= 1) return; const c = o.col;
+    block(g, x, y, z, w, d, hh, c ? { col: c } : { top: o.top || '#2C3252', left: o.left || '#20253F', right: o.right || '#181B31' });
+    winGrid(g, x, y, z, w, d, hh, o, 24, gz, 11, Math.min(gz * .5, 16), nz);
+    if (o.edge) { g.beginPath(); qTop(g, x, y, z + hh, w, d); g.strokeStyle = o.edge; g.lineWidth = 2 * V.s; g.stroke(); }
   }
   function door(g, x, y, z, o = {}) { // дверь на фасаде-плоскости +y: (x,y,z): низ середины двери; коврик, наличник, номер, звонок (o.ring 0…1)
     const dw = 120, dh = 230, lt = o.lt ?? T;
@@ -580,22 +577,263 @@ const ISO = (() => {
     g.beginPath(); qL(g, x - dw / 2, y + .5, z, dw, dh); g.fillStyle = o.col || '#1F2A52'; g.fill();
     g.beginPath(); qL(g, x - dw / 2 + 14, y + 1, z + 24, dw - 28, 80); qL(g, x - dw / 2 + 14, y + 1, z + 120, dw - 28, 92); g.strokeStyle = '#33407A'; g.lineWidth = 3 * V.s; g.stroke();
     g.beginPath(); qL(g, x + dw / 2 - 22, y + 1.5, z + 104, 8, 26); g.fillStyle = P.ice; g.fill();
-    onFace(g, x - 28, y + 1, z + dh + 62, 'left', q => { q.fillStyle = '#E7EAF2'; q.fillRect(0, -12, 56, 40); q.font = font(30, 800); q.fillStyle = P.ink; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillText(o.num || '17', 28, 8); });
+    if (o.num) onFace(g, x - 28, y + 1, z + dh + 62, 'left', q => { q.fillStyle = '#E7EAF2'; q.fillRect(0, -12, 56, 40); q.font = font(30, 800); q.fillStyle = P.ink; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillText(o.num || '', 28, 8); });
     const b = pt(x + dw / 2 + 52, y + 1, z + 128), rg = o.ring || 0;
     onFace(g, x + dw / 2 + 52, y + 1, z + 128, 'left', q => { q.fillStyle = '#2F3760'; q.fillRect(-14, -20, 28, 40); q.beginPath(); q.arc(0, 0, 8, 0, PI2); q.fillStyle = rg > 0 ? mix(P.greyD, P.cyan, rg) : P.greyD; q.fill(); });
     if (rg > 0) glow(g, b[0], b[1], 60 * V.s, P.cyan, .8 * rg);
   }
   function lamp(g, x, y, z, h, o = {}) { // уличный фонарь: столб, плафон, пятно света на полу
-    const col = o.col || P.amber, a = o.a ?? 1, b = pt(x, y, z), tp = pt(x, y, z + h), hd = pt(x, y + 46, z + h - 8);
+    const col = o.col || P.amber, a = o.on ?? o.a ?? 1, b = pt(x, y, z), tp = pt(x, y, z + h), hd = pt(x, y + 46, z + h - 8);
     if (o.pool !== false) { const c = pt(x, y + (o.py ?? 90), z); glow(g, c[0], c[1], 170 * V.s, col, .2 * a, 98 * V.s); }
     g.strokeStyle = '#3A4166'; g.lineWidth = 5 * V.s; g.beginPath(); g.moveTo(b[0], b[1]); g.lineTo(tp[0], tp[1]); g.lineTo(hd[0], hd[1]); g.stroke();
-    glow(g, hd[0], hd[1], 46 * V.s, col, .85 * a); g.beginPath(); g.arc(hd[0], hd[1], 5 * V.s, 0, PI2); g.fillStyle = '#FFF0CC'; g.fill();
+    glow(g, hd[0], hd[1], 46 * V.s, col, .85 * a); g.beginPath(); g.arc(hd[0], hd[1], 5 * V.s, 0, PI2); g.fillStyle = a > 0 ? mix('#5D6178', '#FFF0CC', cl(a)) : '#5D6178'; g.fill();
+  }
+
+  // ---------- типовые объекты (цвет каждого задаётся параметром) ----------
+  // Ориентированные предметы (транспорт, животные): o.axis 'x' (смотрит/едет к +x, вправо-вниз) | 'y' (к +y, влево-вниз). u: вперёд, v: поперёк.
+  function orient(g, x, y, ax) {
+    const Y = ax === 'y', w = (u, v) => Y ? [x + v, y + u] : [x + u, y + v];
+    return { Y, w, face: Y ? 'right' : 'left', front: Y ? 'left' : 'right', dir: Y ? -1 : 1,
+      p: (u, v, z) => { const q = w(u, v); return pt(q[0], q[1], z); },
+      box: (u, v, z, du, dv, h, o) => Y ? block(g, x + v, y + u, z, dv, du, h, o) : block(g, x + u, y + v, z, du, dv, h, o),
+      side: (u, v, z, du, h) => Y ? qR(g, x + v, y + u, z, du, h) : qL(g, x + u, y + v, z, du, h), // путь на боковой плоскости v=const
+      fr: (u, v, z, dv, h) => Y ? qL(g, x + v, y + u, z, dv, h) : qR(g, x + u, y + v, z, dv, h), // путь на передней плоскости u=const
+      on: (u, v, z, fn, face) => { const q = w(u, v); onFace(g, q[0], q[1], z, face, fn); } };
+  }
+  function prism(g, pts, z, h, o = {}) { // призма из выпуклого многоугольника пола [[x,y],…] (ед. мира): видимые бока с освещением и верх
+    const c = o.col || P.steel, n = pts.length; let A = 0;
+    for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; A += a[0] * b[1] - b[0] * a[1]; }
+    const sg = A > 0 ? 1 : -1;
+    if (h > 0) for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n], nx = (b[1] - a[1]) * sg, ny = -(b[0] - a[0]) * sg;
+      if (nx + ny <= 1e-6) continue; const k = cl((ny - nx) / (Math.abs(nx) + Math.abs(ny)) * .5 + .5);
+      g.beginPath(); g.moveTo(...pt(a[0], a[1], z)); g.lineTo(...pt(b[0], b[1], z)); g.lineTo(...pt(b[0], b[1], z + h)); g.lineTo(...pt(a[0], a[1], z + h)); g.closePath();
+      g.fillStyle = mix(shade(c, -.3), c, k); g.fill(); }
+    g.beginPath(); pts.forEach((p, i) => { const s = pt(p[0], p[1], z + h); i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]); }); g.closePath();
+    g.fillStyle = o.top || shade(c, .24); g.fill();
+    if (o.edge) { g.strokeStyle = o.edge; g.lineWidth = 2 * V.s; g.stroke(); }
+  }
+  const oct = (x, y, r, ry = r) => { const A = []; for (let i = 0; i < 8; i++) { const a = (i + .5) * PI / 4; A.push([x + Math.cos(a) * r, y + Math.sin(a) * ry]); } return A; };
+  function frustum(g, x, y, z, w, d, h, ins, o = {}) { // усечённая пирамида (ins: отступ верха; ins ≥ половины стороны: пирамида)
+    const c = o.col || P.steel, iw = Math.min(ins, w / 2), id = Math.min(ins, d / 2), zt = z + h;
+    const B = [[x, y], [x + w, y], [x + w, y + d], [x, y + d]], T_ = [[x + iw, y + id], [x + w - iw, y + id], [x + w - iw, y + d - id], [x + iw, y + d - id]];
+    const F = [[0, 1, shade(c, .12)], [3, 0, shade(c, .04)], [1, 2, shade(c, -.3)], [2, 3, c]]; // −y, −x, +x, +y
+    for (const [i, j, col] of F) { g.beginPath(); g.moveTo(...pt(B[i][0], B[i][1], z)); g.lineTo(...pt(B[j][0], B[j][1], z)); g.lineTo(...pt(T_[j][0], T_[j][1], zt)); g.lineTo(...pt(T_[i][0], T_[i][1], zt)); g.closePath(); g.fillStyle = col; g.fill(); }
+    if (iw < w / 2 && id < d / 2) { g.beginPath(); qTop(g, x + iw, y + id, zt, w - 2 * iw, d - 2 * id); g.fillStyle = o.top || shade(c, .24); g.fill(); }
+  }
+  function wheel(q, r, lt, s) { q.beginPath(); q.arc(0, 0, r, 0, PI2); q.fillStyle = '#151827'; q.fill(); q.beginPath(); q.arc(0, 0, r * .45, 0, PI2); q.fillStyle = '#8A90A6'; q.fill();
+    const a = lt * 9; q.strokeStyle = '#2E3350'; q.lineWidth = 3 * s; q.beginPath(); q.moveTo(Math.cos(a) * r * .45, Math.sin(a) * r * .45); q.lineTo(-Math.cos(a) * r * .45, -Math.sin(a) * r * .45); q.stroke(); }
+  const GLASS = '#1B3552';
+  function car(g, x, y, z, s = 1, o = {}) { // легковая машина: (x,y,z) центр дна; o.col кузов, o.axis, o.lt (колёса), o.lights 0…1 фары
+    const O = orient(g, x, y, o.axis), c = o.col || '#D8DCE6', L = 150 * s, D = 72 * s, lt = o.lt ?? T;
+    shadow(g, x, y, z, L * .52, .34);
+    O.box(-L / 2, -D / 2, z + 12 * s, L, D, 30 * s, { col: c });
+    O.box(-L * .3, -D * .42, z + 42 * s, L * .52, D * .84, 25 * s, { col: shade(c, -.04) });
+    g.beginPath(); O.side(-L * .26, D * .42, z + 46 * s, L * .2, 17 * s); O.side(-L * .02, D * .42, z + 46 * s, L * .2, 17 * s); O.fr(L * .22, -D * .36, z + 45 * s, D * .72, 19 * s); g.fillStyle = GLASS; g.fill();
+    g.beginPath(); O.fr(L / 2, -D * .42, z + 26 * s, D * .2, 8 * s); O.fr(L / 2, D * .22, z + 26 * s, D * .2, 8 * s); g.fillStyle = '#FFF1CF'; g.fill();
+    if ((o.lights || 0) > 0) [-.32, .32].forEach(v => { const p = O.p(L / 2, v * D, z + 30 * s); glow(g, p[0], p[1], 40 * s * V.s, P.amber, .9 * o.lights); });
+    [-.3, .3].forEach(u => O.on(u * L, D / 2 + .5, z + 16 * s, q => wheel(q, 16 * s, lt, s), O.face));
+  }
+  function bus(g, x, y, z, s = 1, o = {}) { // автобус: (x,y,z) центр дна; o.col кузов (синий, жёлтый…), o.num номер маршрута на табло (только из текста), o.axis, o.lt, o.lights
+    const O = orient(g, x, y, o.axis), c = o.col || '#2F6FD6', L = 300 * s, D = 96 * s, Hh = 116 * s, lt = o.lt ?? T, zb = z + 16 * s;
+    shadow(g, x, y, z, L * .5, .36);
+    O.box(-L / 2, -D / 2, zb, L, D, Hh, { col: c, top: shade(c, .38) });
+    g.beginPath(); O.side(-L / 2 + 6 * s, D / 2, zb + 22 * s, L - 12 * s, 7 * s); g.fillStyle = shade(c, .45); g.fill();
+    g.beginPath(); for (let i = 0; i < 5; i++) O.side(-L / 2 + 14 * s + i * 46 * s, D / 2, zb + 50 * s, 38 * s, 40 * s); O.fr(L / 2, -D * .42, zb + 44 * s, D * .84, 52 * s); g.fillStyle = GLASS; g.fill();
+    g.beginPath(); O.side(L / 2 - 56 * s, D / 2, zb + 4 * s, 34 * s, 88 * s); g.fillStyle = '#16243A'; g.fill();
+    g.strokeStyle = rgba(P.ice, .35); g.lineWidth = 2 * V.s; g.beginPath(); for (let i = 0; i < 5; i++) { const a = O.p(-L / 2 + 20 * s + i * 46 * s, D / 2, zb + 58 * s), b = O.p(-L / 2 + 34 * s + i * 46 * s, D / 2, zb + 84 * s); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); } g.stroke();
+    g.beginPath(); O.fr(L / 2, -D * .44, zb + 12 * s, D * .2, 9 * s); O.fr(L / 2, D * .24, zb + 12 * s, D * .2, 9 * s); g.fillStyle = '#FFF1CF'; g.fill();
+    if ((o.lights || 0) > 0) [-.34, .34].forEach(v => { const p = O.p(L / 2, v * D, zb + 16 * s); glow(g, p[0], p[1], 44 * s * V.s, P.amber, .9 * o.lights); });
+    if (o.num != null && o.num !== '') O.on(L / 2, 0, zb + Hh - 18 * s, q => { const w = D * .66; q.fillStyle = '#0F1322'; q.fillRect(-w / 2, -11 * s, w, 22 * s);
+      q.font = font(17 * s, 800); q.fillStyle = P.amber; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillText(String(o.num), 0, 1 * s); }, O.front);
+    [-.33, .3].forEach(u => O.on(u * L, D / 2 + .5, z + 22 * s, q => wheel(q, 21 * s, lt, s), O.face));
+  }
+  function boat(g, x, y, z, s = 1, o = {}) { // лодка/катер на воде: (x,y,z) центр по ватерлинии; o.col корпус, o.cab рубка (false: без), o.deck, o.motor, o.wake 0…1 след, o.axis, o.lt (качается)
+    const O = orient(g, x, y, o.axis), c = o.col || '#E8EBF2', L = 130 * s, D = 52 * s, lt = o.lt ?? T, zb = z + Math.sin(lt * 2.2 + (x + y) * .013) * 2 * s;
+    if ((o.wake || 0) > 0) { g.save(); g.globalAlpha *= cl(o.wake); g.strokeStyle = rgba(P.white, .75); g.lineWidth = 3 * V.s; g.setLineDash([14 * V.s, 10 * V.s]); g.lineDashOffset = lt * 60;
+      g.beginPath(); for (const sd of [-1, 1]) { const a = O.p(-L / 2, sd * D * .32, z), b = O.p(-L / 2 - 110 * s, sd * D * 1.1, z); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); } g.stroke(); g.restore(); }
+    if (o.motor !== false) O.box(-L / 2 - 14 * s, -8 * s, zb - 4 * s, 14 * s, 16 * s, 34 * s, { col: '#2A2E44' });
+    const hull = [[-L / 2, -D / 2], [L * .2, -D / 2], [L / 2, 0], [L * .2, D / 2], [-L / 2, D / 2]].map(p => O.w(p[0], p[1]));
+    prism(g, hull, zb - 6 * s, 24 * s, { col: c, top: o.deck || '#B98A5E' });
+    g.beginPath(); O.side(-L / 2 + 2 * s, D / 2, zb + 10 * s, L * .7 - 4 * s, 5 * s); g.fillStyle = o.trim || P.cyan; g.fill();
+    if (o.cab !== false) { const cc = o.cab || P.white; O.box(-L * .22, -D * .3, zb + 18 * s, L * .26, D * .6, 24 * s, { col: cc }); g.beginPath(); O.fr(L * .04, -D * .26, zb + 28 * s, D * .52, 11 * s); g.fillStyle = GLASS; g.fill(); }
+  }
+  function bike(g, x, y, z, s = 1, o = {}) { // велосипед с человеком: (x,y,z) точка под седлом; o.col рама, o.look одежда (как у person), o.age, o.H рост (170), o.rider false: пустой, o.axis, o.lt, o.phase
+    const O = orient(g, x, y, o.axis), lt = o.lt ?? T, H = (o.H || 170) * s, k = H / 170, col = o.col || P.cyan, ph = (lt * (o.speed ?? 1.3) + (o.phase || 0)) * PI2;
+    const Q = (u, zz) => O.p(u * k, 0, z + zz * k), R = 29;
+    for (const u of [-34, 72]) O.on(u * k, 0, z + R * k, q => { q.beginPath(); q.arc(0, 0, R * k, 0, PI2); q.strokeStyle = '#151827'; q.lineWidth = 6 * k; q.stroke();
+      q.strokeStyle = '#4A5070'; q.lineWidth = 1.5 * k; q.beginPath(); for (let i = 0; i < 4; i++) { const a = ph * .5 + i * PI / 4; q.moveTo(Math.cos(a) * R * k, Math.sin(a) * R * k); q.lineTo(-Math.cos(a) * R * k, -Math.sin(a) * R * k); } q.stroke(); }, O.face);
+    const rh = Q(-34, R), cr = Q(27, 34), st = Q(0, 85), hd = Q(55, 80), fh = Q(72, R), bar = Q(58, 112);
+    g.strokeStyle = col; g.lineWidth = 4.5 * k * V.s; g.lineJoin = 'round'; g.beginPath(); g.moveTo(...rh); g.lineTo(...cr); g.lineTo(...st); g.lineTo(...rh); g.moveTo(...cr); g.lineTo(...hd); g.lineTo(...st); g.moveTo(...fh); g.lineTo(...hd); g.lineTo(...bar); g.stroke();
+    g.strokeStyle = '#151827'; g.lineWidth = 5 * k * V.s; g.beginPath(); const s1 = Q(-8, 88), s2 = Q(10, 88); g.moveTo(...s1); g.lineTo(...s2); g.stroke();
+    if (o.rider !== false) person(g, 'all', x, y, z, o.axis === 'y' ? PI / 2 : 0, H, lt, { pose: 'ride', look: o.look, age: o.age, phase: o.phase, speed: o.speed ?? 1.3 });
+  }
+  function animal(g, x, y, z, s, o, cat) {
+    const O = orient(g, x, y, o.axis), lt = o.lt ?? T, c = o.col || (cat ? '#8E909D' : '#C77A3A'), pose = o.pose || 'stand', dk = shade(c, -.18);
+    const L = (cat ? 48 : 64) * s, D = (cat ? 18 : 24) * s, lie = pose === 'sleep', sit = pose === 'sit', bh = (cat ? 18 : 24) * s * (lie ? .8 : 1), leg = lie ? 0 : (cat ? 18 : 24) * s;
+    const ph = lt * (cat ? 6 : 7), wg = pose === 'walk' ? Math.sin(ph) * 6 * s : 0, zb = z + (sit ? 0 : leg);
+    shadow(g, x, y, z, L * .55, .3);
+    // хвост (сзади = дальше от зрителя)
+    const tb = O.p(-L / 2 + 2 * s, 0, zb + bh * .75), wag = Math.sin(lt * (cat ? 2 : 10)) * (lie ? 0 : 8 * s);
+    const te = lie ? O.p(-L * .2, D * .9, z + 3 * s) : cat ? O.p(-L / 2 - 10 * s, wag * .5, zb + bh + 30 * s) : O.p(-L / 2 - 16 * s, wag, zb + bh + 12 * s);
+    const tc = lie ? O.p(-L / 2 - 14 * s, D * .6, z + 3 * s) : O.p(-L / 2 - 16 * s, 0, zb + bh * (cat ? .6 : 1));
+    g.beginPath(); g.moveTo(...tb); g.quadraticCurveTo(tc[0], tc[1], te[0], te[1]); g.strokeStyle = dk; g.lineWidth = (cat ? 5 : 7) * s * V.s; g.lineCap = 'round'; g.stroke();
+    if (leg && !sit) for (const [u, v] of [[-L / 2 + 3 * s, -D / 2], [L / 2 - 12 * s, -D / 2], [-L / 2 + 3 * s, D / 2 - 8 * s], [L / 2 - 12 * s, D / 2 - 8 * s]]) {
+      const sw = (u > 0 ? 1 : -1) * (v > 0 ? 1 : -1) * wg; O.box(u + sw, v, z, 8 * s, 8 * s, leg, { col: dk }); }
+    if (sit) { O.box(-L / 2, -D / 2, z, L * .55, D, bh * 1.1, { col: c }); for (const v of [-D / 2, D / 2 - 8 * s]) O.box(L * .1, v, z, 8 * s, 8 * s, leg, { col: dk });
+      O.box(L * .02, -D / 2 + 2 * s, z + leg * .7, L * .3, D - 4 * s, bh * 1.2, { col: c }); }
+    else O.box(-L / 2, -D / 2, zb, L, D, bh, { col: c });
+    const hl = (cat ? 18 : 24) * s, hd = (cat ? 20 : 22) * s, hh = (cat ? 17 : 21) * s;
+    const hu = sit ? L * .22 : L / 2 - 6 * s, hz = lie ? z : sit ? z + leg * .7 + bh * 1.2 - 4 * s : zb + bh * .55;
+    O.box(hu, -hd / 2, hz, hl, hd, hh, { col: c });
+    if (!cat) { O.box(hu + hl, -6 * s, hz + 2 * s, 10 * s, 12 * s, 10 * s, { col: shade(c, .18) }); g.beginPath(); O.fr(hu + hl + 10 * s, -3 * s, hz + 8 * s, 6 * s, 4 * s); g.fillStyle = '#151827'; g.fill();
+      for (const v of [-hd / 2 - 3 * s, hd / 2]) O.box(hu + 7 * s, v, hz + hh - 14 * s, 9 * s, 3 * s, 14 * s, { col: dk }); }
+    else for (const v of [-hd / 2 + 1 * s, hd / 2 - 8 * s]) { const q = O.w(hu + 5 * s, v); frustum(g, q[0], q[1], hz + hh, 7 * s, 7 * s, 9 * s, 9 * s, { col: dk }); }
+    g.strokeStyle = '#151827'; g.fillStyle = '#151827'; g.lineWidth = 2 * s * V.s;
+    for (const v of [-hd * .28, hd * .28]) { const e = O.p(hu + hl, v, hz + hh * .68); g.beginPath(); if (lie) { g.moveTo(e[0] - 3 * s * V.s, e[1]); g.lineTo(e[0] + 3 * s * V.s, e[1]); g.stroke(); } else { g.arc(e[0], e[1], 2.4 * s * V.s, 0, PI2); g.fill(); } }
+    if (o.zzz) { const h0 = O.p(hu + hl / 2, 0, hz + hh + 10 * s); for (let i = 0; i < 3; i++) { const q = ((lt * .6 + i / 3) % 1); g.globalAlpha = Math.sin(q * PI);
+      g.font = font((12 + q * 14) * s * V.s, 800); g.fillStyle = P.white; g.textAlign = 'center'; g.fillText('z', h0[0] + q * 26 * s * V.s, h0[1] - q * 60 * s * V.s); } g.globalAlpha = 1; }
+  }
+  function dog(g, x, y, z, s = 1, o = {}) { animal(g, x, y, z, s, o, false); } // собака: (x,y,z) центр дна; o.col (рыжий…), o.pose 'stand'|'walk'|'sit'|'sleep', o.zzz (спит), o.axis, o.lt
+  function cat(g, x, y, z, s = 1, o = {}) { animal(g, x, y, z, s, o, true); } // кошка: те же параметры
+  function bird(g, x, y, s = 1, o = {}) { // летящая птица (чайка, голубь) в px: машет крыльями; o.col, o.lt, o.ph фаза
+    const lt = o.lt ?? T, f = Math.sin((lt * (o.rate || 2.6) + (o.ph || 0)) * PI2), w = 26 * s, up = f * 12 * s, c = o.col || P.white;
+    g.beginPath(); g.moveTo(x - w, y - up); g.quadraticCurveTo(x - w * .45, y - 10 * s - up * .4, x, y); g.quadraticCurveTo(x + w * .45, y - 10 * s - up * .4, x + w, y - up);
+    g.strokeStyle = c; g.lineWidth = 4.5 * s; g.lineCap = 'round'; g.stroke(); g.beginPath(); g.ellipse(x, y + s, 6 * s, 3.5 * s, 0, 0, PI2); g.fillStyle = c; g.fill();
+  }
+  function birds(g, cx, cy, r, lt, o = {}) { // стая кружит вокруг (cx,cy) по эллипсу r × 0.4r; o.n, o.s размер, o.col, o.speed
+    const n = o.n || 5; for (let i = 0; i < n; i++) { const a = lt * (o.speed || .6) + i * PI2 / n + hash(i) * .7, rr_ = r * (.75 + .4 * hash(i + 3));
+      bird(g, cx + Math.cos(a) * rr_, cy + Math.sin(a) * rr_ * .4 + (hash(i + 7) - .5) * r * .25, (o.s || 1) * (.85 + .25 * Math.sin(a)), { col: o.col, lt, ph: hash(i) }); }
+  }
+  function tree(g, x, y, z, s = 1, o = {}) { // дерево: (x,y,z) низ ствола; o.kind 'leaf' (лиственное, дуб, клён) | 'pine' (ель) | 'bush' (куст); o.col листва, o.trunk ствол, o.lt (крона колышется)
+    const k = o.kind || 'leaf', c = o.col || (k === 'pine' ? '#2E8C6A' : '#3FA772'), tr = o.trunk || '#7A5236', lt = o.lt ?? T, sw = Math.sin(lt * 1.3 + x * .013 + y * .007) * 2 * s;
+    shadow(g, x, y, z, (k === 'bush' ? 30 : 46) * s, .3);
+    if (k === 'bush') { prism(g, oct(x, y, 30 * s), z, 24 * s, { col: c }); prism(g, oct(x + sw * .3, y, 19 * s), z + 24 * s, 12 * s, { col: shade(c, .08) }); return; }
+    block(g, x - 7 * s, y - 7 * s, z, 14 * s, 14 * s, (k === 'pine' ? 26 : 48) * s, { col: tr });
+    if (k === 'pine') { for (let i = 0; i < 3; i++) { const r = (42 - i * 11) * s; frustum(g, x - r + sw * i * .5, y - r, z + (20 + i * 30) * s, 2 * r, 2 * r, 46 * s, r * .93, { col: shade(c, i * .05) }); } return; }
+    prism(g, oct(x, y, 46 * s), z + 40 * s, 44 * s, { col: c }); prism(g, oct(x + sw, y - 6 * s, 31 * s), z + 84 * s, 26 * s, { col: shade(c, .07) });
+  }
+  function grass(g, x, y, z, w, d, o = {}) { // трава на прямоугольнике пола: пучки штрихов; o.n, o.col, o.fill (подложка газона), o.seed, o.lt
+    if (o.fill) tile(g, x, y, z, w, d, { fill: o.fill });
+    const n = o.n || Math.round(w * d / 2600), R = rnd(o.seed || 7), lt = o.lt ?? T, k = V.s;
+    g.beginPath(); for (let i = 0; i < n; i++) { const p = pt(x + R() * w, y + R() * d, z), hh = (8 + R() * 8) * k, sw = Math.sin(lt * 2 + i) * 2 * k;
+      g.moveTo(p[0] - 4 * k, p[1]); g.lineTo(p[0] - 6 * k + sw, p[1] - hh * .8); g.moveTo(p[0], p[1]); g.lineTo(p[0] + sw, p[1] - hh); g.moveTo(p[0] + 4 * k, p[1]); g.lineTo(p[0] + 6 * k + sw, p[1] - hh * .75); }
+    g.strokeStyle = o.col || '#4FBF7E'; g.lineWidth = 2.5 * k; g.stroke();
+  }
+  function leaves(g, x, y, z, w, d, lt, o = {}) { // листья на земле (шуршат) и падающие: o.n, o.cols, o.fall доля падающих, o.seed
+    const n = o.n || 24, R = rnd(o.seed || 5), cols = o.cols || [P.orange, P.amber, '#D94A3A'];
+    for (let i = 0; i < n; i++) { const fx = R(), fy = R(), fz = R(), sp = .3 + R() * .5, ci = cols[i % cols.length], fall = i < n * (o.fall ?? .3);
+      const q = fall ? ((lt * sp + fz) % 1) : 0, zz = fall ? z + (1 - q) * 220 : z, p = pt(x + fx * w + (fall ? Math.sin(lt * 2 + i) * 16 : 0), y + fy * d, zz);
+      const r = 7 * V.s, a = fall ? lt * 3 + i : i + Math.sin(lt * 4 + i) * .25;
+      g.save(); g.translate(p[0], p[1]); g.rotate(a); g.scale(1, fall ? 1 : .55); g.beginPath();
+      for (let j = 0; j < 10; j++) { const rr_ = j % 2 ? r * .45 : r, b = j * PI / 5 - PI / 2; j ? g.lineTo(Math.cos(b) * rr_, Math.sin(b) * rr_) : g.moveTo(Math.cos(b) * rr_, Math.sin(b) * rr_); }
+      g.closePath(); g.fillStyle = ci; g.fill(); g.restore(); }
+  }
+  function winGrid(g, x, y, z, w, d, h, o, gx, gz, ww, wh, nz) { // окна на фасадах +y и +x (горят по o.lit, гаснут по o.off)
+    const sd = o.seed || 1, lit = o.lit ?? .3, off = o.off || 0, nx = Math.floor((w - 10) / gx), ny = Math.floor((d - 10) / gx);
+    const on = (a, b) => hash(a) < lit && !(hash(b) < off);
+    for (let pass = 0; pass < 2; pass++) { g.beginPath(); let any = false;
+      for (let k = 0; k < nz; k++) { const zz = z + 10 + k * gz;
+        for (let i = 0; i < nx; i++) if (on(sd * 13.1 + i * 7.3 + k * 3.7, sd * 5.3 + i * 1.7 + k * 9.1) === !!pass) { qL(g, x + 5 + i * gx + (gx - ww) / 2, y + d, zz, ww, wh); any = true; }
+        for (let j = 0; j < ny; j++) if (on(sd * 17.9 + j * 5.1 + k * 2.3 + 40, sd * 3.9 + j * 2.9 + k * 7.7 + 11) === !!pass) { qR(g, x + w, y + 5 + j * gx + (gx - ww) / 2, zz, ww, wh); any = true; } }
+      if (any) { g.fillStyle = pass ? (o.win || 'rgba(246,182,90,.85)') : (o.dark || '#2A3052'); g.fill(); } }
+  }
+  function house(g, x, y, z, w, d, h, o = {}) { // жилой дом с двускатной крышей (конёк вдоль x): o.col стены, o.roof крыша, o.lit доля горящих окон, o.off гаснут, o.door цвет двери
+    const c = o.col || '#D9CDB8', rc = o.roof || '#B5523B', rh = o.rh ?? d * .5, e = 8, zt = z + h + rh;
+    block(g, x, y, z, w, d, h, { col: c });
+    winGrid(g, x, y, z + h * .3 - 10, w, d, h, Object.assign({ dark: '#3B4A6A' }, o), 52, 1, 20, 24, 1);
+    g.beginPath(); qL(g, x + w * .62, y + d, z, 24, 44); g.fillStyle = o.door || shade(c, -.5); g.fill();
+    g.beginPath(); g.moveTo(...pt(x - e, y - e, z + h)); g.lineTo(...pt(x + w + e, y - e, z + h)); g.lineTo(...pt(x + w + e, y + d / 2, zt)); g.lineTo(...pt(x - e, y + d / 2, zt)); g.closePath(); g.fillStyle = shade(rc, .12); g.fill();
+    g.beginPath(); g.moveTo(...pt(x + w, y, z + h)); g.lineTo(...pt(x + w, y + d, z + h)); g.lineTo(...pt(x + w, y + d / 2, zt)); g.closePath(); g.fillStyle = shade(c, -.3); g.fill();
+    g.beginPath(); g.moveTo(...pt(x - e, y + d + e, z + h)); g.lineTo(...pt(x + w + e, y + d + e, z + h)); g.lineTo(...pt(x + w + e, y + d / 2, zt)); g.lineTo(...pt(x - e, y + d / 2, zt)); g.closePath(); g.fillStyle = rc; g.fill();
+  }
+  function shop(g, x, y, z, w, d, h, o = {}) { // магазин | кафе | школа: витрина, вход и вывеска на фасаде +y; o.kind 'shop'|'cafe'|'school', o.sign текст вывески (только из озвучки), o.col стены, o.awn маркиза, o.signCol, o.ink, o.lit
+    const kind = o.kind || 'shop', c = o.col || (kind === 'school' ? '#C9874F' : '#3A4572'), awn = o.awn || (kind === 'cafe' ? P.orange : P.cyan), lt = o.lt ?? T;
+    block(g, x, y, z, w, d, h, { col: c });
+    if (kind === 'school') { winGrid(g, x, y, z + 6, w, d, h, Object.assign({ lit: o.lit ?? .15, dark: '#2E4466', seed: 3 }, o), 40, (h - 30) / 2, 22, 26, 2);
+      g.beginPath(); qL(g, x + w / 2 - 22, y + d + .5, z, 44, 52); g.fillStyle = shade(c, -.5); g.fill();
+      const f0 = pt(x + w * .85, y + d * .5, z + h), f1 = pt(x + w * .85, y + d * .5, z + h + 70); g.strokeStyle = '#8A90A6'; g.lineWidth = 3 * V.s; g.beginPath(); g.moveTo(...f0); g.lineTo(...f1); g.stroke();
+      onFace(g, x + w * .85, y + d * .5, z + h + 70, 'left', q => { const wv = Math.sin(lt * 4) * 3; q.fillStyle = o.flag || P.red; q.beginPath(); q.moveTo(0, 0); q.lineTo(34, wv); q.lineTo(34, 20 + wv); q.lineTo(0, 20); q.fill(); }); }
+    else { g.beginPath(); qL(g, x + 14, y + d + .5, z + 10, w * .55, h * .48); g.fillStyle = (o.lit ?? 0) > .5 ? 'rgba(246,182,90,.85)' : GLASS; g.fill();
+      g.beginPath(); qL(g, x + w * .68, y + d + .5, z, 38, h * .58); g.fillStyle = shade(c, -.5); g.fill();
+      g.beginPath(); qR(g, x + w, y + 14, z + 10, d * .5, h * .4); g.fillStyle = GLASS; g.fill();
+      const n = Math.max(4, Math.round(w / 26)), z0 = z + h * .7, z1 = z + h * .56, dy = 30;
+      for (let i = 0; i < n; i++) { const xa = x + 6 + (w - 12) * i / n, xb = x + 6 + (w - 12) * (i + 1) / n; g.beginPath(); g.moveTo(...pt(xa, y + d, z0)); g.lineTo(...pt(xb, y + d, z0)); g.lineTo(...pt(xb, y + d + dy, z1)); g.lineTo(...pt(xa, y + d + dy, z1)); g.closePath(); g.fillStyle = i % 2 ? P.white : awn; g.fill(); }
+      if (kind === 'cafe' && o.tables !== false) for (const tx of [x + w * .25, x + w * .6]) { shadow(g, tx, y + d + 70, z, 18, .3); cyl(g, tx, y + d + 70, z + 26, 18, 4, { col: P.white }); block(g, tx - 2, y + d + 68, z, 4, 4, 26, { col: '#8A90A6' }); } }
+    if (o.sign) { const sw = w * .74, sh = Math.min(h * .2, 44), zs = kind === 'school' ? z + 58 + sh : z + h - 6;
+      g.beginPath(); qL(g, x + (w - sw) / 2, y + d + 1, zs - sh, sw, sh); g.fillStyle = o.signCol || '#0F1322'; g.fill();
+      onFace(g, x + w / 2, y + d + 1.5, zs - sh / 2, 'left', q => { let fs = sh * .62; q.font = font(fs, 800); const tw = q.measureText(o.sign).width; if (tw > sw * .88) { fs *= sw * .88 / tw; q.font = font(fs, 800); }
+        q.fillStyle = o.ink || P.white; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillText(o.sign, 0, 1); }); }
+  }
+  function stall(g, x, y, z, w, o = {}) { // прилавок рынка вдоль x: (x,y,z) дальний нижний угол, глубина 70; o.goods [{col, kind:'fruit'|'fish'|'box', n}], o.awn навес, o.col прилавок, o.tag текст ценника (из озвучки)
+    const d = 70, c = o.col || P.kraft, awn = o.awn || P.orange, ph = 150, R = rnd(o.seed || 3);
+    block(g, x, y, z, 6, 6, ph, { col: '#4A5070' }); block(g, x + w - 6, y, z, 6, 6, ph, { col: '#4A5070' });
+    block(g, x + 4, y + 12, z, w - 8, d - 12, 58, { col: c });
+    const goods = o.goods || [{ col: P.orange }]; goods.forEach((it, gi) => { const gx0 = x + 10 + (w - 20) * gi / goods.length, gw = (w - 20) / goods.length, n = it.n || 7;
+      for (let i = 0; i < n; i++) { const px = gx0 + 8 + R() * (gw - 16), py = y + 20 + R() * (d - 30), pz = z + 58 + (i > 4 ? 8 : 0), p = pt(px, py, pz);
+        if (it.kind === 'fish') { g.save(); g.translate(p[0], p[1] - 3); g.rotate(-.5 + R() * .3); g.beginPath(); g.ellipse(0, 0, 15 * V.s, 5.5 * V.s, 0, 0, PI2); g.moveTo(13 * V.s, 0); g.lineTo(22 * V.s, -6 * V.s); g.lineTo(22 * V.s, 6 * V.s); g.closePath(); g.fillStyle = it.col; g.fill(); g.beginPath(); g.arc(-9 * V.s, -1.5 * V.s, 1.6 * V.s, 0, PI2); g.fillStyle = '#151827'; g.fill(); g.restore(); }
+        else if (it.kind === 'box') block(g, px - 9, py - 7, pz, 18, 14, 12, { col: it.col });
+        else { g.beginPath(); g.arc(p[0], p[1] - 6 * V.s, 7.5 * V.s, 0, PI2); g.fillStyle = it.col; g.fill(); g.beginPath(); g.arc(p[0] - 2.5 * V.s, p[1] - 8.5 * V.s, 2.4 * V.s, 0, PI2); g.fillStyle = rgba(P.white, .35); g.fill(); } } });
+    if (o.tag) onFace(g, x + w / 2, y + d + 1, z + 40, 'left', q => { q.font = font(17, 800); const tw = Math.max(60, q.measureText(o.tag).width + 20); q.fillStyle = '#F2F4FA'; q.fillRect(-tw / 2, -14, tw, 28); q.fillStyle = P.ink; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillText(o.tag, 0, 1); });
+    block(g, x, y + d - 6, z, 6, 6, ph, { col: '#4A5070' }); block(g, x + w - 6, y + d - 6, z, 6, 6, ph, { col: '#4A5070' });
+    const n = Math.max(3, Math.round(w / 28)); for (let i = 0; i < n; i++) { const xa = x - 8 + (w + 16) * i / n, xb = x - 8 + (w + 16) * (i + 1) / n;
+      g.beginPath(); g.moveTo(...pt(xa, y - 8, z + ph + 14)); g.lineTo(...pt(xb, y - 8, z + ph + 14)); g.lineTo(...pt(xb, y + d + 14, z + ph - 4)); g.lineTo(...pt(xa, y + d + 14, z + ph - 4)); g.closePath(); g.fillStyle = i % 2 ? P.white : awn; g.fill(); }
+  }
+  function sun(g, x, y, r, o = {}) { // солнце в px: o.col (розовое, жёлтое, оранжевое…), o.a, o.rays 0…1 лучи
+    const c = o.col || P.amber, a = o.a ?? 1, lt = o.lt ?? T; if (a <= 0) return; g.save(); g.globalAlpha *= a;
+    glow(g, x, y, r * 3.4, c, .6);
+    if (o.rays) { g.globalAlpha *= cl(o.rays) * .35; g.fillStyle = c; g.beginPath(); for (let i = 0; i < 12; i++) { const b = i * PI / 6 + lt * .12; g.moveTo(x + Math.cos(b - .05) * r * 1.2, y + Math.sin(b - .05) * r * 1.2); g.lineTo(x + Math.cos(b) * r * 2.1, y + Math.sin(b) * r * 2.1); g.lineTo(x + Math.cos(b + .05) * r * 1.2, y + Math.sin(b + .05) * r * 1.2); } g.fill(); g.globalAlpha /= cl(o.rays) * .35; }
+    g.beginPath(); g.arc(x, y, r, 0, PI2); g.fillStyle = c; g.fill(); g.beginPath(); g.arc(x - r * .28, y - r * .28, r * .5, 0, PI2); g.fillStyle = 'rgba(255,255,255,.16)'; g.fill(); g.restore();
+  }
+  function stars(g, lt, o = {}) { // яркие звёзды в px: область o.x0 o.y0 o.x1 o.y1, o.n, o.on 0…1 (зажигаются по одной), o.col, o.seed
+    const n = o.n || 36, R = rnd(o.seed || 11), on = o.on ?? 1, x0 = o.x0 ?? 40, x1 = o.x1 ?? W - 40, y0 = o.y0 ?? 300, y1 = o.y1 ?? 900, c = o.col || '#F4F1DA';
+    for (let i = 0; i < n; i++) { const x = lerp(x0, x1, R()), y = lerp(y0, y1, R()), r = 2 + R() * 3.4, f = 1 + R() * 2, th = (i + .5) / n; if (th > on) continue;
+      const a = cl(pr(on, th, th + 1.5 / n)) * (.6 + .4 * Math.sin(lt * f + i * 2.1)); g.globalAlpha = a; g.fillStyle = c;
+      g.beginPath(); g.arc(x, y, r * .6, 0, PI2); g.fill(); if (r > 3.6) { g.beginPath(); g.moveTo(x - r * 2.2, y); g.lineTo(x, y - r * .3); g.lineTo(x + r * 2.2, y); g.lineTo(x, y + r * .3); g.moveTo(x, y - r * 2.2); g.lineTo(x + r * .3, y); g.lineTo(x, y + r * 2.2); g.lineTo(x - r * .3, y); g.fill(); } }
+    g.globalAlpha = 1;
+  }
+  function cloud(g, x, y, s = 1, o = {}) { // облако в px: (x,y) середина низа; o.col, o.a
+    const c = o.col || '#C9D3EC', key = 'cl' + c; if (!RC[key]) { const [cv, m] = mk(260, 120); const blob = (dy, col) => { m.fillStyle = col; m.beginPath(); m.arc(80, 78 + dy, 36, 0, PI2); m.arc(130, 60 + dy, 48, 0, PI2); m.arc(182, 80 + dy, 32, 0, PI2); m.rect(60, 80 + dy, 140, 30); m.fill(); };
+      blob(6, shade(c, -.3)); blob(0, c); m.fillStyle = 'rgba(255,255,255,.25)'; m.beginPath(); m.arc(118, 46, 26, 0, PI2); m.fill(); RC[key] = cv; }
+    g.save(); g.globalAlpha *= o.a ?? 1; g.drawImage(RC[key], x - 130 * s, y - 116 * s, 260 * s, 120 * s); g.restore();
+  }
+  function sea(g, x, y, z, w, d, lt, o = {}) { // вода, море, река: плоскость с бегущими штрихами волн; o.col, o.wave цвет штрихов, o.n, o.edge кромка, o.seed
+    tile(g, x, y, z, w, d, { fill: o.col || '#1D3F78', stroke: o.edge });
+    const n = o.n || Math.round(w * d / 7000), R = rnd(o.seed || 9), L = 34;
+    g.beginPath(); for (let i = 0; i < n; i++) { const fx = R(), fy = R(), sp = 8 + R() * 10, u = x + ((fx * (w - L) + lt * sp) % (w - L)), v = y + fy * d;
+      const a = pt(u, v, z), b = pt(u + L, v, z); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+    g.strokeStyle = o.wave || 'rgba(166,236,251,.32)'; g.lineWidth = 3 * V.s; g.stroke();
+  }
+  function hill(g, x, y, z, w, d, h, o = {}) { frustum(g, x, y, z, w, d, h, Math.min(w, d) * (o.ins ?? .4), { col: o.col || '#2F7F5E' }); } // холм: усечённая пирамида, o.col
+  function garland(g, a, b, lt, o = {}) { // гирлянда-провис между точками экрана a=[x,y] и b: o.n лампочек, o.on 0…1 (загораются по очереди от a), o.cols, o.sag
+    const n = o.n || 12, sag = o.sag ?? 60, on = o.on ?? 1, cols = o.cols || [P.amber, '#FF8FA3', P.cyan, '#9BE38B'], cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2 + sag * 2;
+    g.beginPath(); g.moveTo(a[0], a[1]); g.quadraticCurveTo(cx, cy, b[0], b[1]); g.strokeStyle = '#4A5070'; g.lineWidth = 2; g.stroke();
+    for (let i = 0; i < n; i++) { const t = (i + .5) / n, m = 1 - t, px = m * m * a[0] + 2 * m * t * cx + t * t * b[0], py = m * m * a[1] + 2 * m * t * cy + t * t * b[1] + 5, c = cols[i % cols.length], k = cl(on * n - i);
+      if (k > 0) glow(g, px, py, 22, c, .75 * k * (.85 + .15 * Math.sin(lt * 5 + i))); g.beginPath(); g.arc(px, py, 5, 0, PI2); g.fillStyle = k > 0 ? mix('#3A4062', c, k) : '#3A4062'; g.fill(); }
+  }
+  function board(g, x, y, z, w, h, lines, o = {}) { // доска/табличка с текстом на стойке, лицом к зрителю: (x,y,z) низ середины; lines ['строка' | ['слева','справа']] только из озвучки; o.face 'left'(+y)|'right'(+x), o.legs высота ножек, o.bg, o.ink, o.frame, o.size, o.n видно строк, o.title заголовок
+    const face = o.face || 'left', lg = o.legs ?? 60, bg = o.bg || '#24433A', fr = o.frame || P.kraft, ink = o.ink || '#EEF2F0', rows = (o.title ? 1 : 0) + lines.length, lh = (h - 28) / Math.max(1, rows), sz = o.size || lh * .56, nv = o.n ?? lines.length;
+    const R_ = face === 'right';
+    for (const f of [-.36, .36]) R_ ? block(g, x - 4, y + f * w - 4, z, 8, 8, lg + 10, { col: shade(fr, -.2) }) : block(g, x + f * w - 4, y - 4, z, 8, 8, lg + 10, { col: shade(fr, -.2) });
+    R_ ? block(g, x - 5, y - w / 2, z + lg, 5, w, h, { col: fr }) : block(g, x - w / 2, y - 5, z + lg, w, 5, h, { col: fr });
+    onFace(g, R_ ? x + .5 : x - w / 2, R_ ? y + w / 2 : y + .5, z + lg + h, face, q => { q.fillStyle = bg; q.fillRect(8, 8, w - 16, h - 16); q.textBaseline = 'middle'; q.fillStyle = ink; let r = 0;
+      const fit = (s, mw, fs) => { q.font = font(fs, 700); const tw = q.measureText(s).width; if (tw > mw) q.font = font(fs * mw / tw, 700); };
+      if (o.title) { fit(o.title, w - 40, sz * .8); q.textAlign = 'center'; q.fillText(o.title, w / 2, 14 + lh * .5); r++; }
+      lines.forEach((ln, i) => { if (i >= nv) return; const yy = 14 + lh * (r + i + .5);
+        if (Array.isArray(ln)) { fit(ln[0], w * .55, sz); q.textAlign = 'left'; q.fillText(ln[0], 22, yy); fit(ln[1], w * .4, sz); q.textAlign = 'right'; q.fillText(ln[1], w - 22, yy); }
+        else { fit(ln, w - 40, sz); q.textAlign = 'center'; q.fillText(ln, w / 2, yy); } }); });
+  }
+  const LOOKS = [{ coat: '#E8644A', pants: '#2E3550', hair: '#2B1E18' }, { coat: '#3D8BD9', pants: '#3A3F5C', hair: '#5A3A22' }, { coat: '#F2C14E', pants: '#4A4F6E', hair: '#1E1A18' },
+    { coat: '#2FB58C', pants: '#30364F', hair: '#8A5A30' }, { coat: '#B05AC8', pants: '#2A2F45', hair: '#3A2A22' }, { coat: '#F0F2F7', pants: '#5A6080', hair: '#C9A06A' },
+    { coat: '#E7487A', pants: '#30364F', hair: '#2B1E18' }, { coat: '#7FD0E8', pants: '#454B6B', hair: '#6B4A2E' }];
+  function people(g, list, lt) { // несколько людей с сортировкой по глубине: [{x,y,z,ang,H,pose,age,look (объект или № из ISO.LOOKS),…}]
+    const A = list.slice().sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    for (const p of A) person(g, 'all', p.x, p.y, p.z || 0, p.ang ?? PI / 4, p.H || (p.age === 'child' ? 115 : 175), lt, Object.assign({}, p, { look: typeof p.look === 'number' ? LOOKS[p.look % LOOKS.length] : p.look }));
   }
 
   // ---------- трекер-HUD ----------
   function hud(g, o = {}) { // вверху кадра (y 118…262): № слева, статус-капсула, таймер «ч мин» справа, линия этапов
     const a = o.a ?? 1; if (a <= 0) return; g.save(); g.globalAlpha *= cl(a * 1.6); g.translate(0, -(1 - eo(a)) * 26);
-    label(g, o.id || '', 60, 142, 22, { col: P.grey, w: 600 }); label(g, o.tl || 'в пути', 1020, 142, 22, { col: P.grey, al: 'right' });
+    label(g, o.id || '', 60, 142, 22, { col: P.grey, w: 600 }); if (o.tl) label(g, o.tl, 1020, 142, 22, { col: P.grey, al: 'right' });
     if (o.status) pill(g, o.status, 60, 192, { col: o.col || P.cyan, size: 24, glow: o.flash || 0 });
     odoTime(g, o.min || 0, 1020, 212, 52, { al: 'right', col: o.tcol || P.white, ucol: P.grey });
     const n = o.n || 7, x0 = 72, x1 = 1008, y = 254, st = cl(o.stage ?? 0, 0, n - 1), X = i => lerp(x0, x1, i / (n - 1));
@@ -614,7 +852,8 @@ const ISO = (() => {
     view, pt, floorPts, qTop, qL, qR, block, tile, grid, slab, isoEll, ring, pad, cyl, onFace, faceText,
     trace, along, pulses, arcPts, node, ripple, reticle, check, radial, dial, gauge, cursor, pin, barcode, laser, moon, dotMap,
     font, text, label, labelW, title, digits, odo, odoTime, rr, pill, card, stamp, callout, steps, pop, rise,
-    shadow, beacon, parcel, robot, rack, cells, belt, truck, building, door, lamp, hud };
+    shadow, beacon, parcel, robot, rack, cells, belt, truck, building, door, lamp, hud,
+    orient, prism, frustum, car, bus, boat, bike, dog, cat, bird, birds, tree, grass, leaves, house, shop, stall, sun, stars, cloud, sea, hill, garland, board, LOOKS, people };
 })();
 
 // ===== Модуль человека (person): внутренние имена закрыты, наружу только person =====
@@ -630,33 +869,56 @@ const vX = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0]
 const HIPZ = CL.shin + CL.thigh + .03, WAISTZ = HIPZ + CL.pelvis;
 
 // поза в локальных координатах (x вперёд, y вбок, z вверх, всё в долях H)
-// o.pose: 'knead' (o.tx: вылет теста от стоп, o.tz: высота верха теста), 'idle', 'rest' (кисти на столе: o.tx, o.tz)
+// o.pose: 'idle' | 'walk' | 'run' | 'wave' | 'dance' | 'sit' (o.sz высота сиденья) | 'ride' (велосипед) | 'hold' | 'reach' | 'rest' | 'knead'; o.age 'child' | 'old'; o.speed, o.phase
+function ik2(A, Tg, l1, l2, pole) { // двузвенник: → [сустав, конец, недолёт]
+  const D = vS(Tg, A), u = vN(D), d = Math.min(vL(D), l1 + l2 - 1e-3);
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), p = vN(vS(pole, vM(u, vD(pole, u))));
+  return [vA(vA(A, vM(u, a)), vM(p, h)), vA(A, vM(u, d)), vL(D) - d];
+}
 function chefPose(lt, o) {
-  const pose = o.pose || 'idle', w = Math.PI * 2 * 1.2, s = pose === 'knead' ? Math.sin(w * lt) : 0;
-  const leanDeg = pose === 'knead' ? 12 + 3 * s : pose === 'rest' ? 7 : pose === 'reach' ? (o.lean ?? 0) : 2 + .6 * Math.sin(lt * 1.7);
-  const ln = leanDeg * Math.PI / 180, ax = [Math.sin(ln), 0, Math.cos(ln)];
-  const sway = pose === 'idle' ? .008 * Math.sin(lt * 1.7) : 0;
-  const waist = [0, sway, WAISTZ], neck = vA(waist, vM(ax, CL.torso)), crown = vA(neck, vM(ax, CL.head)), top = vA(crown, vM(ax, CL.hat));
-  const J = { waist, neck, crown, top, arms: {}, legs: {}, ax };
+  const PI = Math.PI, pose = o.pose || 'idle', old = o.age === 'old', hk = o.age === 'child' ? 1.3 : 1;
+  const sp = o.speed ?? (pose === 'run' ? 1.6 : old ? .8 : 1.05), ph = (lt * sp + (o.phase || 0)) * PI * 2;
+  const s = pose === 'knead' ? Math.sin(PI * 2 * 1.2 * lt) : 0;
+  let leanDeg = pose === 'knead' ? 12 + 3 * s : pose === 'rest' ? 7 : pose === 'reach' ? (o.lean ?? 0) : pose === 'run' ? 13 : pose === 'walk' ? 4 : pose === 'ride' ? 20 : pose === 'sit' ? 3 : pose === 'dance' ? 3 : 2 + .6 * Math.sin(lt * 1.7);
+  if (old && pose !== 'reach' && pose !== 'knead' && pose !== 'rest') leanDeg += 9;
+  const ln = leanDeg * PI / 180, ax = [Math.sin(ln), 0, Math.cos(ln)];
+  const sway = pose === 'idle' ? .008 * Math.sin(lt * 1.7) : pose === 'dance' ? .03 * Math.sin(ph) : 0;
+  const LG = {}; let hipz = HIPZ + sway * .5;
+  if (pose === 'walk' || pose === 'run' || pose === 'dance') { let mn = 1;
+    for (const sd of [-1, 1]) { const q = ph + (sd > 0 ? 0 : PI); let th, be;
+      if (pose === 'dance') { const up = Math.max(0, Math.sin(q)); th = .55 * up; be = 1.15 * up; }
+      else { th = (pose === 'run' ? .62 : .38) * Math.sin(q); be = (pose === 'run' ? 1.3 : .55) * Math.max(0, Math.cos(q)); }
+      const kn = [Math.sin(th) * CL.thigh, 0, -Math.cos(th) * CL.thigh], an = vA(kn, [Math.sin(th - be) * CL.shin, 0, -Math.cos(th - be) * CL.shin]);
+      LG[sd] = [kn, an]; mn = Math.min(mn, an[2]); }
+    hipz = .03 - mn;
+    for (const sd of [-1, 1]) { const hip = [0, sd * .065, hipz]; LG[sd] = { hip, knee: vA(hip, LG[sd][0]), ank: vA(hip, LG[sd][1]) }; } }
+  else if (pose === 'sit') { hipz = o.sz ?? .26;
+    for (const sd of [-1, 1]) { const hip = [0, sd * .065, hipz], knee = [CL.thigh, sd * .075, hipz], dz = hipz - .03, dx = dz >= CL.shin ? 0 : Math.sqrt(CL.shin * CL.shin - dz * dz);
+      LG[sd] = { hip, knee, ank: [CL.thigh + dx, sd * .075, dz >= CL.shin ? hipz - CL.shin : .03] }; } }
+  else if (pose === 'ride') { hipz = o.sz ?? .5;
+    for (const sd of [-1, 1]) { const hip = [0, sd * .065, hipz], f = ph + (sd > 0 ? 0 : PI), pd = [.16 + .06 * Math.cos(f), sd * .09, .2 + .06 * Math.sin(f)], r = ik2(hip, pd, CL.thigh, CL.shin, [1, 0, .4]);
+      LG[sd] = { hip, knee: r[0], ank: r[1] }; } }
+  else for (const sd of [-1, 1]) { const hip = [0, sd * .065, hipz], knee = vA(hip, vM(vN([.05, 0, -1]), CL.thigh)); LG[sd] = { hip, knee, ank: vA(knee, vM(vN([-.05, 0, -1]), CL.shin)) }; }
+  const waist = [0, sway, hipz + CL.pelvis], drop = WAISTZ - waist[2], neck = vA(waist, vM(ax, CL.torso)), crown = vA(neck, vM(ax, CL.head * hk)), top = vA(crown, vM(ax, CL.hat));
+  const J = { waist, neck, crown, top, arms: {}, legs: LG, ax, hipz, hk };
   for (const sd of [-1, 1]) {
     const sh = vA(vA(waist, vM(ax, CL.torso - .025)), [0, sd * CL.shW / 2, 0]);
-    let tg, pole;
-    if (pose === 'knead') { tg = [o.tx + .035 * s * (sd > 0 ? 1 : -1) * 0 + .035 * s, sd * .065, o.tz + .01 - .01 * (.5 + .5 * s)]; pole = [-.5, sd * .9, .25]; }
+    let tg, pole, hd = null;
+    if (pose === 'knead') { tg = [o.tx + .035 * s, sd * .065, o.tz + .01 - .01 * (.5 + .5 * s)]; pole = [-.5, sd * .9, .25]; }
     else if (pose === 'rest') { tg = [o.tx, sd * .12, o.tz + .01]; pole = [-.4, sd * 1, .1]; }
-    else if (pose === 'reach' && (!o.hand || o.hand === sd)) { tg = [o.t[0], o.t[1] + (o.hand ? 0 : sd * .08), o.t[2]]; pole = [-.3, sd * 1, -.4]; }
-    else if (pose === 'hold') { tg = [.2, sd * .07, .62]; pole = [-.3, sd * 1, -.5]; }
-    else { tg = [sh[0] + .02, sd * (CL.shW / 2 + .035), sh[2] - CL.upper - CL.fore + .015]; pole = [.6, sd * .25, 0]; }
-    const D = vS(tg, sh), u = vN(D), d = Math.min(vL(D), CL.upper + CL.fore - 1e-3);
-    const a = (CL.upper ** 2 - CL.fore ** 2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, CL.upper ** 2 - a * a));
-    let p = vN(vS(pole, vM(u, vD(pole, u))));
-    const el = vA(vA(sh, vM(u, a)), vM(p, h)), wr = vA(sh, vM(u, d));
-    const hd = pose === 'idle' || (pose === 'reach' && o.hand && o.hand !== sd) ? [0, 0, -1] : pose === 'reach' ? vN(vS(tg, sh)) : vN([1, 0, -1.1]);
-    J.arms[sd] = { sh, el, wr, tip: vA(wr, vM(hd, CL.hand)), miss: vL(D) - d };
-    if (J.arms[sd].miss > .02) throw new Error('person: рука не достаёт до цели на ' + J.arms[sd].miss.toFixed(3) + ' H (поза ' + pose + '). Подвинь человека ближе или цель ниже.');
-  }
-  for (const sd of [-1, 1]) {
-    const hip = [0, sd * .065, HIPZ + sway * .5], knee = vA(hip, vM(vN([.05, 0, -1]), CL.thigh));
-    J.legs[sd] = { hip, knee, ank: vA(knee, vM(vN([-.05, 0, -1]), CL.shin)) };
+    else if (pose === 'reach' && (!o.hand || o.hand === sd)) { tg = [o.t[0], o.t[1] + (o.hand ? 0 : sd * .08), o.t[2]]; pole = [-.3, sd * 1, -.4]; hd = 'dir'; }
+    else if (pose === 'hold' || (o.hold && pose !== 'ride')) { tg = [.2, sd * .07, .62 - drop]; pole = [-.3, sd * 1, -.5]; }
+    else if (pose === 'wave' && (o.hand || 1) === sd) { tg = [sh[0] + .05, sd * (.16 + .06 * Math.sin(lt * 9)), sh[2] + .26]; pole = [.3, sd, -.5]; hd = 'dir'; }
+    else if (pose === 'dance') { const q = ph + (sd > 0 ? 0 : PI); tg = [sh[0] + .08, sd * .2, sh[2] + .1 + .1 * Math.sin(q)]; pole = [.2, sd, -.6]; hd = 'dir'; }
+    else if (pose === 'walk' || pose === 'run') { const q = ph + (sd > 0 ? PI : 0), A = pose === 'run' ? .8 : .45, L = pose === 'run' ? .22 : .29, a = A * Math.sin(q);
+      tg = [sh[0] + Math.sin(a) * L + (pose === 'run' ? .08 : 0), sd * (CL.shW / 2 + .03), sh[2] - Math.cos(a) * L]; pole = [-1, sd * .3, 0]; hd = 'dir'; }
+    else if (pose === 'sit') { tg = [.1, sd * .1, hipz + .08]; pole = [.3, sd, 0]; }
+    else if (pose === 'ride') { tg = [.34, sd * .13, .7]; pole = [-.3, sd, -.3]; }
+    else { tg = [sh[0] + .02, sd * (CL.shW / 2 + .035), sh[2] - CL.upper - CL.fore + .015]; pole = [.6, sd * .25, 0]; hd = 'down'; }
+    const [el, wr, miss] = ik2(sh, tg, CL.upper, CL.fore, pole);
+    const dir = hd === 'down' || (pose === 'reach' && o.hand && o.hand !== sd) || (pose === 'wave' && (o.hand || 1) !== sd) ? [0, 0, -1] : hd === 'dir' ? vN(vS(tg, sh)) : vN([1, 0, -1.1]);
+    J.arms[sd] = { sh, el, wr, tip: vA(wr, vM(dir, CL.hand)), miss };
+    if (miss > .02) throw new Error('person: рука не достаёт до цели на ' + miss.toFixed(3) + ' H (поза ' + pose + '). Подвинь человека ближе или цель ниже.');
   }
   return J;
 }
@@ -675,36 +937,45 @@ function ch_box(g, A, B, w, d, col, ext, ref, caps = true) {
     g.strokeStyle = 'rgba(8,10,20,.3)'; g.lineWidth = 1; g.stroke(); }
 }
 // pass: 'low' (тень, ноги, таз), 'up' (корпус, голова, руки), 'all'. ang: куда смотрит (0 = +x, PI/4 = к зрителю)
-// o.pose: 'idle' | 'knead' (o.tx, o.tz) | 'rest' (o.tx, o.tz) | 'reach' (o.t=[x,y,z], o.hand) | 'hold' (держит предмет перед собой)
-// o.look: { coat, pants, skin, hair, hat: 'chef' | 'cap' | 'none', hatCol, apron: true/false, apronCol }
+// o.look: { coat, pants, skin, hair, shoe, hat: 'none'|'cap'|'chef'|'helmet'|'scarf', hatCol, apron, apronCol, bag (цвет рюкзака), dress (юбка цвета coat) }
 function person(g, pass, x, y, z, ang, H, lt, o = {}) {
   const L0 = o.look || {}, hat = L0.hat || 'none', apron = !!L0.apron;
-  const C = Object.assign({}, CC); for (const k of ['coat', 'pants', 'skin', 'hair', 'shoe']) if (typeof L0[k] === 'string') C[k] = L0[k];
-  if (typeof L0.hatCol === 'string') C.hat = L0.hatCol; if (typeof L0.apronCol === 'string') C.apron = L0.apronCol;
-  const J = chefPose(lt, o), ca = Math.cos(ang), sa = Math.sin(ang);
+  const C = Object.assign({}, CC); if (o.age === 'old') C.hair = '#D5D9E2'; for (const k of ['coat', 'pants', 'skin', 'hair', 'shoe']) if (typeof L0[k] === 'string') C[k] = L0[k];
+  if (typeof L0.hatCol === 'string') C.hat = L0.hatCol; else if (hat === 'helmet') C.hat = '#F2C14E'; else if (hat === 'scarf') C.hat = '#C84B6B';
+  if (typeof L0.apronCol === 'string') C.apron = L0.apronCol;
+  const J = chefPose(lt, o), ca = Math.cos(ang), sa = Math.sin(ang), hk = J.hk;
   const W = v => [x + (v[0] * ca - v[1] * sa) * H, y + (v[0] * sa + v[1] * ca) * H, z + v[2] * H];
-  const side = W([0, 1, 0]), ref = vN(vS(side, W([0, 0, 0]))), up = [0, 0, 1];
-  const near = sd => { const p = W([0, sd, 0]); return p[0] + p[1]; };
-  const ord = near(-1) < near(1) ? [-1, 1] : [1, -1]; // дальняя сторона первой
+  const side = W([0, 1, 0]), ref = vN(vS(side, W([0, 0, 0])));
+  const near = v => { const p = W(v); return p[0] + p[1]; };
+  const ord = near([0, -1, 0]) < near([0, 1, 0]) ? [-1, 1] : [1, -1]; // дальняя сторона первой
+  const backFar = near([-1, 0, 0]) < near([1, 0, 0]);
+  const A = (p, k) => vA(J.crown, vM(J.ax, k)), sitting = o.pose === 'sit' || o.pose === 'ride';
   if (pass !== 'up') {
     ISO.shadow(g, x, y, z, .17 * H, .42);
     for (const sd of ord) { const L = J.legs[sd];
       ch_box(g, W(L.hip), W(L.knee), .09 * H, .095 * H, C.pants, .01 * H, ref, false);
       ch_box(g, W(L.knee), W(L.ank), .075 * H, .08 * H, C.pants, .01 * H, ref, false);
-      ch_box(g, W([-.03, sd * .065, .02]), W([.1, sd * .065, .02]), .07 * H, .04 * H, C.shoe, 0, ref); }
-    ch_box(g, W([0, J.waist[1], HIPZ - .01]), W(J.waist), .2 * H, .14 * H, C.pants, 0, ref);
+      ch_box(g, W(vA(L.ank, [-.03, 0, -.01])), W(vA(L.ank, [.1, 0, -.01])), .07 * H, .04 * H, C.shoe, 0, ref); }
+    ch_box(g, W([0, J.waist[1], J.hipz - .01]), W(J.waist), .2 * H, .14 * H, C.pants, 0, ref);
+    if (L0.dress) { if (sitting) ch_box(g, W([-.04, J.waist[1], J.hipz + .02]), W([.2, J.waist[1], J.hipz + .02]), .25 * H, .07 * H, C.coat, 0, ref);
+      else ch_box(g, W([0, J.waist[1], J.hipz - .17]), W(J.waist), .26 * H, .2 * H, C.coat, 0, ref); }
   }
   if (pass !== 'low') {
-    const arm = A => { ch_box(g, W(A.sh), W(A.el), .072 * H, .072 * H, C.coat, .02 * H, ref, false);
-      ch_box(g, W(A.el), W(A.wr), .058 * H, .058 * H, C.skin, .012 * H, ref, false);
-      ch_box(g, W(A.wr), W(A.tip), .052 * H, .026 * H, ISO.shade(C.skin, -.06), .006 * H, ref); };
+    const arm = A_ => { ch_box(g, W(A_.sh), W(A_.el), .072 * H, .072 * H, C.coat, .02 * H, ref, false);
+      ch_box(g, W(A_.el), W(A_.wr), .058 * H, .058 * H, C.skin, .012 * H, ref, false);
+      ch_box(g, W(A_.wr), W(A_.tip), .052 * H, .026 * H, ISO.shade(C.skin, -.06), .006 * H, ref); };
+    const bag = () => { if (typeof L0.bag === 'string') ch_box(g, W(vA(vA(J.waist, vM(J.ax, .07)), [-.11, 0, 0])), W(vA(vA(J.waist, vM(J.ax, .27)), [-.11, 0, 0])), .2 * H, .08 * H, L0.bag, 0, ref); };
+    if (backFar) bag();
     arm(J.arms[ord[0]]);
     ch_box(g, W(J.waist), W(J.neck), CL.shW * H, .15 * H, C.coat, 0, ref);
+    if (!backFar) bag();
     if (apron) ch_box(g, W(vA(J.waist, [.076, 0, 0])), W(vA(J.waist, vA(vM(J.ax, CL.torso * .62), [.076, 0, 0]))), .17 * H, .006 * H, C.apron, 0, ref);
-    ch_box(g, W(J.neck), W(J.crown), .11 * H, .12 * H, C.skin, 0, ref);
+    ch_box(g, W(J.neck), W(J.crown), .11 * H * hk, .12 * H * hk, C.skin, 0, ref);
     if (hat === 'chef') ch_box(g, W(J.crown), W(J.top), .13 * H, .13 * H, C.hat, .004 * H, ref);
-    else if (hat === 'cap') ch_box(g, W(J.crown), W(vA(J.crown, vM(J.ax, .03))), .125 * H, .13 * H, C.hat, .004 * H, ref);
-    else ch_box(g, W(vA(J.crown, vM(J.ax, -.03))), W(vA(J.crown, vM(J.ax, .015))), .118 * H, .128 * H, C.hair, .002 * H, ref);
+    else if (hat === 'cap') ch_box(g, W(J.crown), W(A(0, .03)), .125 * H * hk, .13 * H * hk, C.hat, .004 * H, ref);
+    else if (hat === 'helmet') { ch_box(g, W(A(0, -.03)), W(A(0, -.018)), .17 * H * hk, .17 * H * hk, C.hat, 0, ref); ch_box(g, W(A(0, -.02)), W(A(0, .035)), .135 * H * hk, .145 * H * hk, C.hat, 0, ref); }
+    else if (hat === 'scarf') ch_box(g, W(A(0, -.065 * hk)), W(A(0, .02)), .124 * H * hk, .135 * H * hk, C.hat, 0, ref);
+    else ch_box(g, W(A(0, -.03 * hk)), W(A(0, .015)), .118 * H * hk, .128 * H * hk, C.hair, .002 * H, ref);
     arm(J.arms[ord[1]]);
   }
   return J;
