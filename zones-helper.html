@@ -9,9 +9,17 @@ addEventListener('message',async e=>{
     let s=null;try{s=JSON.parse(localStorage.getItem('session'))}catch(_){}
     if(!s||!s.user){reply({error:'login'});return}
     const cfg=await (await fetch('/config.json',{cache:'no-store'})).json();
-    const r=await fetch(cfg.proxy+'/analyze',{method:'POST',referrerPolicy:'no-referrer',headers:{'X-User':encodeURIComponent(s.user),'X-Pass':encodeURIComponent(s.password||''),'X-Meta':encodeURIComponent(JSON.stringify({mime:'image/jpeg',prompt:m.prompt}))},body:new Blob([m.buf],{type:'image/jpeg'})});
-    const j=await r.json();if(!r.ok){reply({error:j.error||('http '+r.status)});return}
-    reply({text:j.text||''});
+    // сервер сам ждёт Gemini (async), страница забирает ответ через /analyze-job: связь не рвётся на 2 минутах
+    const au={'X-User':encodeURIComponent(s.user),'X-Pass':encodeURIComponent(s.password||'')};
+    const r=await fetch(cfg.proxy+'/analyze',{method:'POST',referrerPolicy:'no-referrer',headers:Object.assign({'X-Meta':encodeURIComponent(JSON.stringify({mime:'image/jpeg',prompt:m.prompt,async:true}))},au),body:new Blob([m.buf],{type:'image/jpeg'})});
+    const j=await r.json();if(!r.ok||!j.job){reply({error:j.error||('http '+r.status)});return}
+    const t0=Date.now();
+    while(Date.now()-t0<600000){
+      await new Promise(f=>setTimeout(f,4000));
+      let d=null;try{d=await (await fetch(cfg.proxy+'/analyze-job?id='+j.job,{referrerPolicy:'no-referrer',headers:au})).json()}catch(_){continue}
+      if(d&&d.done){if(d.error)reply({error:d.error});else reply({text:d.text||''});return}
+    }
+    reply({error:'timeout'});
   }catch(err){reply({error:String(err)})}
 });
 parent.postMessage({type:'zones-ready'},'*');
