@@ -723,8 +723,32 @@ export async function handler(req, info) {
     let meta = {}; try { meta = JSON.parse(decodeURIComponent(req.headers.get("X-Meta") || "{}")); } catch (_) {}
     const bytes = new Uint8Array(await req.arrayBuffer());
     if (!bytes.length) return json({ error: "Пустой файл" }, 400, h);
-    const out = await geminiAnalyze(bytes, String(meta.mime || req.headers.get("Content-Type") || "video/mp4"), String(meta.prompt || "Подробно опиши с таймкодами: речь (дословно), музыку и доли, звуки, что происходит в кадре."));
+    const mime = String(meta.mime || req.headers.get("Content-Type") || "video/mp4");
+    const prompt = String(meta.prompt || "Подробно опиши с таймкодами: речь (дословно), музыку и доли, звуки, что происходит в кадре.");
+    // Долгий разбор: сервер сам ждёт Gemini и кладёт ответ в хранилище, браузер забирает его через /analyze-job.
+    // Так связь не обрывается на ~2 минутах, и оплаченный ответ не теряется.
+    if (meta.async) {
+      const kv = await kvOpen(); if (!kv) return json({ error: "Хранилище недоступно" }, 500, h);
+      const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+      await kv.set(["gjob", id], { user: user.id, done: false, t: Date.now() }, JOB_TTL);
+      const ping = setInterval(() => { fetch(url.origin + "/").catch(() => {}); }, 20000);
+      geminiAnalyze(bytes, mime, prompt)
+        .catch((e) => ({ error: String(e?.message || e) }))
+        .then((out) => kv.set(["gjob", id], { user: user.id, done: true, t: Date.now(), ...out }, JOB_TTL))
+        .finally(() => clearInterval(ping));
+      return json({ job: id }, 200, h);
+    }
+    const out = await geminiAnalyze(bytes, mime, prompt);
     return json(out, out.error ? 502 : 200, h);
+  }
+  if (req.method === "GET" && url.pathname === "/analyze-job") {
+    const user = await headerAuth(req, ip);
+    if (!user || user.acct || !ADMINS().includes(user.id)) return json({ error: "Нет доступа" }, 403, h);
+    const kv = await kvOpen(), id = url.searchParams.get("id") || "";
+    const r = kv && /^[a-f0-9]{16}$/.test(id) && (await kv.get(["gjob", id])).value;
+    if (!r || r.user !== user.id) return json({ error: "Задание не найдено" }, 404, h);
+    const { user: _, ...out } = r;
+    return json(out, 200, h);
   }
   if (req.method === "POST" && (url.pathname === "/video-upload" || url.pathname === "/video-poster")) {
     const user = await headerAuth(req, ip);
