@@ -84,8 +84,27 @@ const ZINE = (() => {
   const { cl, eo, eio, sp, mix, font, rr } = M;
   // фон с растром точек: half(g, C.pink, C.pinkDot)
   const BG = {};
-  function cached(key, fn) { let c = BG[key]; if (!c) { c = new OffscreenCanvas(1080, 1920); fn(c.getContext('2d')); BG[key] = c; } return c; }
-  function half(g, c1, c2, step = 26) { g.drawImage(cached('h' + c1 + c2 + step, (q) => { q.fillStyle = c1; q.fillRect(0, 0, 1080, 1920); q.fillStyle = c2; for (let y = 0; y < 1920; y += step) for (let x = (y / step) % 2 ? step / 2 : 0; x < 1080; x += step) { q.beginPath(); q.arc(x, y, 3 + 4 * (y / 1920), 0, 7); q.fill(); } }), 0, 0); }
+  function cached(key, fn, h, w, fn2) { let c = BG[key]; if (!c) { if (fn2) { c = new OffscreenCanvas(w, h || 1920); fn2(c.getContext('2d')); } else { c = new OffscreenCanvas(1080, 1920); fn(c.getContext('2d')); } BG[key] = c; } return c; }
+  // Растр точек. Между рядами точек фон однотонный, поэтому под масштабом камеры кадр заливается цветом фона,
+  // а с фильтрацией растягиваются только полосы с точками (дорогая часть). Полосы хранятся в компактном атласе,
+  // восемь периодов каждого ряда рисуются в полосу 8·step×1920 и размножаются точными копиями (ряд периодичен с целым шагом).
+  // Пиксели те же, что у прежнего спрайта во весь кадр; без пика на первом кадре сцены.
+  const HB = {};
+  function halfBands(step) { if (HB[step]) return HB[step]; const b = []; let o = 0;
+    for (let y = 0; y < 1920; y += step) { const r = 3 + 4 * (y / 1920), y0 = Math.max(0, Math.floor(y - r) - 4), y1 = Math.min(1920, Math.ceil(y + r) + 4); b.push(y0, y1 - y0, o); o += y1 - y0; }
+    b.total = o; return (HB[step] = b); }
+  function half(g, c1, c2, step = 26) {
+    const m = g.getTransform();
+    if (step % 2 === 0 && g.globalAlpha === 1 && g.globalCompositeOperation === 'source-over' && !m.b && !m.c && m.a > 0 && m.d > 0 && m.e <= 0 && m.f <= 0 && m.a * 1080 + m.e >= g.canvas.width && m.d * 1920 + m.f >= g.canvas.height) {
+      const B = halfBands(step), A = cached('a' + c1 + c2 + step, null, B.total, 1080, (q) => { const w8 = step * 8, W8 = new OffscreenCanvas(w8, 1920), q8 = W8.getContext('2d'); q8.fillStyle = c1; q8.fillRect(0, 0, w8, 1920); q8.fillStyle = c2;
+        for (let y = 0; y < 1920; y += step) for (let x = (y / step) % 2 ? step / 2 : 0; x <= w8; x += step) { q8.beginPath(); q8.arc(x, y, 3 + 4 * (y / 1920), 0, 7); q8.fill(); }
+        for (let i = 0; i < B.length; i += 3) for (let x = 0; x < 1080; x += w8) q.drawImage(W8, 0, B[i], w8, B[i + 1], x, B[i + 2], w8, B[i + 1]); });
+      const fs = g.fillStyle; g.fillStyle = c1; g.fillRect(0, 0, 1080, 1920);
+      for (let i = 0; i < B.length; i += 3) g.drawImage(A, 0, B[i + 2], 1080, B[i + 1], 0, B[i], 1080, B[i + 1]);
+      g.fillStyle = fs; return;
+    }
+    g.drawImage(cached('h' + c1 + c2 + step, (q) => { q.fillStyle = c1; q.fillRect(0, 0, 1080, 1920); q.fillStyle = c2; for (let y = 0; y < 1920; y += step) for (let x = (y / step) % 2 ? step / 2 : 0; x < 1080; x += step) { q.beginPath(); q.arc(x, y, 3 + 4 * (y / 1920), 0, 7); q.fill(); } }), 0, 0);
+  }
   // фон в крупную клетку
   function checker(g, c1 = C.blue, c2 = C.blue2, s = 90) { g.drawImage(cached('c' + c1 + c2 + s, (q) => { q.fillStyle = c1; q.fillRect(0, 0, 1080, 1920); q.fillStyle = c2; for (let y = 0; y < 1920; y += s) for (let x = (y / s) % 2 ? s : 0; x < 1080; x += s * 2) q.fillRect(x, y, s, s); }), 0, 0); }
   // вращающиеся лучи на весь кадр

@@ -111,7 +111,8 @@ x.globalAlpha=0.3+r2*0.55;x.fillStyle=DC[Math.floor(r3*6)];x.beginPath();x.arc(x
 if(words&&words.length)x.fillText(words[Math.floor(r1*words.length)],xx+16,y);else x.fillRect(xx+16,y-2,30+r1*80,4);}}return SPR[k]=c;}
 // статичные фоны запекаются один раз (ключ - положение свечения)
 // фоны строятся в 1/4 разрешения (мягкие пятна), растягиваются один раз, сетка поверх в полном - сборка ~5 мс вместо ~30
-function softBg(draw){const [s,y]=cv(270,480);y.scale(0.25,0.25);draw(y);const [c,x]=cv(1080,1920);x.imageSmoothingQuality='high';x.drawImage(s,0,0,1080,1920);return [c,x];}
+function softBg(draw){const [s,y]=cv(270,480);y.scale(0.25,0.25);draw(y);const c=new OffscreenCanvas(1080,1920),x=c.getContext('2d',{alpha:false});// фон непрозрачный: холст без альфы, заливка под ним не рисуется
+x.imageSmoothingQuality='high';x.drawImage(s,0,0,1080,1920);return [c,x];}
 function darkSpr(gx,gy,gr){const k='dk'+gx+'_'+gy+'_'+gr;if(SPR[k])return SPR[k];const [c,x]=softBg(x=>{x.fillStyle=C.night;x.fillRect(0,0,1080,1920);
 x.drawImage(glowSpr(C.glow),gx-gr,gy-gr,2*gr,2*gr);x.globalAlpha=0.5;x.drawImage(glowSpr('#2A1470'),gx-260-560,gy+520-560,1120,1120);x.globalAlpha=1;x.drawImage(vigSpr(),0,0,1080,1920);});
 x.drawImage(gridSpr(1),0,0);return SPR[k]=c;}

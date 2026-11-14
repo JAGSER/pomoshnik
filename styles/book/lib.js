@@ -50,7 +50,8 @@ const BOOK = (() => {
   const shade = (c, k) => k < 0 ? mix(c, '#1B1A33', -k) : mix(c, '#FFFFFF', k);
 
   // ---------- текстуры (один раз; маленькие OffscreenCanvas) ----------
-  const mk = (w, h, op) => { const c = new OffscreenCanvas(w, h); return [c, c.getContext('2d', op ? { alpha: false } : undefined)]; };
+  let NEWC = null; // во время прогрева сюда попадают новые спрайты, чтобы растеризовать их сразу
+  const mk = (w, h, op) => { const c = new OffscreenCanvas(w, h); if (NEWC) NEWC.push(c); return [c, c.getContext('2d', op ? { alpha: false } : undefined)]; };
   function tex() {
     if (TX) return TX;
     TX = {};
@@ -84,6 +85,7 @@ const BOOK = (() => {
   // ---------- кадр, слои, камера ----------
   function begin(t, k) {
     K = k; G = k.g; T = t; SCR = [0, 0]; CAM = { x: 540, y: 960, z: 1 }; tex();
+    if (!TX.page) page().getContext('2d').getImageData(0, 0, 1, 1); // бумага готовится вместе с текстурами (иначе ~20 мс на первом показе)
     G.setTransform(1, 0, 0, 1, 0, 0); G.globalAlpha = 1; G.globalCompositeOperation = 'source-over'; G.lineCap = 'round'; G.lineJoin = 'round';
     return G;
   }
@@ -132,6 +134,14 @@ const BOOK = (() => {
     x.fillStyle = '#F6F1E9'; x.fillRect(0, 0, W, H); x.lineCap = 'round'; x.lineJoin = 'round';
     T = at; drawSc(x, pv, plt, [0, 0], { i, lt: plt, dur: plt, p: 1, t: at, out: true }); T = t0; F.i = i; F.at = at; return TX.frz;
   }
+  function warmNext(list, j) {
+    const sc = list[j]; if (!TX || TX.wn === sc) return; TX.wn = sc;
+    const x = TX.wx || (TX.wx = new OffscreenCanvas(1, 1).getContext('2d')), nx = list[j + 1], end_ = nx ? nx.at : (K ? K.duration : 35), lt = .15, t0 = T;
+    x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.lineCap = 'round'; x.lineJoin = 'round';
+    NEWC = []; T = sc.at + lt;
+    try { drawSc(x, sc, lt, [0, 0], { i: j, lt, dur: end_ - sc.at, p: cl(lt / (end_ - sc.at)), t: sc.at + lt, in: true }); }
+    finally { T = t0; const L = NEWC; NEWC = null; for (const c of L) c.getContext('2d').getImageData(0, 0, 1, 1); }
+  }
   function turnFx(g, q, img) { // перелистывание: старая страница загибается от правого нижнего угла и уходит влево
     const e = eio(q), ang = (16 + 12 * e) * DEG, nx = Math.cos(ang), ny = Math.sin(ang), fx = lerp(W + 240, -1000, e), fy = H * .56;
     const f = (x, y) => (x - fx) * nx + (y - fy) * ny, rect = [-2, -2, W + 2, -2, W + 2, H + 2, -2, H + 2], keep = half(rect, f), lift = half(rect, (x, y) => -f(x, y));
@@ -149,6 +159,13 @@ const BOOK = (() => {
   function play(g, t, list) { // сцены [{at, draw(g, lt, info), tr:'turn'|'bloom'|'pan'|'rise'|'cut', d, x, y, cam, settle, push}]
     let i = 0; while (i < list.length - 1 && t >= list[i + 1].at) i++;
     const sc = list[i], lt = t - sc.at, nx = list[i + 1], end_ = nx ? nx.at : (K ? K.duration : 35);
+    // заготовка уходящей страницы для следующего перехода за 0,1…0,6 с до склейки (кэш зависит только от сцены и момента
+    // склейки, картинка та же): иначе кадр начала перехода рисует сцену дважды и даёт пик
+    // и прогрев кэшей следующей сцены (здания, надписи, зверьки): её начало проигрывается в холст 1×1, новые спрайты
+    // сразу растеризуются. Пики переносятся с кадра склейки на обычные кадры до неё, по одной работе на кадр.
+    const busy = i > 0 && lt < (sc.d ?? TRD[sc.tr] ?? 0) && sc.tr !== 'cut';
+    if (nx && !busy && t >= nx.at - .6 && t < nx.at - .35 && nx.tr !== 'cut' && (nx.d ?? TRD[nx.tr] ?? 0) > 0) frozen(list, i, nx.at);
+    else if (nx && !busy && t >= nx.at - .35 && t < nx.at - .05) warmNext(list, i + 1);
     const inf = { i, lt, dur: end_ - sc.at, p: cl(lt / (end_ - sc.at)), t };
     const d = sc.d ?? TRD[sc.tr] ?? 0;
     if (i > 0 && d > 0 && lt < d && sc.tr !== 'cut') {

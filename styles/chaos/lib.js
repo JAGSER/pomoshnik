@@ -102,6 +102,7 @@ const CHAOS = (() => {
   function bg(g, kind, t, o = {}) {
     const T = tex(); kind = kind || 'ink';
     const f = Math.floor(t * 15); g.drawImage(T.bgc[kind], -10 + (f * 7) % 9 - 4, -10 + (f * 5) % 9 - 4);
+    warm(T, T.bgc[kind]);
     if (o.ghost) {
       const gc = ghostTex(o.ghost);
       g.save(); g.globalAlpha = kind === 'ink' ? 0.016 : 0.03;
@@ -111,6 +112,13 @@ const CHAOS = (() => {
       g.save(); g.globalAlpha = o.code; const y = -((t * 46) % 700);
       g.drawImage(codeTex(o.codeLines), 0, y + 320); g.restore();
     }
+  }
+  // прогрев: холсты-текстуры записываются сразу, а растеризуются при первом показе (у фона ~8 мс). Чтобы это не легло
+  // на кадр склейки, за кадр дорисовывается не больше одного ещё не показанного холста. На пиксели не влияет.
+  function warm(T, used) {
+    const q = T.warm || (T.warm = Object.keys(BG).map(k => T.bgc[k]).concat([T.dash]));
+    const i = q.indexOf(used); if (i >= 0) q.splice(i, 1);
+    if (q.length) q.shift().getContext('2d').getImageData(0, 0, 1, 1);
   }
   // стена кода: строки из параметра lines (по теме ролика); без lines только номера строк и полоски
   function codeTex(lines) {
@@ -169,20 +177,26 @@ const CHAOS = (() => {
 
   // ---------- глитч ----------
   // спрайт строки: текст рисуется один раз в OffscreenCanvas (кэш до 24 строк), дальше только drawImage
-  const SPR = new Map(); let SPX = 0; const SPX_MAX = 9e6; // кэш до ~9 млн пикселей (~36 МБ)
+  const SPR = new Map(); let SPX = 0; const SPX_MAX = 9e6; let MC = null; // кэш до ~9 млн пикселей (~36 МБ)
+  // e.by, e.bh - строки глифов внутри спрайта (+12 px прозрачного запаса). Спрайт рисуется только этими строками на всю ширину:
+  // раньше всё прозрачное поле (высота 1,3 кегля) проходило через масштабирование с фильтрацией в каждом кадре. Пиксели те же.
   function sprite(s, fnt, sx, col, size) {
     const key = s + '|' + fnt + '|' + sx + '|' + col;
     let e = SPR.get(key); if (e) { SPR.delete(key); SPR.set(key, e); return e; }
-    const m = new OffscreenCanvas(8, 8).getContext('2d'); m.font = fnt;
-    const tw0 = m.measureText(s).width, tw = tw0 * sx, pad = Math.ceil(size * 0.08) + 6;
+    const m = MC || (MC = new OffscreenCanvas(8, 8).getContext('2d')); m.font = fnt;
+    const mt = m.measureText(s), tw0 = mt.width, tw = tw0 * sx, pad = Math.ceil(size * 0.08) + 6;
     const w = Math.ceil(tw) + pad * 2, h = Math.ceil(size * 1.3), oy = Math.ceil(size * 1.0);
     const cv = new OffscreenCanvas(w, h), c = cv.getContext('2d');
     c.font = fnt; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
     c.translate(pad, oy); c.scale(sx, 1); c.fillStyle = paint(c, col, tw0, 'left'); c.fillText(s, 0, 0);
-    e = { cv, w, h, ox: pad, oy, tw }; SPR.set(key, e); SPX += w * h;
+    const bl = mt.actualBoundingBoxLeft, br = mt.actualBoundingBoxRight, ba = mt.actualBoundingBoxAscent, bd = mt.actualBoundingBoxDescent, ok = [bl, br, ba, bd].every(v => typeof v === 'number' && isFinite(v)), M = 12;
+    const bx = ok ? Math.max(0, Math.floor(pad - Math.max(0, bl) * sx) - M) : 0, by = ok ? Math.max(0, Math.floor(oy - Math.max(0, ba)) - M) : 0;
+    const bw = ok ? Math.min(w, Math.ceil(pad + Math.max(0, br) * sx) + M) - bx : w, bh = ok ? Math.min(h, Math.ceil(oy + Math.max(0, bd)) + M) - by : h;
+    e = { cv, w, h, ox: pad, oy, tw, bx, by, bw: Math.max(1, bw), bh: Math.max(1, bh) }; SPR.set(key, e); SPX += w * h;
     while (SPX > SPX_MAX && SPR.size > 1) { const k0 = SPR.keys().next().value, e0 = SPR.get(k0); SPX -= e0.w * e0.h; SPR.delete(k0); }
     return e;
   }
+  const blit = (g, e, x, y) => g.drawImage(e.cv, 0, e.by, e.w, e.bh, x, y + e.by, e.w, e.bh);
   // текст с RGB-расслоением и разломом на полосы. a = 0..1 сила глитча. Возвращает ширину.
   // o: { font, sx, col, glitch, light, size, seed, align }
   function gtext(g, s, x, y, o) {
@@ -192,48 +206,64 @@ const CHAOS = (() => {
     if (a > 0.02) {
       const d = 6 + a * 26;
       g.save(); g.globalAlpha *= 0.9; g.globalCompositeOperation = light ? 'multiply' : 'screen';
-      g.drawImage(sprite(s, o.font, sx, light ? '#2BB8D6' : C.CYAN, size).cv, x0 - d, y0);
-      g.drawImage(sprite(s, o.font, sx, light ? '#E2334F' : C.MAG, size).cv, x0 + d * 0.8, y0);
+      blit(g, sprite(s, o.font, sx, light ? '#2BB8D6' : C.CYAN, size), x0 - d, y0);
+      blit(g, sprite(s, o.font, sx, light ? '#E2334F' : C.MAG, size), x0 + d * 0.8, y0);
       g.restore();
       if (a > 0.3) {
         const n = 6, bh = Math.ceil(e.h / n), sd = (o.seed || 1) * 37 + Math.floor(a * 7);
         for (let i = 0; i < n; i++) {
           const off = (rnd(sd + i * 3.1) - 0.5) * a * 140, hh = Math.min(bh, e.h - i * bh);
-          if (hh > 0) g.drawImage(e.cv, 0, i * bh, e.w, hh, x0 + off, y0 + i * bh, e.w, hh);
+          // полоса [i*bh, i*bh+hh), обрезанная по строкам глифов (вне них прозрачно); края полос внутри букв не меняются
+          const r0 = Math.max(i * bh, e.by), r1 = Math.min(i * bh + hh, e.by + e.bh), c0 = 0, c1 = e.w;
+          if (hh > 0 && r1 > r0) g.drawImage(e.cv, c0, r0, c1 - c0, r1 - r0, x0 + off + c0, y0 + r0, c1 - c0, r1 - r0);
         }
         return e.tw;
       }
     }
-    g.drawImage(e.cv, x0, y0);
+    blit(g, e, x0, y0);
     return e.tw;
   }
   // всплеск глитча посреди сцены: возвращает силу 0..1 в редкие моменты
   function jitter(t, seed = 1, rate = 0.06) { const f = Math.floor(t * 12); return rnd(f * 7.3 + seed) < rate ? 0.35 + rnd(f + seed * 3) * 0.5 : 0; }
 
   // глитч всего кадра на склейке: сдвиг полос + цветные двойники. Вызывать после рисования сцены, до hud.
+  // строки полуразмерного снимка, которые реально читают полосы (с запасом 2 строки на сглаживание), слитые в отрезки
+  function rowRanges(list) {
+    const r = list.map(([a, b]) => [Math.max(0, Math.floor(a) - 2), Math.min(960, Math.ceil(b) + 2)]).sort((p, q) => p[0] - q[0]), out = [];
+    for (const x of r) { const l = out[out.length - 1]; if (l && x[0] <= l[1]) l[1] = Math.max(l[1], x[1]); else out.push(x); }
+    return out;
+  }
   function cut(g, u, seed = 1, kind = 'ink', dur = 0.2) {
     if (u < 0 || u > dur || !g.canvas) return;
     const a = 1 - u / dur, T = tex(), light = BG[kind].light, f = Math.floor(u * 30), cv = g.canvas;
-    T.hg.clearRect(0, 0, 540, 960); T.hg.drawImage(cv, 0, 0, 540, 960);
+    // полосы считаются заранее (те же формулы), чтобы снимок и тонировка делались только для нужных строк: картинка та же, работы меньше
+    const S3 = [], S4 = [];
+    for (let i = 0; i < 4; i++) {
+      const y0 = Math.floor(rnd(seed * 17 + i * 3 + f) * 1500) + 200, h = 120 + Math.floor(rnd(seed + i + f * 7) * 260);
+      S3.push([y0, h, (14 + 34 * a) * (rnd(i + f) > 0.5 ? 1 : -1)]);
+    }
+    for (let i = 0; i < 7; i++) {
+      const y0 = Math.floor(rnd(seed * 13 + f * 5 + i) * 940) * 2, h = Math.min(H - y0, 16 + Math.floor(rnd(seed + i * 7 + f) * 80) * 2), dx = (rnd(seed * 3 + i + f * 11) - 0.5) * 220 * a;
+      if (h > 2) S4.push([y0, h, dx]);
+    }
+    const RT = rowRanges(S3.map(([y0, h]) => [y0 / 2, (y0 + h) / 2])), RH = rowRanges(S3.concat(S4).map(([y0, h]) => [y0 / 2, (y0 + h) / 2]));
+    for (const [r0, r1] of RH) { T.hg.clearRect(0, r0, 540, r1 - r0); T.hg.drawImage(cv, 0, 2 * r0, 1080, 2 * (r1 - r0), 0, r0, 540, r1 - r0); }
     ['#00FFFF', '#FF0000'].forEach((tint, j) => {
       const c = T.tint[j].getContext('2d');
-      c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, 540, 960); c.drawImage(T.half, 0, 0);
-      c.globalCompositeOperation = light ? 'screen' : 'multiply'; c.fillStyle = tint; c.fillRect(0, 0, 540, 960);
+      for (const [r0, r1] of RT) {
+        c.globalCompositeOperation = 'source-over'; c.clearRect(0, r0, 540, r1 - r0); c.drawImage(T.half, 0, r0, 540, r1 - r0, 0, r0, 540, r1 - r0);
+        c.globalCompositeOperation = light ? 'screen' : 'multiply'; c.fillStyle = tint; c.fillRect(0, r0, 540, r1 - r0);
+      }
     });
     // цветные двойники в 4 широких полосах
     g.save(); g.globalCompositeOperation = light ? 'multiply' : 'screen'; g.globalAlpha = 0.7 * a;
-    for (let i = 0; i < 4; i++) {
-      const y0 = Math.floor(rnd(seed * 17 + i * 3 + f) * 1500) + 200, h = 120 + Math.floor(rnd(seed + i + f * 7) * 260);
-      const dx = (14 + 34 * a) * (rnd(i + f) > 0.5 ? 1 : -1);
+    for (const [y0, h, dx] of S3) {
       g.drawImage(T.tint[0], 0, y0 / 2, 540, h / 2, -dx, y0, W, h);
       g.drawImage(T.tint[1], 0, y0 / 2, 540, h / 2, dx, y0, W, h);
     }
     g.restore();
     // сдвиг полос из того же снимка (полуразмер, растянут: полосы чуть мягче, как в видео-глитче)
-    for (let i = 0; i < 7; i++) {
-      const y0 = Math.floor(rnd(seed * 13 + f * 5 + i) * 940) * 2, h = Math.min(H - y0, 16 + Math.floor(rnd(seed + i * 7 + f) * 80) * 2), dx = (rnd(seed * 3 + i + f * 11) - 0.5) * 220 * a;
-      if (h > 2) g.drawImage(T.half, 0, y0 / 2, 540, h / 2, dx, y0, W, h);
-    }
+    for (const [y0, h, dx] of S4) g.drawImage(T.half, 0, y0 / 2, 540, h / 2, dx, y0, W, h);
   }
 
   // ---------- типографика ----------
