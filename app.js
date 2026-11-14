@@ -3393,7 +3393,14 @@ function vtPlace(cands, match, pauses, T0, T1, Wtot) {
 function vtTime(chunk, pcm, rate, t0, t1) {
   const win = 0.01, env = vtEnvelope(pcm, rate, win);
   const long = vtPauses(env, win, 0.15, 0.05), short = vtPauses(env, win, 0.09, 0.05);
-  const S = vtSentences(chunk).map((s) => ({ text: s.trim(), toks: vtTokens(s) })).filter((s) => s.toks.length);
+  // фразы без слов («🌞», «…») не теряются из субтитров: их текст приклеивается к соседней фразе
+  const S = [];
+  let pre = "";
+  for (const s of vtSentences(chunk).map((x) => ({ text: x.trim(), toks: vtTokens(x) }))) {
+    if (!s.toks.length) { if (S.length) S[S.length - 1].text += " " + s.text; else pre += s.text + " "; continue; }
+    if (pre) { s.text = pre + s.text; pre = ""; }
+    S.push(s);
+  }
   if (!S.length) throw new Error("пустой текст");
   const dur = pcm.length / rate, T0 = Math.min(long.on, dur), T1 = Math.max(T0 + 0.1, long.off);
   // уровень 1: границы предложений ↔ длинные паузы
@@ -5138,6 +5145,8 @@ async function makeCreativeScene(v, label) {
     const nm = s0 ? T(String(s0.name || styleId)) : T("Стандартный");
     styleNote = LL(`🎨 Стиль подобран сам: «${nm}»`, `🎨 Style picked automatically: ${nm}`);
   }
+  // бюджет правок считается после подбора стиля, чтобы подбор не отнимал время у режиссёра
+  const budget0 = sec();
   // стиль ролика: грузим один раз на ролик, system уходит во все запросы directorCall (и в правки)
   let style = null;
   STYLE_RUN = null;
@@ -5246,7 +5255,7 @@ async function makeCreativeScene(v, label) {
       note(`проверка ${round + 1}: ${r.problem ? r.problem.slice(0, 140) : "чисто"}${r.miss && r.miss.length ? `; нет в коде: ${r.miss.map((x) => x.say).join(", ")}` : ""}`);
       if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n, miss: r.miss || [] };
       if (!r.problem || round === 2) break;
-      if (best && sec() > BUDGET) { note("время вышло — беру лучший вариант"); break; }
+      if (best && sec() - budget0 > BUDGET) { note("время вышло — беру лучший вариант"); break; }
       if (calls >= MAXC - 1) { note("правки: последнее обращение оставлено для просмотра кадров"); break; }
       msgs.push({ role: "user", content: r.problem + "\nИсправь и пришли код целиком." });
       code = (await write("Правка", true)) || code;
