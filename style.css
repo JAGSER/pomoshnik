@@ -499,7 +499,7 @@ button.think-toggle { font: inherit; font-size: .8em; }
 /* ===== Голосовой режим при запуске ===== */
 .voice { position: fixed; inset: 0; z-index: 900; background: var(--surface); color: var(--ink); display: flex; flex-direction: column; align-items: center; padding: calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 32px); }
 .voice[hidden] { display: none; }
-.vo-close { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 12px; width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+.vo-close { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 14px); right: 14px; width: 64px; height: 64px; border: 3px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 32px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
 .vo-mascot { position: relative; margin-top: 4vh; width: min(78vw, 340px); aspect-ratio: 1; border: 0; padding: 0; background: none; cursor: pointer; flex: none; }
 .vo-bars { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .vo-bars rect { fill: var(--accent); opacity: .35; transform-box: fill-box; transform-origin: center bottom; animation: vo-bar 1.1s ease-in-out infinite alternate; }
@@ -521,3 +521,6 @@ button.think-toggle { font: inherit; font-size: .8em; }
 .vo-write { border: 3px solid var(--line); background: none; color: var(--ink); border-radius: 999px; padding: 16px 40px; font: inherit; font-size: 24px; font-weight: 700; cursor: pointer; }
 @media (max-height: 640px) { .vo-mascot { width: min(60vw, 240px); margin-top: 0; } .vo-text { font-size: 32px; } .vo-lbl { font-size: 22px; margin-bottom: 12px; } }
 @media (prefers-reduced-motion: reduce) { .voice *, .voice .vo-bars rect { animation: none !important; } }
+.vo-swap { display: inline-grid; } .vo-swap > span { grid-area: 1 / 1; animation: vo-fade 4s ease-in-out infinite; } .vo-swap > span + span { animation-delay: -2s; }
+@keyframes vo-fade { 0%, 40% { opacity: 1; } 50%, 90% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .vo-swap > span + span { opacity: 0; } }

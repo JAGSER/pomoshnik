@@ -1839,7 +1839,7 @@ function voiceTyping() {
 function voiceListen() {
   if (!VOICE.on || VOICE.rec) return;
   const v = $("#voice"); v.classList.remove("idle");
-  $("#vo-lbl").textContent = LL("Слушаю", "Listening");
+  $("#vo-lbl").innerHTML = `<span class="vo-swap"><span>${LL("Слушаю", "Listening")}</span><span>${LL("Говорите", "Speak")}</span></span>`;
   const r = new SR();
   r.lang = SR_LANG(); r.interimResults = true; r.continuous = false;
   r.onresult = (e) => {
