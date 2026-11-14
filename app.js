@@ -22,6 +22,7 @@ const show = (id) => {
 };
 // один шаг назад по текущему состоянию экрана
 async function goBack() {
+  if (VOICE.on) { closeVoice(); return; }
   const sheet = document.getElementById("helpers-sheet");
   if (sheet && !sheet.hidden) { sheet.hidden = true; HELPERS_EDIT = false; return; }
   const vs = [...document.querySelectorAll(".sheet.vsheet")].find((x) => !x.hidden);
@@ -240,9 +241,9 @@ async function init() {
   SESSION = store.get("session");
   const valid = SESSION && (CFG.users[SESSION.user] || isAcct(SESSION.user));
   if (valid && CFG.users[SESSION.user] && userLang(SESSION.user) !== LANG) { setLang(userLang(SESSION.user)); return; }
-  if (valid) startHome();
+  if (valid) { startHome(); openVoice(); }
   // первый заход: сразу в приложение, без имени и пароля
-  else if (!store.get("wantLogin")) { try { await newGuest(); startHome(); } catch (e) { startLogin(); $("#login-error").textContent = e.message; } }
+  else if (!store.get("wantLogin")) { try { await newGuest(); startHome(); openVoice(); } catch (e) { startLogin(); $("#login-error").textContent = e.message; } }
   else startLogin();
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
@@ -1805,6 +1806,88 @@ function startListening() {
   try { rec.start(); } catch (_) { rec = null; $("#btn-mic").classList.remove("on"); }
 }
 function stopListening() { if (rec) { try { rec.stop(); } catch (_) {} } }
+
+/* ===== Голосовой режим при запуске: сразу слушаем, сказанное уходит в новый разговор ===== */
+const VOICE = { on: false, rec: null, text: "", t0: 0, denied: false, typer: 0 };
+const VOICE_IDEAS = () => LL(
+  ["Что приготовить на ужин?", "Посоветуй хороший фильм на вечер", "Как отправить фото в Ватсап?", "Напомни, как сделать видеозвонок", "Поздравь сестру с днём рождения", "Как увеличить шрифт в телефоне?", "Переведи фразу на английский", "Почему небо голубое?"],
+  ["What should I cook for dinner?", "Recommend a good film for tonight", "How do I send a photo on WhatsApp?", "Remind me how to make a video call", "Write a birthday wish for my sister", "How do I make the text bigger on my phone?", "Translate a phrase into Spanish", "Why is the sky blue?"]);
+function voiceText(t, hint) {
+  const b = $("#vo-text"), s = t.length > 220 ? "…" + t.slice(-220) : t;
+  b.classList.toggle("hint", !!hint);
+  b.classList.toggle("mid", s.length > 45 && s.length <= 100);
+  b.classList.toggle("long", s.length > 100);
+  const w = document.createElement("span"), c = document.createElement("span");
+  w.textContent = s; c.className = "vo-cur"; w.append(c); b.replaceChildren(w);
+}
+// пока человек молчит: вопрос печатается, быстро стирается, печатается следующий
+function voiceTyping() {
+  const ideas = VOICE_IDEAS();
+  let i = Math.floor(Math.random() * ideas.length), n = 0, dir = 1;
+  const tick = () => {
+    if (!VOICE.on || VOICE.text) return;
+    const q = ideas[i % ideas.length];
+    n += dir;
+    voiceText(q.slice(0, n), true);
+    let d = dir > 0 ? 55 : 18;
+    if (dir > 0 && n >= q.length) { dir = -1; d = 1600; }
+    else if (dir < 0 && n <= 0) { dir = 1; i++; d = 300; }
+    VOICE.typer = setTimeout(tick, d);
+  };
+  clearTimeout(VOICE.typer); tick();
+}
+function voiceListen() {
+  if (!VOICE.on || VOICE.rec) return;
+  const v = $("#voice"); v.classList.remove("idle");
+  $("#vo-lbl").textContent = LL("Слушаю", "Listening");
+  const r = new SR();
+  r.lang = SR_LANG(); r.interimResults = true; r.continuous = false;
+  r.onresult = (e) => {
+    let t = "";
+    for (const x of e.results) t += x[0].transcript;
+    if (!t.trim()) return;
+    if (!VOICE.text) { clearTimeout(VOICE.typer); v.classList.add("speaking"); }
+    VOICE.text = t; voiceText(t);
+  };
+  r.onerror = (e) => { if (e.error === "not-allowed" || e.error === "service-not-allowed") VOICE.denied = true; };
+  r.onend = () => {
+    VOICE.rec = null;
+    if (!VOICE.on) return;
+    if (VOICE.text.trim()) return voiceSend();
+    // молчат: слушаем дальше, но не дольше минуты подряд
+    if (VOICE.denied || Date.now() - VOICE.t0 > 60000) return voiceIdle();
+    setTimeout(voiceListen, 250);
+  };
+  VOICE.rec = r;
+  try { r.start(); } catch (_) { VOICE.rec = null; voiceIdle(); }
+}
+function voiceIdle() {
+  $("#voice").classList.add("idle");
+  $("#vo-lbl").textContent = LL("Нажмите на меня и говорите", "Tap me and speak");
+}
+function openVoice() {
+  if (!SR || VOICE.on || curScreen() !== "screen-home") return;
+  stopSpeaking();
+  Object.assign(VOICE, { on: true, text: "", t0: Date.now(), denied: false });
+  const v = $("#voice"); v.classList.remove("speaking", "idle"); v.hidden = false;
+  track("Голосовой режим");
+  voiceTyping(); voiceListen();
+}
+function closeVoice() {
+  VOICE.on = false; clearTimeout(VOICE.typer);
+  if (VOICE.rec) { try { VOICE.rec.abort(); } catch (_) {} VOICE.rec = null; }
+  $("#voice").hidden = true;
+}
+function voiceChat() { openChat(newChat((me().presets || Object.keys(CFG.presets))[0])); }
+function voiceSend() {
+  const t = VOICE.text.trim();
+  closeVoice(); voiceChat();
+  $("#input").value = t; autoGrow();
+  send();
+}
+$("#vo-close").onclick = closeVoice;
+$("#vo-write").onclick = () => { closeVoice(); voiceChat(); setTimeout(() => $("#input").focus(), 50); };
+$("#vo-mascot").onclick = () => { if (VOICE.rec) return; VOICE.t0 = Date.now(); VOICE.denied = false; voiceListen(); };
 
 /* ===== Голос: чтение вслух ===== */
 function plain(text) {
