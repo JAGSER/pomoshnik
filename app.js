@@ -461,7 +461,33 @@ function renderAcct() {
       } catch (e) { out.textContent = e.message; }
     };
     box.append(b, out);
+    // цена творческих роликов: журналы последних 30 роликов на этом устройстве (прослойка токены не отдаёт — оценка)
+    const cb = el("button", "btn btn-ghost btn-wide"); cb.type = "button"; cb.textContent = "💰 Цена роликов (это устройство)";
+    const co = el("pre", "creative-log"); co.hidden = true;
+    cb.onclick = async () => { co.hidden = !co.hidden; if (co.hidden) return; await loadStylesCached(); co.textContent = videoCostReport(store.get("creativeLogs:" + SESSION.user) || []); };
+    box.append(cb, co);
   }
+}
+// таблица: последние ролики с ценой и средние по стилям
+function videoCostReport(logs) {
+  const rows = (logs || []).filter((l) => l && l.id).slice(-30).reverse();
+  if (!rows.length) return "На этом устройстве творческих роликов ещё не было.";
+  const sn = (id) => (id ? styleDisplayName(id) : "Стандартный");
+  const cost = (l) => { try { return vtCost(l.calls || []); } catch (_) { return { usd: 0, rub: 0, in: 0, out: 0, est: true }; } };
+  const lines = rows.map((l) => {
+    const c = cost(l), d = new Date(l.at);
+    const st = sn(l.style) + (l.mode === "auto" ? " (авто)" : "");
+    const mods = [...new Set((l.calls || []).map((x) => String(x.model || "").replace(/^claude-|-5-5$/g, "")))].join("+");
+    return `${d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "2-digit" })} ${d.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" })} · ${st} · ${l.sec || "?"} с ролик · сборка ${l.buildSec != null ? l.buildSec + " с" : "?"} · ${(l.calls || []).length} выз. ${mods} · ${c.in}/${c.out} ток. · $${c.usd.toFixed(3)} = ${c.rub.toFixed(1)} ₽${c.est ? "*" : ""}`;
+  });
+  const by = {};
+  rows.forEach((l) => { const k = sn(l.style); const c = cost(l); const b = by[k] || (by[k] = { n: 0, usd: 0, sec: 0, build: 0, nb: 0 }); b.n++; b.usd += c.usd; b.sec += l.sec || 0; if (l.buildSec != null) { b.build += l.buildSec; b.nb++; } });
+  const tot = rows.reduce((a, l) => a + cost(l).usd, 0), R = VIDEO_COST.usdRub;
+  const avg = Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([k, b]) => `${k}: ${b.n} шт. · в среднем $${(b.usd / b.n).toFixed(3)} = ${(b.usd / b.n * R).toFixed(1)} ₽ · ролик ${Math.round(b.sec / b.n)} с · сборка ${b.nb ? Math.round(b.build / b.nb) + " с" : "?"}`);
+  return `Последних роликов: ${rows.length}, всего $${tot.toFixed(2)} = ${(tot * R).toFixed(0)} ₽, в среднем ${(tot / rows.length * R).toFixed(1)} ₽ за ролик\n` +
+    `Цены за млн токенов (вход/выход): ${Object.entries(VIDEO_COST.models).map(([m, p]) => m.replace(/^claude-|-5-5$/g, "") + " $" + p[0] + "/$" + p[1]).join(", ")}; курс ${R} ₽\n\n` +
+    lines.join("\n") + "\n\nСредние по стилям:\n" + avg.join("\n") +
+    "\n\n* оценка по длине текста: прослойка пока не передаёт точный расход токенов (без кэша и без скрытых размышлений модели).";
 }
 
 /* ===== Вход (только пароль — прослойка сама находит человека) ===== */
@@ -2763,11 +2789,12 @@ async function videoButton(btn, text, msg, opt = {}) {
     const speech = total / VRATE;
     // в конце — тишина под финальную заставку (или короткая пауза, если заставка выключена)
     const pcm = new Float32Array(total + Math.round(VRATE * (outro ? OUTRO_SEC : 0.6)));
-    const subs = [];
+    const subs = [], words = [], timing = [];
     let off = 0;
     parts.forEach((a, i) => {
       pcm.set(a, off);
-      subTimes(chunks[i], off / VRATE, (off + a.length) / VRATE, subs);
+      // время фраз и слов — по голосу этого куска, пока на него не наложены музыка и звуки
+      timing.push(subTimes(chunks[i], off / VRATE, (off + a.length) / VRATE, subs, a, words));
       off += a.length;
     });
     // 2) сборка видео (если в разговоре есть фото — получится слайдшоу из них)
@@ -2779,7 +2806,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     if (creativeOn() && !creativeLeft && PLAN.usage.needReg) vidNote(btn, LL("ℹ️ Творческие ролики с анимацией откроются, когда вы сохраните аккаунт: ⚙️ → придумайте имя и пароль. Сейчас сделан обычный ролик.", "ℹ️ Creative videos with animation unlock once you save your account: ⚙️ → choose a name and password. This one is a simple video."));
     else if (creativeOn() && !creativeLeft) vidNote(btn, LL("ℹ️ Творческие ролики на этот период закончились, сделан обычный. Больше роликов на тарифе «Семья».", "ℹ️ No creative videos left for now, so this is a simple one. More on the Family plan."));
     if (creativeOn() && creativeLeft) {
-      try { scene = await makeCreativeScene({ emoji, title, subs, speech, duration: pcm.length / VRATE, outro, photos }, label); }
+      try { scene = await makeCreativeScene({ emoji, title, subs, words, timing, speech, duration: pcm.length / VRATE, outro, photos }, label); }
       catch (e) {
         console.warn("Творческий режим:", e);
         if (/аккаунт|account/i.test(e.message || "")) { vidNote(btn, "ℹ️ " + e.message); loadPlan(); }
@@ -2804,6 +2831,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     try { blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`)); }
     finally { if (scene.destroy) scene.destroy(); }
     if (scene.log) scene.log(`видео собрано за ${Math.round((Date.now() - tEnc) / 1000)} с; озвучка заняла ${tVoice} с; всего ${Math.round((Date.now() - tStart) / 1000)} с`);
+    if (scene.meta) scene.meta({ buildSec: Math.round((Date.now() - tStart) / 1000) });
     const name = (title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "Ответ") + (blob.type.includes("webm") ? ".webm" : ".mp4");
     btn._ready = new File([blob], name, { type: blob.type });
     btn._ctx = { title, text, msg, emoji };
@@ -2811,6 +2839,10 @@ async function videoButton(btn, text, msg, opt = {}) {
       let peak = 0; for (let i = 0; i < pcm.length; i += 64) { const x = Math.abs(pcm[i]); if (x > peak) peak = x; }
       const a = (await audioInFile(blob)) + (peak > 0.02 ? "" : "-silent");
       vidNote(btn, /-silent$/.test(a) ? "⚠️ Голос не записался: озвучка пришла пустой (тишина)" : a === "AAC-nocfg" ? "⚠️ Звук AAC без настройки — iPhone может его не проиграть" : a === "AAC" ? `🔊 Звук в файле: AAC ✓${VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""}` : a === "Opus" ? "⚠️ Звук в файле: Opus — iPhone его не проигрывает" : "⚠️ В файле нет звука" + (VIDEO_PATH ? " (" + VIDEO_PATH + ")" : ""));
+    }
+    if (scene.styleNote) {
+      const row = btn.closest(".msg-actions"), n = row && row.nextElementSibling, prev = n && n.classList.contains("vid-note") ? n.textContent : "";
+      vidNote(btn, (prev ? prev + " · " : "") + scene.styleNote);
     }
     track("Видео", { mode: scene.frame ? "творческое" : "обычное", sec: Math.round(pcm.length / VRATE) });
     btn.disabled = false;
@@ -3206,8 +3238,389 @@ function bdayVideo(b) {
     : `Напиши короткое тёплое поздравление с днём рождения для: ${b.name}, от меня (4–6 предложений). Из него я сделаю видеооткрытку.`), 60);
 }
 
-// Субтитры: кусок делится на фразы, время — пропорционально длине фраз
-function subTimes(chunk, t0, t1, out) {
+/* ===== VT: время слов по паузам голоса, чек-лист озвучки, подбор стиля, цена ролика =====
+   Чистые функции без DOM и без глобальных переменных приложения: их можно проверить в node
+   (блок между метками VT-BEGIN и VT-END), а vtNorm/vtNumOf/vtWhen уходят ещё и в песочницу ролика. */
+// VT-BEGIN
+// цены моделей ($ за миллион токенов: вход, выход) и курс — одно место для подсчёта цены ролика
+const VIDEO_COST = { usdRub: 81, models: { "claude-opus-5-5": [4, 20], "claude-sonnet-5-5": [2, 10], "claude-haiku-5-5": [0.1, 0.5] } };
+const VT_RU_NUM = { ноль: 0, один: 1, одна: 1, одно: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5, шесть: 6, семь: 7, восемь: 8, девять: 9, десять: 10,
+  одиннадцать: 11, двенадцать: 12, тринадцать: 13, четырнадцать: 14, пятнадцать: 15, шестнадцать: 16, семнадцать: 17, восемнадцать: 18, девятнадцать: 19,
+  двадцать: 20, тридцать: 30, сорок: 40, пятьдесят: 50, шестьдесят: 60, семьдесят: 70, восемьдесят: 80, девяносто: 90,
+  сто: 100, двести: 200, триста: 300, четыреста: 400, пятьсот: 500, шестьсот: 600, семьсот: 700, восемьсот: 800, девятьсот: 900,
+  двух: 2, трех: 3, четырех: 4, пяти: 5, шести: 6, семи: 7, восьми: 8, девяти: 9, десяти: 10, двенадцати: 12, пятнадцати: 15, двадцати: 20, тридцати: 30, сорока: 40, пятидесяти: 50, ста: 100, сотни: 100, сотен: 100,
+  тысяча: 1e3, тысячи: 1e3, тысяч: 1e3, тысячу: 1e3, миллион: 1e6, миллиона: 1e6, миллионов: 1e6, миллиард: 1e9, миллиарда: 1e9, миллиардов: 1e9 };
+function vtNorm(w) { return String(w == null ? "" : w).toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/g, ""); }
+// число в слове: «12», «№3» → 3, «семь» → 7; иначе null
+function vtNumOf(w) {
+  const s = String(w == null ? "" : w).replace(/[\s\u00a0]/g, "").replace(/^№/, "");
+  if (/^\d+([.,]\d+)?$/.test(s)) return parseFloat(s.replace(",", "."));
+  const n = vtNorm(w);
+  return Object.prototype.hasOwnProperty.call(VT_RU_NUM, n) && VT_RU_NUM[n] < 1e3 ? VT_RU_NUM[n] : null;
+}
+// k.when: секунда, когда звучит n-е (с 1) вхождение слова; регистр, ё и окончания не важны; числа цифрами и словами равны
+function vtWhen(words, q, n, def) {
+  if (!Array.isArray(words) || !words.length || q == null) return def === undefined ? null : def;
+  const qn = vtNorm(q), num = vtNumOf(q);
+  n = Math.max(1, Math.floor(+n || 1));
+  if (!qn) return def === undefined ? null : def;
+  const END = ["иями", "ями", "ами", "ого", "его", "ому", "ему", "ыми", "ими", "ая", "яя", "ое", "ее", "ые", "ие", "ый", "ий", "ой", "ую", "юю", "ых", "их", "ым", "им", "ом", "ем", "ам", "ям", "ах", "ях", "ов", "ев", "ей", "ут", "ют", "ат", "ят", "ит", "ет", "ть", "ти", "а", "я", "о", "е", "ы", "и", "у", "ю", "ь", "s"];
+  let st = qn;
+  for (const e of END) if (st.length - e.length >= 3 && st.endsWith(e)) { st = st.slice(0, -e.length); break; }
+  const pre = (a, b) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; };
+  const hit = [];
+  for (const x of words) {
+    if (!x) continue;
+    const wn = vtNorm(x.w);
+    if (!wn) continue;
+    if (num != null) { if (vtNumOf(x.w) === num) hit.push(x); continue; }
+    if (wn === qn) { hit.push(x); continue; }
+    const p = pre(st, wn);
+    if (p >= Math.max(3, Math.min(st.length, wn.length) - 1) && Math.abs(wn.length - qn.length) <= 3 + Math.max(0, qn.length - st.length)) hit.push(x);
+  }
+  if (!hit.length) return def === undefined ? null : def;
+  return +hit[Math.min(n, hit.length) - 1].t0;
+}
+// русское число словами (для оценки длины: «214» звучит как «двести четырнадцать»)
+function vtSpell(n) {
+  n = Math.floor(Math.abs(+n || 0));
+  if (n === 0) return "ноль";
+  const u = ["", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять", "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать"];
+  const d = ["", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят", "семьдесят", "восемьдесят", "девяносто"];
+  const h = ["", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот", "семьсот", "восемьсот", "девятьсот"];
+  const tri = (x) => [h[Math.floor(x / 100)], x % 100 < 20 ? u[x % 100] : d[Math.floor((x % 100) / 10)] + " " + u[x % 10]].join(" ");
+  const parts = [], big = [["", ""], ["тысяч", "тысяч"], ["миллионов", "миллионов"], ["миллиардов", "миллиардов"]];
+  for (let i = 0; n > 0 && i < big.length; i++, n = Math.floor(n / 1000)) { const x = n % 1000; if (x) parts.unshift(tri(x) + " " + big[i][0]); }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+function vtSyl(w) {
+  const s = String(w || "");
+  let n = 0;
+  s.replace(/\d+([.,]\d+)?/g, (m) => { const [a, b] = m.split(/[.,]/); n += (vtSpell(a).match(/[аеёиоуыэюя]/g) || []).length + (b ? 3 + (vtSpell(b).match(/[аеёиоуыэюя]/g) || []).length : 0); return ""; })
+    .replace(/[аеёиоуыэюяaeiouy]/gi, () => (n++, ""));
+  if (/№/.test(s)) n += 2;
+  if (/[₽%$€]/.test(s)) n += 2;
+  return n;
+}
+// предложения (так же, как раньше делились субтитры) и слова с паузами после них: g=1 запятая/тире/двоеточие, g=2 конец предложения
+function vtSentences(chunk) { return (String(chunk).match(/[^.!?…]+[.!?…]*["»)]*\s*/g) || [String(chunk)]).filter((s) => s.trim()); }
+function vtTokens(sent) {
+  const raw = String(sent).split(/\s+/).filter(Boolean), out = [];
+  for (const r of raw) {
+    const core = r.replace(/^[«"„“(\[]+/, "").replace(/[»"”)\].,!?…:;—–-]+$/, "");
+    if (!/[0-9A-Za-zА-Яа-яЁё₽№%$€]/.test(core)) { if (out.length && /[—–-]/.test(r)) out[out.length - 1].g = Math.max(out[out.length - 1].g, 1); continue; }
+    const tail = r.slice(r.indexOf(core) + core.length);
+    const g = /[.!?…]/.test(tail) ? 2 : /[,;:—–]/.test(tail) ? 1 : 0;
+    out.push({ w: core, syl: vtSyl(core), g });
+  }
+  if (out.length) out[out.length - 1].g = 2;
+  return out;
+}
+const VT_W = { word: 0.35, minor: 1.6, sent: 3.6 };
+function vtWordW(t) { return Math.max(0.7, t.syl + VT_W.word); }
+// огибающая громкости голоса: RMS в окнах по 10 мс
+function vtEnvelope(pcm, rate, win) {
+  const W = Math.max(1, Math.round(rate * (win || 0.01))), m = Math.floor(pcm.length / W), env = new Float32Array(m);
+  for (let k = 0; k < m; k++) { let s = 0; for (let i = k * W, e = i + W; i < e; i++) s += pcm[i] * pcm[i]; env[k] = Math.sqrt(s / W); }
+  return env;
+}
+// паузы: участки тише порога (доля от громкости речи этого куска) не короче minDur секунд
+function vtPauses(env, win, minDur, rel) {
+  const vals = Array.from(env).filter((x) => x > 1e-5).sort((a, b) => a - b);
+  if (vals.length < 10) return { pauses: [], thr: 0, on: 0, off: env.length * win };
+  const ref = vals[Math.floor(vals.length * 0.9)], thr = Math.max(ref * (rel || 0.05), 1e-4);
+  const runs = [];
+  let s = -1;
+  for (let k = 0; k <= env.length; k++) {
+    const q = k < env.length && env[k] < thr;
+    if (q && s < 0) s = k;
+    if (!q && s >= 0) { runs.push([s, k]); s = -1; }
+  }
+  // короткие щелчки (до 30 мс) внутри тишины не разрывают паузу
+  const merged = [];
+  for (const r of runs) { const p = merged[merged.length - 1]; if (p && r[0] - p[1] <= 3) p[1] = r[1]; else merged.push(r.slice()); }
+  let on = 0, off = env.length;
+  if (merged.length && merged[0][0] === 0) on = merged[0][1];
+  if (merged.length && merged[merged.length - 1][1] === env.length) off = merged[merged.length - 1][0];
+  const pauses = merged.filter((r) => r[0] > on && r[1] < off && (r[1] - r[0]) * win >= minDur).map((r) => ({ s: r[0] * win, e: r[1] * win, d: (r[1] - r[0]) * win }));
+  return { pauses, thr, on: on * win, off: off * win };
+}
+// монотонное сопоставление границ (по ожидаемому положению в «весах» слогов) с паузами; -1 — граница без паузы
+function vtMatch(cands, pauses, T0, T1, Wtot, o) {
+  const n = cands.length, m = pauses.length;
+  if (!n) return [];
+  if (!m || !(T1 > T0) || !(Wtot > 0)) return cands.map(() => -1);
+  const r = (T1 - T0) / Wtot, minE = o.minExp || 0.4;
+  const seg = (ta, tb, wa, wb) => { const act = tb - ta, exp = (wb - wa) * r; return act <= 0.05 ? 1e6 : (act - exp) * (act - exp) / Math.max(minE, exp); };
+  const sk = [0]; cands.forEach((c, i) => sk.push(sk[i] + c.skip));
+  const skip = (a, b) => sk[b] - sk[a];
+  const bonus = (j) => o.bonus * Math.min(pauses[j].d, o.cap || 0.8);
+  const dp = [], fr = [];
+  for (let i = 0; i < n; i++) {
+    dp.push(new Float64Array(m).fill(Infinity)); fr.push(new Int32Array(m * 2).fill(-1));
+    for (let j = 0; j < m; j++) {
+      let best = seg(T0, pauses[j].s, 0, cands[i].a) + skip(0, i), bi = -1, bj = -1;
+      for (let i2 = 0; i2 < i; i2++) for (let j2 = 0; j2 < j; j2++) {
+        if (dp[i2][j2] === Infinity) continue;
+        const c = dp[i2][j2] + seg(pauses[j2].e, pauses[j].s, cands[i2].b, cands[i].a) + skip(i2 + 1, i);
+        if (c < best) { best = c; bi = i2; bj = j2; }
+      }
+      dp[i][j] = best - bonus(j); fr[i][2 * j] = bi; fr[i][2 * j + 1] = bj;
+    }
+  }
+  let best = seg(T0, T1, 0, Wtot) + skip(0, n), bi = -1, bj = -1;
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+    if (dp[i][j] === Infinity) continue;
+    const c = dp[i][j] + seg(pauses[j].e, T1, cands[i].b, Wtot) + skip(i + 1, n);
+    if (c < best) { best = c; bi = i; bj = j; }
+  }
+  const res = cands.map(() => -1);
+  while (bi >= 0) { res[bi] = bj; const a = fr[bi][2 * bj], b = fr[bi][2 * bj + 1]; bi = a; bj = b; }
+  return res;
+}
+// времена границ по результату сопоставления: [{end, start}] для каждой границы (несопоставленные — по весам между соседними опорами)
+function vtPlace(cands, match, pauses, T0, T1, Wtot) {
+  const anc = [{ w: 0, t: T0 }];
+  cands.forEach((c, i) => { if (match[i] >= 0) anc.push({ w: c.a, t: pauses[match[i]].s, i, end: true }, { w: c.b, t: pauses[match[i]].e, i }); });
+  anc.push({ w: Wtot, t: T1 });
+  const at = (w) => {
+    for (let k = 1; k < anc.length; k++) if (w <= anc[k].w || k === anc.length - 1) { const A = anc[k - 1], B = anc[k]; return B.w > A.w ? A.t + (B.t - A.t) * (w - A.w) / (B.w - A.w) : A.t; }
+    return T1;
+  };
+  return cands.map((c, i) => match[i] >= 0 ? { end: pauses[match[i]].s, start: pauses[match[i]].e, p: true } : { end: at(c.a), start: at(c.b), p: false });
+}
+// главное: кусок озвучки (его PCM и текст) → фразы-субтитры и слова со временем. t0 — где кусок начинается в ролике
+function vtTime(chunk, pcm, rate, t0, t1) {
+  const win = 0.01, env = vtEnvelope(pcm, rate, win);
+  const long = vtPauses(env, win, 0.15, 0.05), short = vtPauses(env, win, 0.09, 0.05);
+  const S = vtSentences(chunk).map((s) => ({ text: s.trim(), toks: vtTokens(s) })).filter((s) => s.toks.length);
+  if (!S.length) throw new Error("пустой текст");
+  const dur = pcm.length / rate, T0 = Math.min(long.on, dur), T1 = Math.max(T0 + 0.1, long.off);
+  // уровень 1: границы предложений ↔ длинные паузы
+  let W = 0;
+  const sW = S.map((s) => s.toks.reduce((a, t, i) => a + vtWordW(t) + (i < s.toks.length - 1 && t.g ? VT_W.minor : 0), 0));
+  const c1 = [];
+  S.forEach((s, i) => { W += sW[i]; if (i < S.length - 1) { c1.push({ a: W, b: W + VT_W.sent, skip: 0.9 }); W += VT_W.sent; } });
+  const m1 = vtMatch(c1, long.pauses, T0, T1, W, { bonus: 0.9, cap: 0.9, minExp: 0.5 });
+  const got = m1.filter((x) => x >= 0).length;
+  if (c1.length >= 2 && got < c1.length / 2) throw new Error("пауз меньше, чем границ фраз");
+  const pl1 = vtPlace(c1, m1, long.pauses, T0, T1, W);
+  const span = S.map((s, i) => ({ s: i ? pl1[i - 1].start : T0, e: i < S.length - 1 ? pl1[i].end : T1 }));
+  // проверка здравого смысла: длительность каждого предложения близка к ожидаемой (скорость речи от 0,4 до 2,5 от средней)
+  const rate0 = (T1 - T0) / W;
+  for (let i = 0; i < S.length; i++) { const k = (span[i].e - span[i].s) / (sW[i] * rate0); if (!(k > 0.4 && k < 2.5)) throw new Error("паузы не сходятся с текстом"); }
+  // уровень 2: внутри предложения запятые и тире ↔ короткие паузы; слова — по слогам
+  const words = [];
+  S.forEach((s, si) => {
+    const a = span[si].s, b = span[si].e, toks = s.toks;
+    const ps = short.pauses.filter((p) => p.s > a + 0.08 && p.e < b - 0.08);
+    const lay = (gap) => {
+      let w = 0, k = 0;
+      const c2 = [], pos = [];
+      toks.forEach((t, i) => { pos.push(w); w += vtWordW(t); if (i < toks.length - 1 && t.g) { const gw = gap(k++); c2.push({ a: w, b: w + gw, skip: 0.25, i }); w += gw; } });
+      return { w, c2, pos };
+    };
+    const L0 = lay(() => VT_W.minor);
+    const m2 = vtMatch(L0.c2, ps, a, b, L0.w, { bonus: 0.6, cap: 0.5, minExp: 0.3 });
+    // запятая без найденной паузы почти не занимает времени
+    const { w, c2, pos } = lay((k) => (m2[k] >= 0 ? VT_W.minor : 0.25));
+    const pl2 = vtPlace(c2, m2, ps, a, b, w);
+    // опоры: начало, каждая граница (конец слова до неё, начало слова после), конец
+    const anc = [{ w: 0, t: a }];
+    c2.forEach((c, k) => anc.push({ w: c.a, t: pl2[k].end }, { w: c.b, t: pl2[k].start }));
+    anc.push({ w, t: b });
+    const at = (x) => { for (let k = 1; k < anc.length; k++) if (x <= anc[k].w + 1e-9 || k === anc.length - 1) { const A = anc[k - 1], B = anc[k]; return B.w > A.w ? A.t + (B.t - A.t) * (x - A.w) / (B.w - A.w) : A.t; } return b; };
+    toks.forEach((t, i) => words.push({ w: t.w, t0: +(t0 + at(pos[i])).toFixed(2), t1: +(t0 + at(pos[i] + vtWordW(t))).toFixed(2), s: si }));
+  });
+  // блоки субтитров — те же, что раньше (предложения до 170 знаков); граница — чуть раньше начала следующей фразы
+  const blocks = [];
+  let cur = null;
+  S.forEach((s, i) => { if (cur && (cur.text + " " + s.text).length > 170) { blocks.push(cur); cur = null; } if (!cur) cur = { text: s.text, i0: i, i1: i }; else { cur.text += " " + s.text; cur.i1 = i; } });
+  if (cur) blocks.push(cur);
+  const subs = blocks.map((bk, k) => {
+    const st = k === 0 ? 0 : Math.max(span[bk.i0 - 1].e, span[bk.i0].s - 0.12);
+    return { st, text: bk.text };
+  });
+  return {
+    subs: subs.map((x, k) => ({ t0: t0 + x.st, t1: k < subs.length - 1 ? t0 + subs[k + 1].st : t1, text: x.text[0].toUpperCase() + x.text.slice(1) })),
+    words: words.map(({ w, t0: a, t1: b }) => ({ w, t0: a, t1: b })),
+    info: { pauses: long.pauses.length, matched: got, bounds: c1.length },
+  };
+}
+// прежняя пропорция (откат): фразы по длине текста, слова внутри — по слогам
+function vtPropWords(text, t0, t1) {
+  const toks = vtSentences(text).flatMap((s) => vtTokens(s));
+  const W = toks.reduce((a, t) => a + vtWordW(t) + (t.g ? VT_W.minor : 0), 0) || 1;
+  let w = 0;
+  return toks.map((t) => { const a = t0 + (t1 - t0) * w / W; w += vtWordW(t); const b = t0 + (t1 - t0) * w / W; w += t.g ? VT_W.minor : 0; return { w: t.w, t0: +a.toFixed(2), t1: +b.toFixed(2) }; });
+}
+
+// ---- чек-лист озвучки: числа, цены, названные цвета с предметом ----
+const VT_COLORS = [["красн", "красный"], ["оранжев", "оранжевый"], ["желт", "жёлтый"], ["зелен", "зелёный"], ["голуб", "голубой"], ["син", "синий"], ["фиолетов", "фиолетовый"], ["розов", "розовый"],
+  ["бел", "белый"], ["черн", "чёрный"], ["сер", "серый"], ["коричнев", "коричневый"], ["рыж", "рыжий"], ["золот", "золотой"], ["серебрист", "серебристый"], ["серебрян", "серебряный"], ["бирюзов", "бирюзовый"],
+  ["ал", "алый"], ["багров", "багровый"], ["малинов", "малиновый"], ["лилов", "лиловый"], ["сиренев", "сиреневый"], ["бежев", "бежевый"], ["пурпурн", "пурпурный"], ["изумрудн", "изумрудный"], ["лазурн", "лазурный"]];
+const VT_ADJ = /^(ый|ий|ой|ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ым|им|ыми|ими|ых|их|ую|юю|ом|ем|ей)$/;
+const VT_EN_COLORS = ["red", "orange", "yellow", "green", "blue", "purple", "violet", "pink", "white", "black", "grey", "gray", "brown", "golden", "gold", "silver", "turquoise"];
+function vtColorOf(w, en) {
+  const n = vtNorm(w);
+  if (en) return VT_EN_COLORS.includes(n) ? n : null;
+  for (const [st, name] of VT_COLORS) if (n.startsWith(st) && VT_ADJ.test(n.slice(st.length))) return name;
+  return null;
+}
+// words: [{w, t0, g?}] по порядку; если g нет — берём из текста. Возвращает [{kind, say, val?, col?, t}]
+function vtChecklist(text, words, en) {
+  const toks = vtSentences(text).flatMap((s) => vtTokens(s));
+  const W = toks.map((t, i) => ({ ...t, t0: words && words[i] && vtNorm(words[i].w) === vtNorm(t.w) ? words[i].t0 : null }));
+  // если слова не совпали по порядку (другой текст) — ищем время по слову
+  W.forEach((t, i) => { if (t.t0 == null && words && words.length) { const k = W.slice(0, i + 1).filter((x) => vtNorm(x.w) === vtNorm(t.w)).length; t.t0 = vtWhen(words, t.w, k, null); } });
+  const out = [], CUR = /^(₽|руб|рубль|рубля|рублей|р)$/i, isNumW = (n) => Object.prototype.hasOwnProperty.call(VT_RU_NUM, n);
+  const noun = (j) => (j < W.length && /[A-Za-zА-Яа-яЁё]/.test(W[j].w) && !isNumW(vtNorm(W[j].w)) && !CUR.test(W[j].w) && !vtColorOf(W[j].w, en) ? W[j].w : null);
+  for (let i = 0; i < W.length; i++) {
+    const t = W[i], n = vtNorm(t.w);
+    // числа цифрами
+    const dig = String(t.w).replace(/[\s\u00a0]/g, "").match(/^(№|\$|€)?(\d+(?:[.,]\d+)?)(₽|%|\$|€)?$/);
+    if (dig) {
+      let val = parseFloat(dig[2].replace(",", ".")), say = t.w, j = i;
+      if (/[$€]/.test((dig[1] || "") + (dig[3] || ""))) { out.push({ kind: "price", say: t.w, val, t: t.t0 }); continue; }
+      if (dig[3] === "%") { out.push({ kind: "num", say: t.w, val, t: t.t0 }); continue; }
+      if (dig[1]) { const pv = i > 0 && W[i - 1].g === 0 && /[A-Za-zА-Яа-яЁё]/.test(W[i - 1].w) ? W[i - 1].w + " " : ""; out.push({ kind: "num", say: pv + t.w, val, t: t.t0 }); continue; }
+      // «12 000» — соседние группы цифр
+      while (!dig[3] && W[j].g === 0 && j + 1 < W.length && /^\d{3}$/.test(W[j + 1].w)) { j++; val = val * 1000 + +W[j].w; say += " " + W[j].w; }
+      if (W[j].g === 0 && j + 1 < W.length && !en && isNumW(vtNorm(W[j + 1].w)) && VT_RU_NUM[vtNorm(W[j + 1].w)] >= 1e3) { j++; val *= VT_RU_NUM[vtNorm(W[j].w)]; say += " " + W[j].w; }
+      if (dig[3] || (W[j].g === 0 && j + 1 < W.length && (CUR.test(W[j + 1].w) || (en && /^(rub|roubles?|rubles?)$/i.test(W[j + 1].w))))) { out.push({ kind: "price", say: say.replace(/₽$/, "") + " ₽", val, t: t.t0 }); i = dig[3] ? j : j + 1; continue; }
+      const nn = W[j].g === 0 ? noun(j + 1) : null;
+      out.push({ kind: "num", say: say + (nn ? " " + nn : ""), val, t: t.t0 }); i = j; continue;
+    }
+    // числа словами (русский): «двенадцать тысяч», «сто восемьдесят рублей», «семь лодок»
+    if (!en && isNumW(n) && VT_RU_NUM[n] < 1e3) {
+      let val = 0, part = 0, j = i, say = [];
+      for (; j < W.length; j++) {
+        const x = vtNorm(W[j].w);
+        if (!isNumW(x)) break;
+        const v = VT_RU_NUM[x];
+        if (v >= 1e3) { val += (part || 1) * v; part = 0; } else part += v;
+        say.push(W[j].w);
+        if (W[j].g) { j++; break; }
+      }
+      val += part; j--;
+      const k = j;
+      if (val === 1 && say.length === 1) continue; // «один день», «один за другим» — не количество
+      if (W[k].g === 0 && k + 1 < W.length && CUR.test(W[k + 1].w)) { out.push({ kind: "price", say: say.join(" ") + " ₽", val, t: t.t0 }); i = k + 1; continue; }
+      const nn = W[k].g === 0 ? noun(k + 1) : null;
+      out.push({ kind: "num", say: say.join(" ") + (nn ? " " + nn : ""), val, t: t.t0 }); i = k; continue;
+    }
+    // цвет с предметом
+    const col = vtColorOf(t.w, en);
+    if (col) {
+      let j = i + 1, say = t.w;
+      if (t.g === 0 && j < W.length && vtColorOf(W[j].w, en) == null && /^(и|и\s|-)$/.test(W[j].w) === false) {
+        // «синий автобус», «оранжевых куртках»; через одно прилагательное: «розовое вечернее небо»
+        if (W[j].g === 0 && j + 1 < W.length && /(ый|ий|ой|ая|яя|ое|ее|ые|ие|ых|их)$/.test(vtNorm(W[j].w)) && !en) { say += " " + W[j].w; j++; }
+        const nn = noun(j);
+        if (nn) say += " " + nn;
+      }
+      out.push({ kind: "color", say, col, t: t.t0 });
+    }
+  }
+  return out;
+}
+// строка для задания режиссёру (компактно: не больше maxChars)
+function vtChecklistLine(items, maxChars, en) {
+  if (!items || !items.length) return "";
+  const head = en ? "Named in the voice-over (show it on screen at that moment, in that color and quantity; seconds, see k.when):" : "В озвучке названо (покажи на экране в этот момент, в этом цвете и количестве; секунды, см. k.when):";
+  const parts = [];
+  let len = head.length;
+  for (const x of items) { const s = x.say + (x.t != null ? " " + (+x.t).toFixed(1) : ""); if (len + s.length + 2 > maxChars) break; parts.push(s); len += s.length + 2; }
+  return parts.length ? head + " " + parts.join("; ") + "." : "";
+}
+// локальная сверка: числа из чек-листа есть в коде ролика (литерал числа или слово в строке)
+function vtCheckCode(items, code) {
+  const src = String(code || ""), miss = [];
+  const has = (re) => re.test(src);
+  for (const x of items || []) {
+    if (x.kind !== "num" && x.kind !== "price") continue;
+    const v = x.val, cands = new Set();
+    if (!(v >= 0) || !isFinite(v)) continue;
+    cands.add(String(v));
+    const lead = String(x.say).match(/\d+(?:[.,]\d+)?/); if (lead) cands.add(lead[0]);
+    if (v >= 1000 && Number.isInteger(v)) { cands.add(v.toLocaleString("ru-RU").replace(/\s/g, " ")); cands.add(String(v).replace(/\B(?=(\d{3})+(?!\d))/g, " ")); cands.add(String(v).replace(/\B(?=(\d{3})+(?!\d))/g, "_")); }
+    let ok = false;
+    for (const c of cands) { const e = c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "[\\s\\u00a0_]?"); if (has(new RegExp("(^|[^\\d.])" + e + "(?![\\d])"))) { ok = true; break; } }
+    if (!ok) { const w = vtNorm(String(x.say).split(/\s+/)[0]); if (w && !/^\d/.test(w) && new RegExp(w, "i").test(src.toLowerCase().replace(/ё/g, "е"))) ok = true; }
+    if (!ok) miss.push(x);
+  }
+  return miss;
+}
+// что должно быть в кадре в момент t: названное в текущей фразе до t (+0,5 с)
+function vtShotDue(items, subs, t) {
+  const s = (subs || []).find((x) => t >= x.t0 && t < x.t1) || null;
+  if (!s) return [];
+  return (items || []).filter((x) => x.t != null && x.t >= s.t0 - 0.05 && x.t <= t + 0.5);
+}
+
+// ---- подбор стиля по теме ----
+function vtPickStyleLocal(text, styles) {
+  const words = String(text || "").toLowerCase().replace(/ё/g, "е").split(/[^a-zа-я0-9]+/).filter((w) => w.length >= 3);
+  const score = (tags) => {
+    let s = 0;
+    for (const tg of tags || []) {
+      const t = String(tg).toLowerCase().replace(/ё/g, "е").trim();
+      if (!t) continue;
+      let c = 0;
+      for (const w of words) if (t.length >= 4 ? w.startsWith(t) : w === t) c++;
+      s += Math.min(2, c);
+    }
+    return s;
+  };
+  const sc = (styles || []).filter((x) => x && x.id && Array.isArray(x.tags)).map((x) => ({ id: x.id, s: score(x.tags) })).sort((a, b) => b.s - a.s);
+  if (!sc.length || sc[0].s < 3 || (sc[1] && sc[0].s - sc[1].s < 1)) return { id: "", sure: false, top: sc.slice(0, 3) };
+  return { id: sc[0].id, sure: true, top: sc.slice(0, 3) };
+}
+// ответ модели → id стиля, "" (стандартный) или null (не понял)
+function vtParseStylePick(txt, ids) {
+  const s = String(txt || "").trim().toLowerCase();
+  if (!s || s.length > 400) return null;
+  const m = s.match(/[a-z_][a-z0-9_-]*/g) || [];
+  for (const w of m) { if (ids.includes(w)) return w; if (w === "standard" || w === "none") return ""; }
+  if (/стандарт/.test(s)) return "";
+  return null;
+}
+
+// ---- цена ролика ----
+// грубая оценка токенов по тексту (кириллица плотнее латиницы), картинка 540×960 ≈ 700 токенов
+function vtTok(x) {
+  if (x == null) return 0;
+  if (typeof x === "string") { const cyr = (x.match(/[\u0400-\u04FF]/g) || []).length; return Math.ceil(cyr / 2.6 + (x.length - cyr) / 3.6); }
+  if (Array.isArray(x)) return x.reduce((a, b) => a + vtTok(b), 0);
+  if (x.type === "image") return 700;
+  if (x.type === "text") return vtTok(x.text);
+  if (x.content != null) return vtTok(x.content) + 4;
+  return 0;
+}
+function vtCost(calls, cfg) {
+  cfg = cfg || VIDEO_COST;
+  let usd = 0, tin = 0, tout = 0, est = false;
+  for (const c of calls || []) {
+    const p = cfg.models[c.model] || cfg.models["claude-opus-5-5"];
+    usd += (c.in || 0) / 1e6 * p[0] + (c.out || 0) / 1e6 * p[1];
+    tin += c.in || 0; tout += c.out || 0; if (c.est) est = true;
+  }
+  return { usd: +usd.toFixed(4), rub: +(usd * cfg.usdRub).toFixed(2), in: tin, out: tout, est };
+}
+// VT-END
+
+// Субтитры: кусок делится на фразы. Если есть голос куска (pcm), границы фраз ставятся по паузам в голосе,
+// а слова получают своё время (words); если паузы не сходятся с текстом — прежняя пропорция по длине фраз
+function subTimes(chunk, t0, t1, out, pcm, words) {
+  if (pcm && pcm.length) {
+    try {
+      const r = vtTime(chunk, pcm, VRATE, t0, t1);
+      out.push(...r.subs);
+      if (words) words.push(...r.words);
+      return "паузы";
+    } catch (e) { console.warn("Время слов: откат к пропорции —", e.message || e); }
+  }
+  const n0 = out.length;
   const sent = chunk.match(/[^.!?…]+[.!?…]*["»)]*\s*/g) || [chunk];
   const blocks = [];
   let cur = "";
@@ -3216,6 +3629,8 @@ function subTimes(chunk, t0, t1, out) {
   const len = blocks.reduce((n, b) => n + b.length, 0) || 1;
   let t = t0;
   blocks.forEach((b) => { const d = (t1 - t0) * b.length / len; out.push({ t0: t, t1: t + d, text: b[0].toUpperCase() + b.slice(1) }); t += d; });
+  if (words) try { out.slice(n0).forEach((s) => words.push(...vtPropWords(s.text, s.t0, s.t1))); } catch (_) {}
+  return "пропорция";
 }
 
 function wrapLines(g, text, maxW) {
@@ -3885,8 +4300,11 @@ function loadStylesCached() {
     return STYLE_LIST_CACHE;
   }).catch(() => STYLE_LIST_CACHE);
 }
+// пустой id — «Стандартный» (без стиля), "auto" — «Авто» (стиль подбирается под тему ролика)
+const STYLE_MODES = [{ id: "", name: "Стандартный" }, { id: "auto", name: "Авто" }];
 function styleDisplayName(id) {
-  if (!id) return T("Авто");
+  if (!id) return T("Стандартный");
+  if (id === "auto") return T("Авто");
   const s = STYLE_LIST_CACHE.find((x) => String(x.id || "") === id);
   return s ? T(String(s.name || id)) : id;
 }
@@ -4055,7 +4473,7 @@ function buildChatMenu() {
     });
     menu.appendChild(sk);
   }
-  const list = [{ id: "", name: "Авто" }, ...(Array.isArray(STYLE_LIST_CACHE) ? STYLE_LIST_CACHE : [])];
+  const list = [...STYLE_MODES, ...(Array.isArray(STYLE_LIST_CACHE) ? STYLE_LIST_CACHE : [])];
   list.forEach((s) => {
     const id = String(s.id || "");
     const b = document.createElement("button");
@@ -4063,7 +4481,7 @@ function buildChatMenu() {
     b.className = "chat-menu-item";
     b.setAttribute("role", "menuitemradio");
     b.dataset.style = id;
-    b.dataset.label = id ? T(String(s.name || id)) : T("Авто");
+    b.dataset.label = T(String(s.name || id));
     b.textContent = b.dataset.label;
     b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -4091,7 +4509,7 @@ function openStyleDemo() {
   const draw = (list) => {
     stopStyleVideos();
     box.innerHTML = "";
-    [{ id: "", name: "Авто" }, ...(Array.isArray(list) ? list : [])].forEach((s) => {
+    [...STYLE_MODES, ...(Array.isArray(list) ? list : [])].forEach((s) => {
       const id = String(s.id || "");
       const card = document.createElement("div");
       card.className = "style-card";
@@ -4099,14 +4517,19 @@ function openStyleDemo() {
       const head = document.createElement("div");
       head.className = "style-card-head";
       const title = document.createElement("b");
-      title.textContent = id ? T(String(s.name || id)) : T("Авто");
+      title.textContent = T(String(s.name || id));
       const mark = document.createElement("span");
       mark.className = "style-mark";
       mark.textContent = T("Выбрано");
       mark.hidden = true;
       head.append(title, mark);
       card.appendChild(head);
-      if (id) {
+      if (id === "auto") {
+        const p = document.createElement("p");
+        p.className = "sheet-hint";
+        p.textContent = T("Приложение само подберёт стиль под тему ролика");
+        card.appendChild(p);
+      } else if (id) {
         const v = document.createElement("video");
         v.src = "styles/" + encodeURIComponent(id) + "/demo.mp4";
         v.controls = true;
@@ -4322,7 +4745,7 @@ function WORKER_MAIN() {
   function makeSound(fn, R, len, dur, subs) {
     const out = new Float32Array(len), lib = SFX_LIB(R); let count = 0;
     const s = {
-      names: lib.names, duration: dur, subs,
+      names: lib.names, duration: dur, subs, when: (q, n, d) => vtWhen(K.words || [], q, n, d),
       rand: (seed) => { let x = (seed | 0) || 1; return () => ((x = (x * 16807) % 2147483647) / 2147483647); },
       // звук name в момент t; pitch — во сколько раз выше/ниже (0.5…2)
       play(t, name, gain = 0.15, o = {}) {
@@ -4388,6 +4811,9 @@ function WORKER_MAIN() {
       } else if (m.cmd === "load") {
         brief = m.brief; outro = m.outro; speech = m.brief.speech; lastErr = null; level = 0;
         K.title = brief.title; K.emojiMain = brief.emojiMain; K.duration = speech; K.subs = brief.subs;
+        // время слов озвучки: k.when('слово', n) → секунда n-го вхождения слова (или d / null)
+        K.words = Array.isArray(brief.words) ? brief.words : [];
+        K.when = (q, n, d) => vtWhen(K.words, q, n, d);
         const fns = new Function(m.code + "\n;return { draw: typeof draw === 'function' ? draw : null, sound: typeof sound === 'function' ? sound : null };")();
         userDraw = fns.draw; userSound = fns.sound;
         if (!userDraw) throw new Error("в коде нет функции draw(t, k)");
@@ -4455,7 +4881,7 @@ function FRAME_MAIN(workerSrc) {
 class Sandbox {
   constructor() {
     this.id = 0; this.wait = new Map();
-    const workerSrc = `${mascotDraw}\n${outroDraw}\n${SFX_LIB}\n(${WORKER_MAIN})();`;
+    const workerSrc = `${mascotDraw}\n${outroDraw}\n${SFX_LIB}\nconst VT_RU_NUM = ${JSON.stringify(VT_RU_NUM)};\n${vtNorm}\n${vtNumOf}\n${vtWhen}\n(${WORKER_MAIN})();`;
     const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'"><body><script>(${FRAME_MAIN})(${JSON.stringify(workerSrc)});<\/script></body>`;
     this.frameEl = document.createElement("iframe");
     this.frameEl.setAttribute("sandbox", "allow-scripts");
@@ -4497,6 +4923,7 @@ const DIRECTOR_PROMPT = `Ты — сильный моушн-дизайнер и 
 ХОЛСТ: k.g — CanvasRenderingContext2D, k.W=1080, k.H=1920. Фон рисуешь сам (первым делом залей весь холст). Внизу (y > 1690) приложение рисует свою подпись — там ничего важного. Безопасная зона: x 60…1020, y 110…1690 (k.SAFE).
 
 СИНХРОН С ГОЛОСОМ: k.subs — фразы озвучки [{t0,t1,text}]. k.sub(t) → {i, text, t0, t1, p} — текущая фраза (p — доля 0…1). Меняй сцены вместе с фразами. k.amp — громкость голоса 0…1 (для пульса, «дыхания»).
+k.when('слово', n) → секунда, когда в озвучке звучит n-е (с 1) вхождение слова; регистр и окончание не важны (k.when('лодк') найдёт «лодок»), числа цифрами и словами равны (k.when('7') = k.when('семь')); слова нет — null (или третий аргумент: k.when('кран', 1, 57)). Названный предмет, число, цвет появляется в момент k.when(...), а не в начале фразы. В звуке так же: s.when(...). k.words — все слова [{w,t0,t1}].
 
 КИСТИ:
 - k.text(str, x, y, opts) — ВЕСЬ текст рисуй только им: он сам уменьшает шрифт и переносит строки, чтобы влезть в экран. opts: size (64), weight (700), color, align ('center'|'left'|'right'), maxWidth, maxLines (3), lineHeight (1.2), alpha, font, stroke (цвет обводки), strokeWidth. y — центр блока. Возвращает {w,h,size}.
@@ -4541,7 +4968,14 @@ async function loadStyleList() {
     return Array.isArray(a) ? a.filter((s) => s && s.id).sort((x, y) => (+x.n || 0) - (+y.n || 0)) : [];
   } catch (_) { return []; }
 }
-async function directorCall(messages, onChars, model, system) {
+// модель, которую прослойка реально даст по тарифу (если просили недоступную — первую из тарифа); для подсчёта цены
+function servedModel(m) {
+  const plans = { trial: ["claude-sonnet-5-5", "claude-opus-5-5"], free: ["claude-haiku-5-5"], family: ["claude-sonnet-5-5"], familyplus: ["claude-sonnet-5-5", "claude-opus-5-5"] };
+  const list = SESSION && Array.isArray(SESSION.models) && SESSION.models.length ? SESSION.models : plans[PLAN && PLAN.plan];
+  return list && !list.includes(m) ? list[0] : m;
+}
+// ctl.cancel = true прерывает ожидание ответа (задание на сервере доработает само). usage — токены, если прослойка их отдала
+async function directorCall(messages, onChars, model, system, ctl) {
   const r = await fetch(CFG.proxy + "/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user: SESSION.user, password: SESSION.password, model: model || creativeModel(), web: false, purpose: "video", videoId: CUR_VID, system: system || (STYLE_RUN && STYLE_RUN.sys) || DIRECTOR_PROMPT, messages, bg: true }),
@@ -4555,6 +4989,7 @@ async function directorCall(messages, onChars, model, system) {
     const T0 = Date.now();
     for (;;) {
       await new Promise((res) => setTimeout(res, 2000));
+      if (ctl && ctl.cancel) throw new Error("ожидание ответа прервано");
       let d;
       try {
         const q = await fetch(CFG.proxy + "/job", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: SESSION.user, password: SESSION.password, job, from: out.length }) });
@@ -4567,14 +5002,15 @@ async function directorCall(messages, onChars, model, system) {
         continue;
       }
       if (d.text) { out += d.text; if (onChars) onChars(out.length); }
-      if (d.done) { if (d.err && !out) throw new Error(d.err); return { text: out, stop: d.stop, err: d.err }; }
+      if (d.done) { if (d.err && !out) throw new Error(d.err); const u = d.usage; return { text: out, stop: d.stop, err: d.err, usage: u && (u.input_tokens != null || u.output_tokens != null) ? { in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), out: u.output_tokens || 0 } : null }; }
       if (d.age > 180000) throw new Error("Сервер перестал писать ролик");
       if (Date.now() - T0 > 40 * 60000) throw new Error("Ролик пишется слишком долго");
     }
   }
   const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = "", out = "", stop = null;
+  let buf = "", out = "", stop = null, uin = null, uout = null;
   for (;;) {
+    if (ctl && ctl.cancel) { try { reader.cancel(); } catch (_) {} throw new Error("ожидание ответа прервано"); }
     const { value, done } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
@@ -4584,11 +5020,12 @@ async function directorCall(messages, onChars, model, system) {
       if (!line.startsWith("data:")) continue;
       let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
       if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { out += ev.delta.text; if (onChars) onChars(out.length); }
-      else if (ev.type === "message_delta" && ev.delta?.stop_reason) stop = ev.delta.stop_reason;
+      else if (ev.type === "message_start" && ev.message?.usage) { const u = ev.message.usage; uin = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); }
+      else if (ev.type === "message_delta" && ev.delta?.stop_reason) { stop = ev.delta.stop_reason; if (ev.usage && ev.usage.output_tokens != null) uout = ev.usage.output_tokens; }
       else if (ev.type === "error") throw new Error("Claude прервал ответ");
     }
   }
-  return { text: out, stop };
+  return { text: out, stop, usage: uin != null && uout != null && (uin || uout) ? { in: uin, out: uout } : null };
 }
 function extractCode(s) {
   const m = s.match(/```(?:js|javascript)?\s*\n([\s\S]*?)```/i) || s.match(/```(?:js|javascript)?\s*\n([\s\S]*)$/i);
@@ -4617,24 +5054,91 @@ async function makeCreativeScene(v, label) {
   const brief = {
     title: v.title, emojiMain: v.emoji, speech: v.speech, app: appName(), o1: T("Спросите о своём"), o2: T(`в «${appName()}»`),
     subs: v.subs.map((s) => ({ t0: +s.t0.toFixed(2), t1: +s.t1.toFixed(2), text: s.text })),
+    words: (v.words || []).map((w) => ({ w: w.w, t0: w.t0, t1: w.t1 })),
   };
   const photos = v.photos || [];
+  // чек-лист из озвучки: числа, цены, названные цвета с предметом и когда они звучат (бесплатно, на устройстве)
+  let check = [], checkLine = "";
+  try {
+    check = vtChecklist(brief.subs.map((s) => s.text).join(" "), brief.words, LANG === "en");
+    checkLine = vtChecklistLine(check, Math.max(300, Math.round(7 * v.speech)), false);
+  } catch (e) { check = []; checkLine = ""; console.warn("Чек-лист озвучки:", e); }
   const ask = [
     `Ролик 9:16 по ответу помощника. Тема: ${v.emoji} ${v.title}. Длительность речи: ${v.speech.toFixed(1)} с (k.duration).`,
     photos.length ? `Фото от пользователя: ${photos.length} шт. (k.photo(0…${photos.length - 1})) — уменьшенные копии приложены выше по порядку. Сделай ролик из этих фото.` : ``,
     `Фразы озвучки с таймингом (секунды):`,
     ...brief.subs.map((s) => `[${s.t0.toFixed(2)}–${s.t1.toFixed(2)}] ${s.text}`),
+    checkLine,
     brief.subs.length > 14 ? `Фраз много — объединяй соседние в 8–14 сцен и держи код компактным.` : ``,
     LANG === "en" ? `ВАЖНО: зритель говорит по-английски — весь текст на экране (заголовки, подписи, надписи) пиши только на английском.` : ``,
     `Придумай идею и запрограммируй ролик.`,
   ].join("\n");
-  const log = { at: new Date().toISOString(), model: creativeModel(), steps: [] };
+  const mode = creativeStyle();
+  const log = { id: CUR_VID, at: new Date().toISOString(), model: creativeModel(), steps: [], mode: mode || "standard", style: "", sec: Math.round(v.speech), timing: (v.timing || []).join(", "), calls: [] };
   const T0 = Date.now(), sec = () => Math.round((Date.now() - T0) / 1000);
-  // бюджет на работу Claude: после него правки и просмотр кадров пропускаются, берём лучшее, что есть
-  const BUDGET = 150;
-  const note = (x) => { log.steps.push(`[${sec()} с] ${x}`); try { store.set("creativeLog:" + SESSION.user, log); } catch (_) {} };
+  // бюджет на работу Claude: после него правки пропускаются, берём лучшее, что есть (просмотр кадров идёт всегда)
+  const BUDGET = 150, SHOTS_CAP = 300;
+  // журнал ролика: последний — в creativeLog, последние 30 — в creativeLogs (на этом устройстве)
+  const saveLog = () => {
+    try { log.cost = vtCost(log.calls); } catch (_) {}
+    try {
+      store.set("creativeLog:" + SESSION.user, log);
+      const all = (store.get("creativeLogs:" + SESSION.user) || []).filter((x) => x && x.id);
+      const i = all.findIndex((x) => x.id === log.id);
+      if (i >= 0) all[i] = log; else all.push(log);
+      store.set("creativeLogs:" + SESSION.user, all.slice(-30));
+    } catch (_) {}
+  };
+  const note = (x) => { log.steps.push(`[${sec()} с] ${x}`); saveLog(); };
+  // все платные обращения идут через call: считаем их (прослойка разрешает не больше 6 на ролик) и токены
+  let calls = 0;
+  const MAXC = 6;
+  const call = async (what, m, model, system, onChars, capSec) => {
+    calls++;
+    const ctl = { cancel: false }, timer = capSec ? setTimeout(() => (ctl.cancel = true), capSec * 1000) : null;
+    try {
+      const r = await directorCall(m, onChars, model, system, ctl);
+      try {
+        const u = r.usage, sysText = system || (STYLE_RUN && STYLE_RUN.sys) || DIRECTOR_PROMPT;
+        log.calls.push({ what, model: servedModel(model || creativeModel()), in: u ? u.in : vtTok(sysText) + vtTok(m), out: u ? u.out : vtTok(r.text), est: !u });
+        saveLog();
+      } catch (_) {}
+      return r;
+    } finally { if (timer) clearTimeout(timer); }
+  };
+  // режим «Авто»: стиль подбирается под тему одним дешёвым вызовом, иначе по ключевым словам, иначе «Стандартный»
+  let styleId = mode, styleNote = "";
+  if (mode === "auto") {
+    styleId = "";
+    let list = [];
+    try {
+      list = (await loadStyleList()).filter((s) => s.desc);
+      const ids = list.map((s) => String(s.id));
+      const theme = `${v.emoji} ${v.title}\n` + brief.subs.map((s) => s.text).join(" ").slice(0, 1500);
+      let pick = null, how = "";
+      if (list.length) {
+        try {
+          const sys = "Ты подбираешь визуальный стиль для короткого ролика по тексту его озвучки. Ответь только id одного стиля из списка, без пояснений. Если ни один стиль явно не подходит теме, ответь standard.";
+          const m = [{ role: "user", content: "Стили (id — как выглядит и для каких тем):\n" + list.map((s) => `${s.id} — ${s.desc}`).join("\n") + "\n\nТекст ролика:\n" + theme + "\n\nid стиля:" }];
+          label("✨ Подбираю стиль…");
+          const r = await call("Подбор стиля", m, "claude-haiku-5-5", sys, null, 60);
+          pick = vtParseStylePick(r.text, ids);
+          how = pick == null ? "" : "модель";
+          if (pick == null) note(`подбор стиля: ответ не понят «${String(r.text || "").slice(0, 60)}»`);
+        } catch (e) { note("подбор стиля моделью не удался: " + ((e && e.message) || e)); if (/аккаунт|account|закончил|лимит|limit/i.test((e && e.message) || "")) throw e; }
+        if (pick == null) { const r = vtPickStyleLocal(theme, list); pick = r.id; how = r.sure ? "по ключевым словам" : "нет уверенности"; }
+      } else how = "список стилей не загрузился";
+      styleId = pick || "";
+      note(`стиль «Авто»: ${styleId || "стандартный"} (${how})`);
+    } catch (e) {
+      if (/аккаунт|account|закончил|лимит|limit/i.test((e && e.message) || "")) throw e;
+      styleId = ""; note("подбор стиля не удался: " + ((e && e.message) || e));
+    }
+    const s0 = list.find((s) => String(s.id) === styleId);
+    const nm = s0 ? T(String(s0.name || styleId)) : T("Стандартный");
+    styleNote = LL(`🎨 Стиль подобран сам: «${nm}»`, `🎨 Style picked automatically: ${nm}`);
+  }
   // стиль ролика: грузим один раз на ролик, system уходит во все запросы directorCall (и в правки)
-  const styleId = creativeStyle();
   let style = null;
   STYLE_RUN = null;
   if (styleId) {
@@ -4659,7 +5163,11 @@ async function makeCreativeScene(v, label) {
       note(`стиль: ${styleId} (библиотека ${konst})`);
       if (!style.example) note("пример не загрузился" + (exErr ? ": " + ((exErr && exErr.message) || exErr) : ""));
     } catch (e) { style = null; STYLE_RUN = null; note("стиль не загрузился: " + ((e && e.message) || e)); }
-  } else note("стиль: авто");
+  } else note("стиль: стандартный");
+  if (log.timing) note(`время фраз и слов: ${log.timing}`);
+  log.style = style ? style.id : "";
+  if (styleNote && styleId && !style) styleNote = LL("🎨 Стиль подобран сам, но не загрузился: сделан «Стандартный»", "🎨 The picked style didn't load, so this is Standard");
+  if (check.length) note(`чек-лист озвучки: ${check.length} (${check.slice(0, 6).map((x) => x.say).join("; ")}${check.length > 6 ? "; …" : ""})`);
   // библиотека стиля в начале кода: draw и её функции в одной области видимости, до sb.load и тестов
   const extractCode = (...a) => {
     const c = _extractCode(...a);
@@ -4688,7 +5196,7 @@ async function makeCreativeScene(v, label) {
   let cut = false;
   // правки пишет быстрый Sonnet: он только чинит готовый код
   const write = async (what, fast) => {
-    const { text: txt, stop, err: jerr } = await directorCall(msgs, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`), fast ? "claude-sonnet-5-5" : null);
+    const { text: txt, stop, err: jerr } = await call(what, msgs, fast ? "claude-sonnet-5-5" : null, null, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
     cut = stop === "max_tokens";
     const code = extractCode(txt);
     note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}${jerr ? ", сервер: " + jerr : ""}`);
@@ -4701,7 +5209,7 @@ async function makeCreativeScene(v, label) {
     label("✨ Идея…");
     let code = await write("Код");
     // ответ без кода (переспросил, начал рассуждать, оборвался до кода) — просим ещё раз, строго кодом
-    for (let a = 0; !code && a < 2; a++) {
+    for (let a = 0; !code && a < 2 && calls < MAXC - 1; a++) {
       const last = String(msgs[msgs.length - 1].content || "");
       note(`ответ без кода: «${last.slice(0, 200).replace(/\s+/g, " ")}»`);
       if (!last.trim()) msgs.pop();
@@ -4721,7 +5229,11 @@ async function makeCreativeScene(v, label) {
         if (ch.error) return { problem: `Во время ролика ошибка: ${ch.error}` };
         const slow = r.ms > 150; // на телефоне кадр рисуется медленнее — это не провал, а повод упростить
         const issues = ch.issues.concat(slow ? [`кадр рисуется долго (${Math.round(r.ms)} мс) — упрости тяжёлые места`] : []);
-        return { n: issues.length + (slow ? 4 : 0), problem: issues.length ? "Автопроверка нашла проблемы:\n- " + issues.join("\n- ") : null };
+        // сверка с чек-листом озвучки: числа из текста должны быть в коде ролика (сама по себе правку не вызывает)
+        let miss = [];
+        try { miss = vtCheckCode(check, style && c.startsWith(style.lib) ? c.slice(style.lib.length) : c); } catch (_) { miss = []; }
+        const missTxt = miss.map((x) => `в коде нет числа из озвучки «${x.say}»${x.t != null ? ` (звучит на ${(+x.t).toFixed(1)} с, k.when)` : ""} — покажи его на экране в этот момент`);
+        return { n: issues.length + (slow ? 4 : 0) + miss.length, miss, problem: issues.length ? "Автопроверка нашла проблемы:\n- " + issues.concat(missTxt).join("\n- ") : null };
       } catch (e) {
         if (/завис/.test(e.message)) { sb.destroy(); sb = new Sandbox(); await sendPhotos(sb); }
         return { problem: `Код ролика завис или работает слишком медленно (${e.message}) — упрости.` };
@@ -4731,10 +5243,11 @@ async function makeCreativeScene(v, label) {
     for (let round = 0; round < 3; round++) {
       label("✨ Проверка…");
       const r = await test(code);
-      note(`проверка ${round + 1}: ${r.problem ? r.problem.slice(0, 140) : "чисто"}`);
-      if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n };
+      note(`проверка ${round + 1}: ${r.problem ? r.problem.slice(0, 140) : "чисто"}${r.miss && r.miss.length ? `; нет в коде: ${r.miss.map((x) => x.say).join(", ")}` : ""}`);
+      if (r.n != null && (!best || r.n < best.n)) best = { code, n: r.n, miss: r.miss || [] };
       if (!r.problem || round === 2) break;
       if (best && sec() > BUDGET) { note("время вышло — беру лучший вариант"); break; }
+      if (calls >= MAXC - 1) { note("правки: последнее обращение оставлено для просмотра кадров"); break; }
       msgs.push({ role: "user", content: r.problem + "\nИсправь и пришли код целиком." });
       code = (await write("Правка", true)) || code;
     }
@@ -4752,13 +5265,23 @@ async function makeCreativeScene(v, label) {
       ts.push(end);
       return [...new Set(ts)].sort((a, b) => a - b);
     })() : shotTimes;
-    const sh = sec() > BUDGET ? { ok: false } : await sb.call({ cmd: "shots", times: shotT }, style ? 45000 : 30000);
-    if (!sh.ok && sec() > BUDGET) note("просмотр кадров пропущен — время вышло");
+    // кадры смотрим всегда; ожидание ответа арт-директора ограничено SHOTS_CAP секунд, потом берём проверенный вариант
+    let sh = { ok: false };
+    try { sh = await sb.call({ cmd: "shots", times: shotT }, style ? 45000 : 30000); } catch (e) { note("кадры не снялись: " + ((e && e.message) || e)); }
+    if (sh.ok) note(`просмотр кадров: ${sh.shots.length} шт., ожидание не дольше ${SHOTS_CAP} с`);
     if (sh.ok) {
       // в переписку идёт код без библиотеки стиля (она большая и неизменная)
       const shown = style && good.startsWith(style.lib) ? good.slice(style.lib.length).replace(/^\n+/, "") : good;
       if (msgs[msgs.length - 1].role !== "assistant") msgs.push({ role: "assistant", content: "```js\n" + shown + "\n```" });
       else if (good !== code) msgs.push({ role: "user", content: "Берём этот вариант кода:\n```js\n" + shown + "\n```" }, { role: "assistant", content: "Хорошо." });
+      // что из чек-листа должно быть видно на этих кадрах, и каких чисел нет в коде
+      let dueText = "";
+      try {
+        const due = shotT.map((t) => { const d = vtShotDue(check, brief.subs, t); return d.length ? `${t} с: ${d.map((x) => x.say).join(", ")}` : ""; }).filter(Boolean);
+        const miss = best.miss || [];
+        dueText = (due.length ? `В озвучке к этим кадрам названо (должно быть видно в этом цвете и количестве): ${due.join("; ")}.` : "") +
+          (miss.length ? `${due.length ? " " : ""}В коде не нашлось: ${miss.map((x) => x.say).join(", ")} — покажи на экране, когда это звучит.` : "");
+      } catch (_) { dueText = ""; }
       // для стилей: один круг проверки и точечные замены строк, без перезаписи всего ролика (перезапись ломала то, что было хорошо)
       const askStyle = style ? `Кадры ролика в моменты ${shotT.join(", ")} с. Проверь как арт-директор по списку:
 1) всё в стиле «${style.konst}», нет элементов другого стиля;
@@ -4767,7 +5290,7 @@ async function makeCreativeScene(v, label) {
 4) объекты и персонажи не обрезаны краем кадра (сдвигай сцену, масштаб не уменьшай), персонажи стоят на земле;
 5) подписи читаются и не лежат на объектах (иначе тёмная плашка или пустое место);
 6) значок-трекер стиля (hud, journey) и номер страницы на месте, маячки и выноски не закрывают людей; текст контрастен фону (не тот же цвет, что фон);
-7) предметы и места, о которых говорит озвучка в этот момент, нарисованы (а не заменены словом или пустой карточкой), кадр не пустой и не только из текста; новые предметы нарисованы в цветах и линии стиля.
+7) предметы и места, о которых говорит озвучка в этот момент, нарисованы (а не заменены словом или пустой карточкой), кадр не пустой и не только из текста; новые предметы нарисованы в цветах и линии стиля.${dueText ? "\n8) " + dueText : ""}
 Если всё хорошо — ответь одним словом OK.
 Если есть дефекты — НЕ переписывай код целиком. Пришли только точечные замены, не больше 6, каждая строго в таком виде:
 <<<
@@ -4777,9 +5300,11 @@ async function makeCreativeScene(v, label) {
 >>>` : null;
       msgs.push({ role: "user", content: [
         ...sh.shots.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })),
-        { type: "text", text: askStyle || `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст. Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
+        { type: "text", text: askStyle || `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст.${dueText ? " " + dueText : ""} Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
-      const { text: txt } = await directorCall(msgs, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), style ? "claude-opus-5-5" : "claude-sonnet-5-5");
+      let txt = "OK";
+      try { txt = (await call("Кадры", msgs, style ? "claude-opus-5-5" : "claude-sonnet-5-5", null, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), SHOTS_CAP)).text; }
+      catch (e) { txt = "OK"; note(`арт-директор не ответил (${(e && e.message) || e}; предел ${SHOTS_CAP} с) — беру проверенный вариант`); }
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
       let better = null;
       if (!/^\s*OK\b/i.test(txt)) {
@@ -4796,6 +5321,7 @@ async function makeCreativeScene(v, label) {
       }
     }
     note("код готов, дальше сборка видео");
+    try { const c = vtCost(log.calls); note(`расход: ${log.calls.length} обращ., ${c.in} вх. / ${c.out} вых. токенов ≈ $${c.usd.toFixed(3)} (${c.rub.toFixed(1)} ₽)${c.est ? ", оценка по длине текста" : ""}`); } catch (_) {}
     // звуки, которые Claude написал под свою анимацию
     let sfx = null;
     try {
@@ -4804,7 +5330,9 @@ async function makeCreativeScene(v, label) {
     } catch (e) { note("звуки не получились: " + (e.message || e)); }
     return {
       sfx,
+      styleNote,
       log: (x) => note(x),
+      meta: (o) => { Object.assign(log, o || {}); saveLog(); },
       duration: v.duration,
       frame: async (t, amp) => (await sb.call({ cmd: "frame", t, amp }, 8000)).bmp,
       destroy: () => sb.destroy(),
