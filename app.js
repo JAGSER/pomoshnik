@@ -1964,8 +1964,9 @@ function ttsDialogModel() { return (CFG.voice || {}).dialogModel || "gemini-3.8-
 function ttsVideoModel() { return (CFG.voice || {}).videoModel || "gemini-3.8-flash-tts"; }
 async function ttsBlob(chunk, voice, model, purpose) {
   voice = voice || userVoice(); model = model || ttsDialogModel();
-  // чтение вслух в диалоге озвучивается другим голосом, чем ролики, поэтому хранится под своим ключом
-  const key = purpose === "video" ? ttsKey(chunk, voice, model) : "d2|" + ttsKey(chunk, voice, model);
+  // бесплатный тариф читает диалоги другим голосом (Cloud TTS), поэтому его звук хранится под своим ключом;
+  // остальным ключ как до v140, а записи v140-v141 с префиксом d2| больше не используются
+  const key = purpose !== "video" && PLAN && PLAN.plan === "free" ? "c|" + ttsKey(chunk, voice, model) : ttsKey(chunk, voice, model);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
   if (TTS_INFLIGHT.has(key)) return TTS_INFLIGHT.get(key);
@@ -2026,6 +2027,8 @@ async function ttsLoadOnce(chunk, voice, model, purpose) {
   try { b = await r.blob(); } catch (e) { const er = new Error("Озвучка пришла не полностью"); er.network = true; throw er; } finally { clearTimeout(timer); }
   const used = r.headers.get("X-TTS-Model") || "";
   if (used.startsWith("backup:")) b._backup = used;
+  // бесплатный тариф: запасной звук (не Cloud TTS) под ключом Cloud не запоминаем
+  if (purpose !== "video" && PLAN && PLAN.plan === "free" && r.headers.get("X-TTS-Path") === "gemini") b._backup = "gemini";
   return b;
 }
 

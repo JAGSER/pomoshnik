@@ -125,11 +125,13 @@ async function pwHash(pw, salt) {
 // тарифы: что можно и сколько
 const PLANS = {
   trial: { title: "Пробный", models: ["claude-sonnet-5-5", "claude-opus-5-5"], chatDay: 50, web: true, ttsDialog: true, creativeTotal: 3, videoSec: 180, maxTokens: 8000 },
-  free: { title: "Бесплатный", models: ["claude-haiku-5-5"], chatDay: 10, web: false, ttsDialog: false, ttsDayChars: 4000, creativeMonth: 1, videoSec: 40, maxTokens: 2500 },
+  free: { title: "Бесплатный", models: ["claude-haiku-5-5"], chatDay: 10, web: false, ttsDialog: true, ttsDayChars: 4000, creativeMonth: 1, videoSec: 40, maxTokens: 2500 },
   family: { title: "Семья", models: ["claude-sonnet-5-5"], chatDay: 300, web: true, ttsDialog: true, creativeMonth: 30, videoSec: 180, maxTokens: 8000 },
   familyplus: { title: "Семья+", models: ["claude-sonnet-5-5", "claude-opus-5-5"], chatDay: 500, web: true, ttsDialog: true, creativeMonth: 100, videoSec: 180, maxTokens: 16000, rename: true },
 };
 const TRIAL_DAYS = 7;
+// бесплатный тариф после пробного периода (planOf уже перевёл просроченный пробный в free): дешёвая модель OpenRouter и озвучка диалогов через Cloud TTS
+const freeAfterTrial = (plan) => plan === "free";
 // счётчики в KV хранятся как Deno.KvU64 — достаём число в любом виде
 const u64 = (v) => (v == null ? 0 : Number(typeof v === "object" && "value" in v ? v.value : v));
 async function kvNum(kv, key) { return u64((await kv.get(key)).value); }
@@ -1338,7 +1340,7 @@ export async function handler(req, info) {
         ? "Come up with one fitting emoji and a short title of 2–5 words in English for this chat. Reply with exactly one line: emoji, space, title. No quotes, no period."
         : "Придумай для разговора одно подходящее по смыслу эмодзи и короткое название из 2–5 слов на русском. Ответь строго одной строкой: эмодзи, пробел, название. Без кавычек и точки.",
       messages: [{ role: "user", content: text }],
-    }, plan === "free" ? OR_CHEAP() : null);
+    }, freeAfterTrial(plan) ? OR_CHEAP() : null);
     if (!r.ok) return json({ error: "Не удалось придумать название" }, 502, h);
     const d = await r.json();
     const line = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().split("\n")[0];
@@ -1356,7 +1358,7 @@ export async function handler(req, info) {
         ? "Write a short warm message (1–2 sentences, up to 200 characters) that a person sends to family or friends together with a short video about the text below. First person, natural, like a real message in a messenger, one fitting emoji. No hashtags, no quotes, do not mention AI or apps."
         : "Напиши короткое тёплое сообщение (1–2 предложения, до 200 символов), которое человек отправляет родным или друзьям вместе с коротким видео по тексту ниже. От первого лица, живо, как в мессенджере, одно подходящее эмодзи. Без хэштегов и кавычек, не упоминай ИИ и приложения.",
       messages: [{ role: "user", content: (body.title ? "Тема: " + String(body.title).slice(0, 80) + "\n\n" : "") + text }],
-    }, plan === "free" ? OR_CHEAP() : null);
+    }, freeAfterTrial(plan) ? OR_CHEAP() : null);
     if (!r.ok) return json({ error: "Не удалось придумать подпись" }, 502, h);
     const d = await r.json();
     return json({ caption: (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().replace(/^["«]|["»]$/g, "").slice(0, 300) }, 200, h);
@@ -1393,7 +1395,14 @@ export async function handler(req, info) {
     const text = String(body.text || "").slice(0, 5000);
     if (!text.trim()) return json({ error: "Пустой текст" }, 400, h);
     let ttsModel = body.model;
-    if (P) {
+    // бесплатные после пробного: диалоги сначала через Cloud TTS (бесплатный лимит Google, в дневной лимит знаков не идёт),
+    // при ошибке как раньше через Gemini; остальные и ролики только через Gemini, как до v140
+    let res = null, path = "gemini", fb = "";
+    if (body.purpose !== "video" && freeAfterTrial(plan)) {
+      res = await cloudTTS(text, user.acct ? user.acct.lang : body.lang, body.picked ? body.voice : null).catch((e) => ({ error: String(e), reason: "EXCEPTION" }));
+      if (res.error) { fb = res.reason || "ERROR"; res = null; } else path = "cloud";
+    }
+    if (!res && P) {
       if (!P.ttsDialog && body.purpose !== "video") return json({ error: "Чтение вслух живым голосом есть на тарифе «Семья»", code: "tts_plan" }, 402, h);
       if (P.ttsDayChars) {
         const kv = await kvOpen(), k = ["tts", user.id, DAY()];
@@ -1401,12 +1410,6 @@ export async function handler(req, info) {
         await kvInc(kv, k, text.length, 3);
         ttsModel = "gemini-3.8-flash-lite-tts";
       }
-    }
-    // диалоги: сначала Cloud TTS, при любой ошибке как раньше через Gemini; ролики только через Gemini
-    let res = null, path = "gemini", fb = "";
-    if (body.purpose !== "video") {
-      res = await cloudTTS(text, user.acct ? user.acct.lang : body.lang, body.picked ? body.voice : null).catch((e) => ({ error: String(e), reason: "EXCEPTION" }));
-      if (res.error) { fb = res.reason || "ERROR"; res = null; } else path = "cloud";
     }
     if (!res) res = await geminiTTS(text, body.voice, ttsModel);
     const th = { "X-TTS-Path": path, ...(fb ? { "X-TTS-Fallback": fb } : {}) };
@@ -1504,7 +1507,7 @@ export async function handler(req, info) {
   }
   const think = !!body.think && !isLive && (!P || plan !== "free");
   // бесплатный тариф после пробного периода: ответы через дешёвую модель OpenRouter (живой режим как был, через Gemini)
-  const orModels = plan === "free" && !isLive ? OR_CHEAP() : null;
+  const orModels = freeAfterTrial(plan) && !isLive ? OR_CHEAP() : null;
   const payload = {
     model,
     // творческое видео: длинный код ролика — даём больший запас длины ответа
