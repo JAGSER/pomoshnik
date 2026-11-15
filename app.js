@@ -1964,7 +1964,8 @@ function ttsDialogModel() { return (CFG.voice || {}).dialogModel || "gemini-3.8-
 function ttsVideoModel() { return (CFG.voice || {}).videoModel || "gemini-3.8-flash-tts"; }
 async function ttsBlob(chunk, voice, model, purpose) {
   voice = voice || userVoice(); model = model || ttsDialogModel();
-  const key = ttsKey(chunk, voice, model);
+  // чтение вслух в диалоге озвучивается другим голосом, чем ролики, поэтому хранится под своим ключом
+  const key = purpose === "video" ? ttsKey(chunk, voice, model) : "d2|" + ttsKey(chunk, voice, model);
   let blob = TTS_MEM.get(key) || await ADB.get(key);
   if (blob) { TTS_MEM.set(key, blob); return blob; }
   if (TTS_INFLIGHT.has(key)) return TTS_INFLIGHT.get(key);
@@ -2010,7 +2011,7 @@ async function ttsLoadOnce(chunk, voice, model, purpose) {
     r = await fetch(CFG.proxy + "/tts", {
     signal: ctl.signal,
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), model: model || v.model, purpose: purpose || "dialog" }),
+    body: JSON.stringify({ user: SESSION.user, password: SESSION.password, text: chunk, voice: voice || userVoice(), picked: !!(store.get("voice:" + SESSION.user) || me().voice), model: model || v.model, purpose: purpose || "dialog" }),
     });
   } catch (e) { clearTimeout(timer); const er = new Error(ctl.signal.aborted ? "Голос Gemini не ответил вовремя" : "Нет связи с сервером озвучки"); er.network = true; throw er; }
   if (r.status === 501) GEMINI_OFF = true;

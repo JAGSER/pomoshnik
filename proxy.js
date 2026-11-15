@@ -352,6 +352,49 @@ async function geminiTTS(text, voiceIn, modelIn) {
   return { bytes, model: usedModel, backup: usedModel !== first };
 }
 
+// Чтение вслух в диалогах: Google Cloud Text-to-Speech (Chirp 3 HD, 1 млн знаков в месяц бесплатно).
+// Голос меняется переменной TTS_DIALOG_VOICE (без кода языка), ключ GOOGLE_TTS_API_KEY, иначе ключ Gemini.
+// Ролики сюда не идут. Любая ошибка: вызывающий молча уходит на Gemini TTS.
+const TTS_DIALOG_VOICE = () => env("TTS_DIALOG_VOICE", "Chirp3-HD-Kore");
+async function cloudTTS(text, lang, voiceIn) {
+  const key = (env("GOOGLE_TTS_API_KEY") || env("GEMINI_KEY")).trim();
+  if (!key) return { error: "no key" };
+  const code = lang === "en" ? "en-US" : "ru-RU";
+  const name = `${code}-${/^[A-Za-z]{3,20}$/.test(voiceIn || "") ? "Chirp3-HD-" + voiceIn : TTS_DIALOG_VOICE()}`;
+  // лимит запроса 5000 байт: длинный текст режем по предложениям
+  const enc = new TextEncoder(), parts = [];
+  let cur = "";
+  for (const s of text.match(/[^.!?…\n]+[.!?…]*["»)]*\s*|\n+/g) || [text]) {
+    if (cur && enc.encode(cur + s).length > 4500) { parts.push(cur); cur = ""; }
+    cur += s;
+    while (enc.encode(cur).length > 4500) { parts.push(cur.slice(0, 1500)); cur = cur.slice(1500); }
+  }
+  if (cur.trim()) parts.push(cur);
+  const pcm = [];
+  for (const p of parts) {
+    const r = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
+      method: "POST", headers: { "x-goog-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({ input: { text: p }, voice: { languageCode: code, name }, audioConfig: { audioEncoding: "LINEAR16", sampleRateHertz: 24000 } }),
+    });
+    if (!r.ok) { const t = (await r.text()).slice(0, 300); console.log("Cloud TTS error", r.status, t); return { error: t, status: r.status }; }
+    const d = await r.json();
+    if (!d.audioContent) return { error: "empty" };
+    let b = Uint8Array.from(atob(d.audioContent), (c) => c.charCodeAt(0));
+    // у LINEAR16 в ответе заголовок WAV: берём только звук после блока data
+    if (b[0] === 0x52 && b[1] === 0x49) {
+      for (let i = 12; i + 8 <= b.length;) {
+        const id = String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]), n = b[i + 4] | (b[i + 5] << 8) | (b[i + 6] << 16) | (b[i + 7] << 24);
+        if (id === "data") { b = b.slice(i + 8, Math.min(b.length, i + 8 + n)); break; }
+        i += 8 + n + (n & 1);
+      }
+    }
+    pcm.push(b);
+  }
+  const all = new Uint8Array(pcm.reduce((a, x) => a + x.length, 0));
+  let o = 0; for (const x of pcm) { all.set(x, o); o += x.length; }
+  return { bytes: pcmToWav(all, 24000), model: "chirp3-hd" };
+}
+
 // Хранилище образцов голосов (Deno KV). Значение в KV — до 64 КБ, поэтому режем на части
 const SAMPLE_TEXT = "Здравствуйте! Так звучит мой голос. Я буду читать вам ответы.";
 const SAMPLE_TEXT_EN = "Hello! This is how my voice sounds. I will read the answers to you.";
@@ -1347,7 +1390,13 @@ export async function handler(req, info) {
         ttsModel = "gemini-3.8-flash-lite-tts";
       }
     }
-    const res = await geminiTTS(text, body.voice, ttsModel);
+    // диалоги: сначала Cloud TTS, при любой ошибке как раньше через Gemini; ролики только через Gemini
+    let res = null;
+    if (body.purpose !== "video") {
+      res = await cloudTTS(text, user.acct ? user.acct.lang : body.lang, body.picked ? body.voice : null).catch((e) => ({ error: String(e) }));
+      if (res.error) res = null;
+    }
+    if (!res) res = await geminiTTS(text, body.voice, ttsModel);
     if (res.error) return json(res, res.status, h);
     return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": (res.backup ? "backup:" : "") + (res.model || "") } });
   }
