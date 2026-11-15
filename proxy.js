@@ -28,7 +28,7 @@ function cors(origin) {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-User, X-Pass, X-Meta",
-    "Access-Control-Expose-Headers": "X-TTS-Model",
+    "Access-Control-Expose-Headers": "X-TTS-Model, X-TTS-Path, X-TTS-Fallback",
     "Vary": "Origin",
   };
 }
@@ -357,8 +357,9 @@ async function geminiTTS(text, voiceIn, modelIn) {
 // Ролики сюда не идут. Любая ошибка: вызывающий молча уходит на Gemini TTS.
 const TTS_DIALOG_VOICE = () => env("TTS_DIALOG_VOICE", "Chirp3-HD-Kore");
 async function cloudTTS(text, lang, voiceIn) {
-  const key = (env("GOOGLE_TTS_API_KEY") || env("GEMINI_KEY")).trim();
-  if (!key) return { error: "no key" };
+  const keyVar = env("GOOGLE_TTS_API_KEY").trim() ? "GOOGLE_TTS_API_KEY" : "GEMINI_KEY";
+  const key = env(keyVar).trim();
+  if (!key) return { error: "no key", reason: "NO_KEY", keyVar };
   const code = lang === "en" ? "en-US" : "ru-RU";
   const name = `${code}-${/^[A-Za-z]{3,20}$/.test(voiceIn || "") ? "Chirp3-HD-" + voiceIn : TTS_DIALOG_VOICE()}`;
   // лимит запроса 5000 байт: длинный текст режем по предложениям
@@ -376,9 +377,14 @@ async function cloudTTS(text, lang, voiceIn) {
       method: "POST", headers: { "x-goog-api-key": key, "content-type": "application/json" },
       body: JSON.stringify({ input: { text: p }, voice: { languageCode: code, name }, audioConfig: { audioEncoding: "LINEAR16", sampleRateHertz: 24000 } }),
     });
-    if (!r.ok) { const t = (await r.text()).slice(0, 300); console.log("Cloud TTS error", r.status, t); return { error: t, status: r.status }; }
+    if (!r.ok) {
+      const raw = await r.text(); let e = {}; try { e = JSON.parse(raw).error || {}; } catch (_) {}
+      const reason = ((e.details || []).find((d) => d && d.reason) || {}).reason || e.status || ("HTTP_" + r.status);
+      console.log("Cloud TTS error", r.status, reason);
+      return { error: String(e.message || raw).slice(0, 300), status: r.status, reason, keyVar, voice: name };
+    }
     const d = await r.json();
-    if (!d.audioContent) return { error: "empty" };
+    if (!d.audioContent) return { error: "empty", reason: "EMPTY_AUDIO", keyVar, voice: name };
     let b = Uint8Array.from(atob(d.audioContent), (c) => c.charCodeAt(0));
     // у LINEAR16 в ответе заголовок WAV: берём только звук после блока data
     if (b[0] === 0x52 && b[1] === 0x49) {
@@ -392,7 +398,7 @@ async function cloudTTS(text, lang, voiceIn) {
   }
   const all = new Uint8Array(pcm.reduce((a, x) => a + x.length, 0));
   let o = 0; for (const x of pcm) { all.set(x, o); o += x.length; }
-  return { bytes: pcmToWav(all, 24000), model: "chirp3-hd" };
+  return { bytes: pcmToWav(all, 24000), model: "chirp3-hd", keyVar, voice: name };
 }
 
 // Хранилище образцов голосов (Deno KV). Значение в KV — до 64 КБ, поэтому режем на части
@@ -781,6 +787,12 @@ export async function handler(req, info) {
     return json({ ok: true, service: "pomoshnik-proxy" }, 200, h);
   }
   // готовый образец голоса отдаём без пароля — генерировать новые может только вошедший пользователь
+  // проверка озвучки диалогов: открыть в браузере, ответ показывает, работает ли Cloud TTS и почему нет
+  if (req.method === "GET" && url.pathname === "/tts-check") {
+    const r = await cloudTTS("Проверка", url.searchParams.get("lang") === "en" ? "en" : "ru", null).catch((e) => ({ error: String(e), reason: "EXCEPTION" }));
+    return json(r.error ? { ok: false, googleStatus: r.status || 0, reason: r.reason || "ERROR", message: String(r.error).slice(0, 300), keyVar: r.keyVar || "", voice: r.voice || "" }
+      : { ok: true, googleStatus: 200, keyVar: r.keyVar, voice: r.voice, audioBytes: r.bytes.length }, 200, { ...cors(req.headers.get("Origin") || ""), "Cache-Control": "no-store" });
+  }
   if (req.method === "GET" && url.pathname === "/sample") {
     const voice = url.searchParams.get("voice") || "";
     const en = url.searchParams.get("lang") === "en";
@@ -1391,14 +1403,15 @@ export async function handler(req, info) {
       }
     }
     // диалоги: сначала Cloud TTS, при любой ошибке как раньше через Gemini; ролики только через Gemini
-    let res = null;
+    let res = null, path = "gemini", fb = "";
     if (body.purpose !== "video") {
-      res = await cloudTTS(text, user.acct ? user.acct.lang : body.lang, body.picked ? body.voice : null).catch((e) => ({ error: String(e) }));
-      if (res.error) res = null;
+      res = await cloudTTS(text, user.acct ? user.acct.lang : body.lang, body.picked ? body.voice : null).catch((e) => ({ error: String(e), reason: "EXCEPTION" }));
+      if (res.error) { fb = res.reason || "ERROR"; res = null; } else path = "cloud";
     }
     if (!res) res = await geminiTTS(text, body.voice, ttsModel);
-    if (res.error) return json(res, res.status, h);
-    return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": (res.backup ? "backup:" : "") + (res.model || "") } });
+    const th = { "X-TTS-Path": path, ...(fb ? { "X-TTS-Fallback": fb } : {}) };
+    if (res.error) return json(res, res.status, { ...h, ...th });
+    return new Response(res.bytes, { status: 200, headers: { ...h, "Content-Type": "audio/wav", "Cache-Control": "no-store", ...th, "X-TTS-Model": (res.backup ? "backup:" : "") + (res.model || "") } });
   }
 
   // Образец голоса: генерируется один раз и хранится на сервере для всех
