@@ -165,7 +165,133 @@ async function usageOf(user, plan) {
 }
 const ADMINS = () => env("ADMIN_USERS", "yuri").split(",").map((x) => x.trim().toLowerCase());
 
-async function callAnthropic(key, payload) {
+// ===== OpenRouter: дешёвая модель для бесплатного тарифа и запасной путь, когда у Anthropic кончились кредиты =====
+// Ключ: переменная окружения OPENROUTER_API_KEY. Без ключа всё работает как раньше, только через Claude.
+// Модели меняются здесь или переменными OR_CHEAP_MODELS / OR_SMART_MODELS (через запятую, первая основная).
+const OR_API = "https://openrouter.ai/api/v1/chat/completions";
+const OR_CHEAP = () => env("OR_CHEAP_MODELS", "deepseek/deepseek-v4.1-flash,qwen/qwen3.8-flash").split(",").map((s) => s.trim()).filter(Boolean);
+const OR_SMART = () => env("OR_SMART_MODELS", "qwen/qwen3.8-max-0902,moonshotai/kimi-k3.1-pro").split(",").map((s) => s.trim()).filter(Boolean);
+const orKey = () => env("OPENROUTER_API_KEY").trim();
+
+// формат Anthropic → формат OpenAI (system, история, картинки, PDF); инструменты, раздумья и кэш не переносятся
+function orMessages(payload) {
+  const txt = (c) => typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b && b.type === "text" ? b.text : "")).join("") : "";
+  const out = [];
+  const sys = typeof payload.system === "string" ? payload.system : txt(payload.system);
+  if (sys && sys.trim()) out.push({ role: "system", content: sys });
+  for (const m of payload.messages || []) {
+    if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
+    if (typeof m.content === "string") { if (m.content.trim()) out.push({ role: m.role, content: m.content }); continue; }
+    if (!Array.isArray(m.content)) continue;
+    if (m.role === "assistant") { const t = txt(m.content); if (t.trim()) out.push({ role: "assistant", content: t }); continue; }
+    const parts = [];
+    for (const b of m.content) {
+      if (!b || typeof b !== "object") continue;
+      const s = b.source || {};
+      if (b.type === "text" && String(b.text || "").trim()) parts.push({ type: "text", text: b.text });
+      else if (b.type === "image" && s.type === "base64") parts.push({ type: "image_url", image_url: { url: `data:${s.media_type || "image/jpeg"};base64,${s.data}` } });
+      else if (b.type === "image" && s.type === "url") parts.push({ type: "image_url", image_url: { url: s.url } });
+      else if (b.type === "document" && s.type === "base64") parts.push({ type: "file", file: { filename: b.title || "file.pdf", file_data: `data:${s.media_type || "application/pdf"};base64,${s.data}` } });
+      else if (b.type === "document" && s.type === "text") parts.push({ type: "text", text: s.data || "" });
+      else if (b.type === "tool_result") { const t = txt(b.content); if (t.trim()) parts.push({ type: "text", text: t }); }
+    }
+    if (parts.length) out.push({ role: "user", content: parts });
+  }
+  return out;
+}
+
+// поток OpenAI → поток событий Anthropic, чтобы приложение и jobRun читали ответ без изменений
+function orToAnthropicStream(res, model) {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const ev = (o) => enc.encode(`event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`);
+  const STOP = { stop: "end_turn", length: "max_tokens", content_filter: "refusal" };
+  return new ReadableStream({
+    async start(ctrl) {
+      ctrl.enqueue(ev({ type: "message_start", message: { id: "msg_or", type: "message", role: "assistant", model, content: [], stop_reason: null, usage: { input_tokens: 0, output_tokens: 0 } } }));
+      ctrl.enqueue(ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }));
+      const rd = res.body.getReader();
+      let buf = "", stop = null, usage = null, failed = false;
+      try {
+        for (;;) {
+          const { value, done } = await rd.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+            if (!line.startsWith("data:")) continue;
+            const d = line.slice(5).trim();
+            if (d === "[DONE]") continue;
+            let j; try { j = JSON.parse(d); } catch (_) { continue; }
+            if (j.error) { failed = true; ctrl.enqueue(ev({ type: "error", error: { type: "api_error", message: String(j.error.message || "error") } })); continue; }
+            if (j.usage) usage = j.usage;
+            const c = j.choices && j.choices[0];
+            if (!c) continue;
+            const t = c.delta && c.delta.content;
+            if (t) ctrl.enqueue(ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } }));
+            if (c.finish_reason) stop = STOP[c.finish_reason] || "end_turn";
+          }
+        }
+      } catch (e) { failed = true; ctrl.enqueue(ev({ type: "error", error: { type: "api_error", message: String(e) } })); }
+      ctrl.enqueue(ev({ type: "content_block_stop", index: 0 }));
+      if (!failed || stop) ctrl.enqueue(ev({ type: "message_delta", delta: { stop_reason: stop || "end_turn", stop_sequence: null }, usage: { input_tokens: usage?.prompt_tokens || 0, output_tokens: usage?.completion_tokens || 0 } }));
+      ctrl.enqueue(ev({ type: "message_stop" }));
+      ctrl.close();
+    },
+  });
+}
+
+async function callOpenRouter(payload, models) {
+  const body = {
+    model: models[0], models,
+    messages: orMessages(payload),
+    max_tokens: Math.max(256, Math.min(Number(payload.max_tokens) || 4000, 32000)),
+    stream: !!payload.stream,
+  };
+  if (body.stream) body.stream_options = { include_usage: true };
+  // раздумья модели в ответ не попадают; на коротких запросах (названия, подписи) думать почти не даём
+  body.reasoning = { exclude: true, ...(Number(payload.max_tokens) < 1000 ? { effort: "low" } : {}) };
+  if (Number(payload.max_tokens) < 1000) body.max_tokens = 1500;
+  const res = await fetch(OR_API, {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + orKey(), "content-type": "application/json", "HTTP-Referer": "https://pomoshnik.ai", "X-Title": "Pomoshnik" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return new Response(await res.text(), { status: res.status, headers: { "content-type": "application/json" } });
+  if (body.stream) return new Response(orToAnthropicStream(res, payload.model), { status: 200, headers: { "content-type": "text/event-stream" } });
+  const d = await res.json();
+  const c = d.choices && d.choices[0];
+  const text = (c && c.message && c.message.content) || "";
+  return new Response(JSON.stringify({ type: "message", role: "assistant", model: payload.model, content: [{ type: "text", text }],
+    stop_reason: c && c.finish_reason === "length" ? "max_tokens" : "end_turn", usage: { input_tokens: d.usage?.prompt_tokens || 0, output_tokens: d.usage?.completion_tokens || 0 } }),
+    { status: 200, headers: { "content-type": "application/json" } });
+}
+
+// кредиты кончились, ключ не принят или Claude перегружен — такой ответ уводим на OpenRouter
+const isCreditErr = (st, t) => st === 401 || st === 402 || ([400, 403, 429].includes(st) && /credit|billing|balance|spend|usage limit|quota|payment/i.test(t));
+const isBusyErr = (st) => [429, 500, 502, 503, 504, 529].includes(st);
+
+// orModels: сразу через OpenRouter (бесплатный тариф). Иначе Claude, а при нехватке кредитов или перегрузке — OpenRouter
+async function callAnthropic(key, payload, orModels) {
+  if (orModels && orKey()) return callOpenRouter(payload, orModels);
+  let res = await anthropicFetch(key, payload);
+  if (res.ok || !orKey()) return res;
+  for (let a = 0; a < 2 && isBusyErr(res.status); a++) {
+    const t = await res.text();
+    if (isCreditErr(res.status, t)) return callOpenRouter(payload, /haiku/.test(payload.model || "") ? OR_CHEAP() : OR_SMART());
+    await new Promise((r) => setTimeout(r, 3000 * (a + 1)));
+    res = await anthropicFetch(key, payload);
+    if (res.ok) return res;
+  }
+  const t = await res.text();
+  if (isCreditErr(res.status, t) || isBusyErr(res.status)) {
+    console.log("fallback openrouter", res.status);
+    return callOpenRouter(payload, /haiku/.test(payload.model || "") ? OR_CHEAP() : OR_SMART());
+  }
+  return new Response(t, { status: res.status, headers: { "content-type": res.headers.get("content-type") || "application/json" } });
+}
+
+async function anthropicFetch(key, payload) {
   return fetch(API, {
     method: "POST",
     headers: {
@@ -302,7 +428,7 @@ function stripCache(payload) {
   return found;
 }
 
-async function jobRun(kv, id, owner, key, payload, selfUrl) {
+async function jobRun(kv, id, owner, key, payload, selfUrl, orModels) {
   let text = "", stop = null, err = null, saved = 0, last = 0;
   const flush = async (done) => {
     const at = kv.atomic();
@@ -315,7 +441,7 @@ async function jobRun(kv, id, owner, key, payload, selfUrl) {
   try {
     let res = null;
     for (let a = 0; a < 4; a++) {
-      res = await callAnthropic(key, payload);
+      res = await callAnthropic(key, payload, orModels);
       if (res.ok) break;
       const t = await res.text();
       if (res.status === 400 && /cache_control|cache|ttl/i.test(t) && stripCache(payload)) continue;
@@ -1157,7 +1283,7 @@ export async function handler(req, info) {
         ? "Come up with one fitting emoji and a short title of 2–5 words in English for this chat. Reply with exactly one line: emoji, space, title. No quotes, no period."
         : "Придумай для разговора одно подходящее по смыслу эмодзи и короткое название из 2–5 слов на русском. Ответь строго одной строкой: эмодзи, пробел, название. Без кавычек и точки.",
       messages: [{ role: "user", content: text }],
-    });
+    }, plan === "free" ? OR_CHEAP() : null);
     if (!r.ok) return json({ error: "Не удалось придумать название" }, 502, h);
     const d = await r.json();
     const line = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().split("\n")[0];
@@ -1175,7 +1301,7 @@ export async function handler(req, info) {
         ? "Write a short warm message (1–2 sentences, up to 200 characters) that a person sends to family or friends together with a short video about the text below. First person, natural, like a real message in a messenger, one fitting emoji. No hashtags, no quotes, do not mention AI or apps."
         : "Напиши короткое тёплое сообщение (1–2 предложения, до 200 символов), которое человек отправляет родным или друзьям вместе с коротким видео по тексту ниже. От первого лица, живо, как в мессенджере, одно подходящее эмодзи. Без хэштегов и кавычек, не упоминай ИИ и приложения.",
       messages: [{ role: "user", content: (body.title ? "Тема: " + String(body.title).slice(0, 80) + "\n\n" : "") + text }],
-    });
+    }, plan === "free" ? OR_CHEAP() : null);
     if (!r.ok) return json({ error: "Не удалось придумать подпись" }, 502, h);
     const d = await r.json();
     return json({ caption: (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim().replace(/^["«]|["»]$/g, "").slice(0, 300) }, 200, h);
@@ -1315,6 +1441,8 @@ export async function handler(req, info) {
     if (isLive && !P.models.includes(body.model)) body.model = P.models[0];
   }
   const think = !!body.think && !isLive && (!P || plan !== "free");
+  // бесплатный тариф после пробного периода: ответы через дешёвую модель OpenRouter (живой режим как был, через Gemini)
+  const orModels = plan === "free" && !isLive ? OR_CHEAP() : null;
   const payload = {
     model,
     // творческое видео: длинный код ролика — даём больший запас длины ответа
@@ -1371,7 +1499,7 @@ export async function handler(req, info) {
     if (kv) {
       const id = rnd(16);
       await kv.set(["cjob", id, "m"], { user: user.id, len: 0, stop: null, err: null, done: false, t: Date.now() }, JOB_TTL);
-      jobRun(kv, id, user.id, key, payload, url.origin).catch((e) => console.log("job", String(e)));
+      jobRun(kv, id, user.id, key, payload, url.origin, orModels).catch((e) => console.log("job", String(e)));
       return json({ job: id }, 200, h);
     }
   }
@@ -1379,16 +1507,16 @@ export async function handler(req, info) {
     const gs = await geminiLiveStream(payload).catch(() => null);
     if (gs) return new Response(gs, { status: 200, headers: { ...h, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
   }
-  let res = await callAnthropic(key, payload);
+  let res = await callAnthropic(key, payload, orModels);
   // Если что-то из дополнительных настроек не принято — повторяем без него
   for (let i = 0; i < 3 && res.status === 400; i++) {
     const text = await res.text();
-    if (/cache_control|cache|ttl/i.test(text) && stripCache(payload)) { res = await callAnthropic(key, payload); continue; }
+    if (/cache_control|cache|ttl/i.test(text) && stripCache(payload)) { res = await callAnthropic(key, payload, orModels); continue; }
     if (payload.thinking && /thinking|effort|output_config/i.test(text)) { delete payload.thinking; delete payload.output_config; }
     else if (payload.output_config && /effort|output_config/i.test(text)) delete payload.output_config;
     else if (payload.tools && /tool/i.test(text)) delete payload.tools;
     else return json({ error: "Ошибка запроса", details: text.slice(0, 500) }, 400, h);
-    res = await callAnthropic(key, payload);
+    res = await callAnthropic(key, payload, orModels);
   }
 
   if (!res.ok) {
