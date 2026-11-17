@@ -22,7 +22,7 @@ function env(name, def = "") {
 function cors(origin) {
   const allowed = env("ALLOWED_ORIGIN", "*");
   // основной адрес приложения и старый, с которого идёт переезд, разрешены всегда
-  const list = allowed.split(",").map((s) => s.trim()).concat(["https://pomoshnik.ai", "https://www.pomoshnik.ai", "https://ai.duetplay.app"]);
+  const list = allowed.split(",").map((s) => s.trim()).concat(["https://pomoshnik.ai", "https://www.pomoshnik.ai", "https://ai.duetplay.app", "https://video.duetplay.app"]);
   const ok = list.includes("*") || list.includes(origin);
   return {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
@@ -746,8 +746,9 @@ async function geminiLiveStream(payload) {
 async function geminiAnalyze(bytes, mime, prompt) {
   const gkey = env("GEMINI_KEY");
   if (!gkey) return { error: "Нет ключа Gemini" };
-  let part;
-  if (bytes.length > 15_000_000) {
+  let part = null;
+  if (!bytes.length) { /* только текст */ }
+  else if (bytes.length > 15_000_000) {
     const st = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", { method: "POST",
       headers: { "x-goog-api-key": gkey, "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start",
         "X-Goog-Upload-Header-Content-Length": String(bytes.length), "X-Goog-Upload-Header-Content-Type": mime, "content-type": "application/json" },
@@ -770,7 +771,7 @@ async function geminiAnalyze(bytes, mime, prompt) {
   for (const m of [env("GEMINI_ANALYZE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash", "gemini-2.5-flash"]) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST",
       headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [part, { text: prompt }] }], generationConfig: { temperature: 0.2 } }) });
+      body: JSON.stringify({ contents: [{ role: "user", parts: part ? [part, { text: prompt }] : [{ text: prompt }] }], generationConfig: { temperature: 0.2 } }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { last = d.error?.message || ("Gemini " + r.status); continue; }
     return { text: (d.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || "").join("").trim(), model: m, usage: d.usageMetadata };
@@ -922,6 +923,26 @@ export async function handler(req, info) {
       return json({ job: id }, 200, h);
     }
     const out = await geminiAnalyze(bytes, mime, prompt);
+    return json(out, out.error ? 502 : 200, h);
+  }
+  // Video (video.duetplay.app): открытый автомонтаж. Звук ролика или текст команды уходит в Gemini.
+  // Лимит в сутки на адрес: 3 разбора звука и 40 текстовых команд.
+  if (req.method === "POST" && url.pathname === "/montage") {
+    if (origin !== "https://video.duetplay.app") return json({ error: "Нет доступа" }, 403, h);
+    let meta = {}; try { meta = JSON.parse(decodeURIComponent(req.headers.get("X-Meta") || "{}")); } catch (_) {}
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (bytes.length > 20_000_000) return json({ error: "Слишком длинный ролик" }, 413, h);
+    const media = bytes.length > 0, kind = media ? "m" : "t", cap = media ? 3 : 40;
+    const kv = await kvOpen();
+    const day = new Date().toISOString().slice(0, 10), key = ["mntlim", day, ip, kind];
+    if (kv) {
+      const n = Number((await kv.get(key)).value || 0);
+      if (n >= cap) return json({ error: media ? "Лимит: 3 ролика в день. Завтра снова можно." : "Лимит команд на сегодня исчерпан" }, 429, h);
+      await kv.set(key, n + 1, { expireIn: 2 * 86400000 });
+    }
+    const prompt = String(meta.prompt || "").slice(0, 20000);
+    if (!prompt) return json({ error: "Нет задания" }, 400, h);
+    const out = await geminiAnalyze(media ? bytes : new Uint8Array(0), String(meta.mime || "audio/wav"), prompt);
     return json(out, out.error ? 502 : 200, h);
   }
   if (req.method === "GET" && url.pathname === "/analyze-job") {
