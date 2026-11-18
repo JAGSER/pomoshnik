@@ -926,7 +926,6 @@ export async function handler(req, info) {
     return json(out, out.error ? 502 : 200, h);
   }
   // Video (video.duetplay.app): открытый ИИ-монтаж. Тело: JSON {prompt, parts:[{text}|{mime,data(base64)}]}.
-  // Лимит в сутки на адрес: 5 разборов ролика (с кадрами/звуком) и 60 текстовых запросов.
   if (req.method === "POST" && url.pathname === "/montage") {
     if (origin !== "https://video.duetplay.app") return json({ error: "Нет доступа" }, 403, h);
     const raw = await req.text();
@@ -935,14 +934,6 @@ export async function handler(req, info) {
     const prompt = String(b.prompt || "").slice(0, 60000);
     if (!prompt) return json({ error: "Нет задания" }, 400, h);
     const parts = (Array.isArray(b.parts) ? b.parts : []).slice(0, 80).map((x) => x && x.data ? { inline_data: { mime_type: String(x.mime || "image/jpeg"), data: String(x.data) } } : { text: String(x?.text || "") });
-    const media = parts.some((x) => x.inline_data), kind = media ? "m" : "t", cap = media ? 5 : 60;
-    const kv = await kvOpen();
-    const day = new Date().toISOString().slice(0, 10), key = ["mntlim", day, ip, kind];
-    if (kv) {
-      const n = Number((await kv.get(key)).value || 0);
-      if (n >= cap) return json({ error: media ? "Лимит: 5 роликов в день. Завтра снова можно." : "Лимит правок на сегодня исчерпан" }, 429, h);
-      await kv.set(key, n + 1, { expireIn: 2 * 86400000 });
-    }
     const gkey = env("GEMINI_KEY"); if (!gkey) return json({ error: "Нет ключа Gemini" }, 500, h);
     let last = "";
     for (const m of [env("GEMINI_ANALYZE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash", "gemini-2.5-flash"]) {
@@ -956,7 +947,6 @@ export async function handler(req, info) {
     return json({ error: last }, 502, h);
   }
   // Video: дизайн вставок и проверка результата делает Claude (Opus). Тело: {prompt, images:[{mime,data}]}.
-  // Лимит 15 вызовов в сутки на адрес.
   if (req.method === "POST" && url.pathname === "/montage-claude") {
     if (origin !== "https://video.duetplay.app") return json({ error: "Нет доступа" }, 403, h);
     const raw = await req.text();
@@ -965,12 +955,6 @@ export async function handler(req, info) {
     const prompt = String(b.prompt || "").slice(0, 120000);
     if (!prompt) return json({ error: "Нет задания" }, 400, h);
     const kv = await kvOpen();
-    const day = new Date().toISOString().slice(0, 10), key = ["mntlim", day, ip, "c"];
-    if (kv) {
-      const n = Number((await kv.get(key)).value || 0);
-      if (n >= 15) return json({ error: "Лимит дизайна на сегодня исчерпан" }, 429, h);
-      await kv.set(key, n + 1, { expireIn: 2 * 86400000 });
-    }
     const content = [];
     for (const im of (Array.isArray(b.images) ? b.images : []).slice(0, 40)) if (im && im.data) content.push({ type: "image", source: { type: "base64", media_type: String(im.mime || "image/jpeg"), data: String(im.data) } });
     content.push({ type: "text", text: prompt });
