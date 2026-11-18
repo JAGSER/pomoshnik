@@ -311,7 +311,7 @@ async function anthropicFetch(key, payload) {
         },
         body: JSON.stringify(payload),
       });
-      if (xr.ok) return xr;
+      if (xr.ok) { console.log("xpiki ok", payload.model); return xr; }
       console.log("xpiki error", xr.status, (await xr.text()).slice(0, 200));
     } catch (e) {
       console.log("xpiki network error", String(e).slice(0, 200));
