@@ -955,6 +955,50 @@ export async function handler(req, info) {
     }
     return json({ error: last }, 502, h);
   }
+  // Video: дизайн вставок и проверка результата делает Claude (Opus). Тело: {prompt, images:[{mime,data}]}.
+  // Лимит 15 вызовов в сутки на адрес.
+  if (req.method === "POST" && url.pathname === "/montage-claude") {
+    if (origin !== "https://video.duetplay.app") return json({ error: "Нет доступа" }, 403, h);
+    const raw = await req.text();
+    if (raw.length > 12_000_000) return json({ error: "Слишком большой запрос" }, 413, h);
+    let b = {}; try { b = JSON.parse(raw); } catch (_) { return json({ error: "Плохой запрос" }, 400, h); }
+    const prompt = String(b.prompt || "").slice(0, 120000);
+    if (!prompt) return json({ error: "Нет задания" }, 400, h);
+    const kv = await kvOpen();
+    const day = new Date().toISOString().slice(0, 10), key = ["mntlim", day, ip, "c"];
+    if (kv) {
+      const n = Number((await kv.get(key)).value || 0);
+      if (n >= 15) return json({ error: "Лимит дизайна на сегодня исчерпан" }, 429, h);
+      await kv.set(key, n + 1, { expireIn: 2 * 86400000 });
+    }
+    const content = [];
+    for (const im of (Array.isArray(b.images) ? b.images : []).slice(0, 40)) if (im && im.data) content.push({ type: "image", source: { type: "base64", media_type: String(im.mime || "image/jpeg"), data: String(im.data) } });
+    content.push({ type: "text", text: prompt });
+    const akey = (env("ANTHROPIC_KEY") || env("KEY_YURI") || "").trim();
+    if (!akey) return json({ error: "Нет ключа Claude" }, 500, h);
+    const call = async () => {
+      const res = await anthropicFetch(akey, { model: env("MONTAGE_CLAUDE_MODEL", "claude-opus-5-5"), max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), messages: [{ role: "user", content }] });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: d.error?.message || ("Claude " + res.status) };
+      return { text: (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join(""), usage: d.usage };
+    };
+    // долгий ответ: сервер ждёт Claude сам, браузер забирает результат через /montage-job
+    if (kv) {
+      const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+      await kv.set(["mjob", id], { done: false, t: Date.now() }, JOB_TTL);
+      const ping = setInterval(() => { fetch(url.origin + "/").catch(() => {}); }, 20000);
+      call().catch((e) => ({ error: String(e?.message || e) })).then((out) => kv.set(["mjob", id], { done: true, t: Date.now(), ...out }, JOB_TTL)).finally(() => clearInterval(ping));
+      return json({ job: id }, 200, h);
+    }
+    const out = await call();
+    return json(out, out.error ? 502 : 200, h);
+  }
+  if (req.method === "GET" && url.pathname === "/montage-job") {
+    const kv = await kvOpen(), id = url.searchParams.get("id") || "";
+    const r = kv && /^[a-f0-9]{16}$/.test(id) && (await kv.get(["mjob", id])).value;
+    if (!r) return json({ error: "Задание не найдено" }, 404, h);
+    return json(r, 200, h);
+  }
   if (req.method === "GET" && url.pathname === "/analyze-job") {
     const user = await headerAuth(req, ip);
     if (!user || user.acct || !ADMINS().includes(user.id)) return json({ error: "Нет доступа" }, 403, h);
