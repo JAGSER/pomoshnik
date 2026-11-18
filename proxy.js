@@ -968,7 +968,7 @@ export async function handler(req, info) {
     const call = async () => {
       // DeepSeek (через OpenRouter): технические правки кода графики
       const res = deep && orKey()
-        ? await callOpenRouter({ model: "deepseek", max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages }, env("MONTAGE_DEEPSEEK_MODELS", "deepseek/deepseek-v4.1,deepseek/deepseek-v4.1-flash").split(",").map((x) => x.trim()).filter(Boolean))
+        ? await callOpenRouter({ model: "deepseek", max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages }, env("MONTAGE_DEEPSEEK_MODELS", "~deepseek/deepseek-pro-latest,deepseek/deepseek-v4.1-flash").split(",").map((x) => x.trim()).filter(Boolean))
         : await anthropicFetch(akey, { model: deep ? "claude-sonnet-5-5" : model, max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) return { error: d.error?.message || ("Claude " + res.status) };
