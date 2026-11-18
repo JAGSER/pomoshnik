@@ -953,15 +953,19 @@ export async function handler(req, info) {
     if (raw.length > 12_000_000) return json({ error: "Слишком большой запрос" }, 413, h);
     let b = {}; try { b = JSON.parse(raw); } catch (_) { return json({ error: "Плохой запрос" }, 400, h); }
     const prompt = String(b.prompt || "").slice(0, 120000);
-    if (!prompt) return json({ error: "Нет задания" }, 400, h);
+    const hasMsgs = Array.isArray(b.messages) && b.messages.length;
+    if (!prompt && !hasMsgs) return json({ error: "Нет задания" }, 400, h);
     const kv = await kvOpen();
     const content = [];
     for (const im of (Array.isArray(b.images) ? b.images : []).slice(0, 40)) if (im && im.data) content.push({ type: "image", source: { type: "base64", media_type: String(im.mime || "image/jpeg"), data: String(im.data) } });
-    content.push({ type: "text", text: prompt });
+    if (prompt) content.push({ type: "text", text: prompt });
+    const messages = hasMsgs ? b.messages.slice(-12).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: typeof m.content === "string" ? m.content.slice(0, 200000) : m.content })) : [{ role: "user", content }];
+    const model = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"].includes(b.model) ? b.model : env("MONTAGE_CLAUDE_MODEL", "claude-opus-5-5");
+    const system = b.system ? [{ type: "text", text: String(b.system).slice(0, 200000), cache_control: { type: "ephemeral" } }] : undefined;
     const akey = (env("ANTHROPIC_KEY") || env("KEY_YURI") || "").trim();
     if (!akey) return json({ error: "Нет ключа Claude" }, 500, h);
     const call = async () => {
-      const res = await anthropicFetch(akey, { model: env("MONTAGE_CLAUDE_MODEL", "claude-opus-5-5"), max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), messages: [{ role: "user", content }] });
+      const res = await anthropicFetch(akey, { model, max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) return { error: d.error?.message || ("Claude " + res.status) };
       return { text: (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join(""), usage: d.usage };
