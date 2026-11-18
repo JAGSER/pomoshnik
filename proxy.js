@@ -300,22 +300,31 @@ const XPIKI_API = "https://api.xpiki.com/v1/messages";
 async function anthropicFetch(key, payload) {
   const xk = env("XPIKI_KEY").trim();
   if (xk && env("XPIKI_OFF") !== "1") {
-    try {
-      const xr = await fetch(XPIKI_API, {
-        method: "POST",
-        headers: {
-          "authorization": "Bearer " + xk,
-          "x-api-key": xk,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      if (xr.ok) { console.log("xpiki ok", payload.model); return xr; }
-      console.log("xpiki error", xr.status, (await xr.text()).slice(0, 200));
-    } catch (e) {
-      console.log("xpiki network error", String(e).slice(0, 200));
+    // xpiki часто отвечает 429 «нет свободных мощностей, повторите»: повторяем с паузами,
+    // и только если так и не вышло, запрос уходит на свой ключ Anthropic
+    const waits = [0, 3000, 6000, 10000, 15000];
+    for (let a = 0; a < waits.length; a++) {
+      if (waits[a]) await new Promise((r) => setTimeout(r, waits[a]));
+      try {
+        const xr = await fetch(XPIKI_API, {
+          method: "POST",
+          headers: {
+            "authorization": "Bearer " + xk,
+            "x-api-key": xk,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (xr.ok) { console.log("xpiki ok", payload.model, a ? "попытка " + (a + 1) : ""); return xr; }
+        const t = (await xr.text()).slice(0, 200);
+        console.log("xpiki error", xr.status, "попытка " + (a + 1), t);
+        if (![408, 429, 500, 502, 503, 504, 529].includes(xr.status)) break;
+      } catch (e) {
+        console.log("xpiki network error", "попытка " + (a + 1), String(e).slice(0, 200));
+      }
     }
+    console.log("xpiki не ответил, запрос ушёл на свой ключ Anthropic", payload.model);
   }
   return fetch(API, {
     method: "POST",
