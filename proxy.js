@@ -972,7 +972,7 @@ export async function handler(req, info) {
         : await anthropicFetch(akey, { model: deep ? "claude-sonnet-5-5" : model, max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) return { error: d.error?.message || ("Claude " + res.status) };
-      return { text: (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join(""), usage: d.usage };
+      return { text: (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join(""), usage: d.usage, via: deep && orKey() ? "deepseek" : (deep ? "claude-sonnet-5-5 (нет ключа OpenRouter)" : model) };
     };
     // долгий ответ: сервер ждёт Claude сам, браузер забирает результат через /montage-job
     if (kv) {
