@@ -960,12 +960,16 @@ export async function handler(req, info) {
     for (const im of (Array.isArray(b.images) ? b.images : []).slice(0, 40)) if (im && im.data) content.push({ type: "image", source: { type: "base64", media_type: String(im.mime || "image/jpeg"), data: String(im.data) } });
     if (prompt) content.push({ type: "text", text: prompt });
     const messages = hasMsgs ? b.messages.slice(-12).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: typeof m.content === "string" ? m.content.slice(0, 200000) : m.content })) : [{ role: "user", content }];
+    const deep = b.model === "deepseek";
     const model = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"].includes(b.model) ? b.model : env("MONTAGE_CLAUDE_MODEL", "claude-opus-5-5");
     const system = b.system ? [{ type: "text", text: String(b.system).slice(0, 200000), cache_control: { type: "ephemeral" } }] : undefined;
     const akey = (env("ANTHROPIC_KEY") || env("KEY_YURI") || "").trim();
     if (!akey) return json({ error: "Нет ключа Claude" }, 500, h);
     const call = async () => {
-      const res = await anthropicFetch(akey, { model, max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages });
+      // DeepSeek (через OpenRouter): технические правки кода графики
+      const res = deep && orKey()
+        ? await callOpenRouter({ model: "deepseek", max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages }, env("MONTAGE_DEEPSEEK_MODELS", "deepseek/deepseek-v4.1,deepseek/deepseek-v4.1-flash").split(",").map((x) => x.trim()).filter(Boolean))
+        : await anthropicFetch(akey, { model: deep ? "claude-sonnet-5-5" : model, max_tokens: Math.min(32000, Number(b.max_tokens) || 16000), ...(system ? { system } : {}), messages });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) return { error: d.error?.message || ("Claude " + res.status) };
       return { text: (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join(""), usage: d.usage };
