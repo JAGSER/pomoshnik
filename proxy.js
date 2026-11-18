@@ -294,7 +294,7 @@ async function callAnthropic(key, payload, orModels) {
 }
 
 // ВРЕМЕННАЯ ЗАМЕНА API: если в переменных сервиса задан XPIKI_KEY, запросы к Claude сначала идут
-// через api.xpiki.com. Если xpiki ответил ошибкой, запрос уходит как раньше на свой ключ Anthropic.
+// ТОЛЬКО через api.xpiki.com. Свой ключ Anthropic при этом не используется вообще, даже при сбоях xpiki.
 // Вернуть как было: удалить переменную XPIKI_KEY в настройках сервиса (или поставить XPIKI_OFF=1).
 const XPIKI_API = "https://api.xpiki.com/v1/messages";
 async function anthropicFetch(key, payload) {
@@ -302,7 +302,7 @@ async function anthropicFetch(key, payload) {
   if (xk && env("XPIKI_OFF") !== "1") {
     // xpiki часто отвечает 429 «нет свободных мощностей, повторите»: повторяем с паузами,
     // и только если так и не вышло, запрос уходит на свой ключ Anthropic
-    const waits = [0, 3000, 6000, 10000, 15000];
+    const waits = [0, 3000, 5000, 8000, 10000, 12000, 15000];
     for (let a = 0; a < waits.length; a++) {
       if (waits[a]) await new Promise((r) => setTimeout(r, waits[a]));
       try {
@@ -324,7 +324,10 @@ async function anthropicFetch(key, payload) {
         console.log("xpiki network error", "попытка " + (a + 1), String(e).slice(0, 200));
       }
     }
-    console.log("xpiki не ответил, запрос ушёл на свой ключ Anthropic", payload.model);
+    // Свой ключ Anthropic НЕ используется совсем (так решил Юрий): возвращаем ошибку, без отката
+    console.log("xpiki не ответил, запрос отклонён (свой ключ Anthropic отключён)", payload.model);
+    return new Response(JSON.stringify({ type: "error", error: { type: "xpiki_busy", message: "Сервер перегружен, попробуйте через минуту" } }),
+      { status: 424, headers: { "content-type": "application/json" } });
   }
   return fetch(API, {
     method: "POST",
