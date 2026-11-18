@@ -925,25 +925,35 @@ export async function handler(req, info) {
     const out = await geminiAnalyze(bytes, mime, prompt);
     return json(out, out.error ? 502 : 200, h);
   }
-  // Video (video.duetplay.app): открытый автомонтаж. Звук ролика или текст команды уходит в Gemini.
-  // Лимит в сутки на адрес: 3 разбора звука и 40 текстовых команд.
+  // Video (video.duetplay.app): открытый ИИ-монтаж. Тело: JSON {prompt, parts:[{text}|{mime,data(base64)}]}.
+  // Лимит в сутки на адрес: 5 разборов ролика (с кадрами/звуком) и 60 текстовых запросов.
   if (req.method === "POST" && url.pathname === "/montage") {
     if (origin !== "https://video.duetplay.app") return json({ error: "Нет доступа" }, 403, h);
-    let meta = {}; try { meta = JSON.parse(decodeURIComponent(req.headers.get("X-Meta") || "{}")); } catch (_) {}
-    const bytes = new Uint8Array(await req.arrayBuffer());
-    if (bytes.length > 20_000_000) return json({ error: "Слишком длинный ролик" }, 413, h);
-    const media = bytes.length > 0, kind = media ? "m" : "t", cap = media ? 3 : 40;
+    const raw = await req.text();
+    if (raw.length > 26_000_000) return json({ error: "Слишком длинный ролик" }, 413, h);
+    let b = {}; try { b = JSON.parse(raw); } catch (_) { return json({ error: "Плохой запрос" }, 400, h); }
+    const prompt = String(b.prompt || "").slice(0, 60000);
+    if (!prompt) return json({ error: "Нет задания" }, 400, h);
+    const parts = (Array.isArray(b.parts) ? b.parts : []).slice(0, 80).map((x) => x && x.data ? { inline_data: { mime_type: String(x.mime || "image/jpeg"), data: String(x.data) } } : { text: String(x?.text || "") });
+    const media = parts.some((x) => x.inline_data), kind = media ? "m" : "t", cap = media ? 5 : 60;
     const kv = await kvOpen();
     const day = new Date().toISOString().slice(0, 10), key = ["mntlim", day, ip, kind];
     if (kv) {
       const n = Number((await kv.get(key)).value || 0);
-      if (n >= cap) return json({ error: media ? "Лимит: 3 ролика в день. Завтра снова можно." : "Лимит команд на сегодня исчерпан" }, 429, h);
+      if (n >= cap) return json({ error: media ? "Лимит: 5 роликов в день. Завтра снова можно." : "Лимит правок на сегодня исчерпан" }, 429, h);
       await kv.set(key, n + 1, { expireIn: 2 * 86400000 });
     }
-    const prompt = String(meta.prompt || "").slice(0, 20000);
-    if (!prompt) return json({ error: "Нет задания" }, 400, h);
-    const out = await geminiAnalyze(media ? bytes : new Uint8Array(0), String(meta.mime || "audio/wav"), prompt);
-    return json(out, out.error ? 502 : 200, h);
+    const gkey = env("GEMINI_KEY"); if (!gkey) return json({ error: "Нет ключа Gemini" }, 500, h);
+    let last = "";
+    for (const m of [env("GEMINI_ANALYZE_MODEL", "gemini-3.8-flash"), "gemini-3.7-flash", "gemini-2.5-flash"]) {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST",
+        headers: { "x-goog-api-key": gkey, "content-type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [...parts, { text: prompt }] }], generationConfig: { temperature: Number(b.temperature ?? 0.9), responseMimeType: "application/json" } }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { last = d.error?.message || ("Gemini " + r.status); continue; }
+      return json({ text: (d.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || "").join("").trim(), model: m }, 200, h);
+    }
+    return json({ error: last }, 502, h);
   }
   if (req.method === "GET" && url.pathname === "/analyze-job") {
     const user = await headerAuth(req, ip);
