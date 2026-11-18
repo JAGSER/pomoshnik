@@ -1,4 +1,4 @@
-// сборка: обновлены переменные (ключ озвучки, 2)
+// сборка: временная замена API на xpiki (XPIKI_KEY)
 // Прослойка «Помощник» — хранит ключи Anthropic и пароли родственников.
 // Ключи и пароли задаются ТОЛЬКО в секретных переменных окружения сервиса,
 // в коде их нет.
@@ -293,7 +293,30 @@ async function callAnthropic(key, payload, orModels) {
   return new Response(t, { status: res.status, headers: { "content-type": res.headers.get("content-type") || "application/json" } });
 }
 
+// ВРЕМЕННАЯ ЗАМЕНА API: если в переменных сервиса задан XPIKI_KEY, запросы к Claude сначала идут
+// через api.xpiki.com. Если xpiki ответил ошибкой, запрос уходит как раньше на свой ключ Anthropic.
+// Вернуть как было: удалить переменную XPIKI_KEY в настройках сервиса (или поставить XPIKI_OFF=1).
+const XPIKI_API = "https://api.xpiki.com/v1/messages";
 async function anthropicFetch(key, payload) {
+  const xk = env("XPIKI_KEY").trim();
+  if (xk && env("XPIKI_OFF") !== "1") {
+    try {
+      const xr = await fetch(XPIKI_API, {
+        method: "POST",
+        headers: {
+          "authorization": "Bearer " + xk,
+          "x-api-key": xk,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (xr.ok) return xr;
+      console.log("xpiki error", xr.status, (await xr.text()).slice(0, 200));
+    } catch (e) {
+      console.log("xpiki network error", String(e).slice(0, 200));
+    }
+  }
   return fetch(API, {
     method: "POST",
     headers: {
