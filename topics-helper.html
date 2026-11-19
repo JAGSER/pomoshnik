@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><title>topics helper</title>
+<script>
+// Служебная страница: страницы тем на shuster.pomoshnik.ai (topicsp1, topicsh2) присылают задание,
+// страница отдаёт его Claude через прокси «Помощника». Ключ только на сервере.
+// Вход: если на устройстве уже есть вход в «Помощник», используется он; иначе свой гостевой вход без регистрации.
+const OK=['https://shuster.pomoshnik.ai'];
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(_){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
+let CFG=null;
+const cfg=async()=>CFG||(CFG=await (await fetch('/config.json',{cache:'no-store'})).json());
+async function post(path,body){const c=await cfg();const r=await fetch(c.proxy+path,{method:'POST',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return r}
+async function newGuest(){const r=await post('/guest',{lang:'ru',ref:'topics'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.user)throw new Error(d.error||'не получилось войти');const s={user:d.user,password:d.password};LS.set('topics_session',s);return s}
+async function session(fresh){
+  const app=LS.get('session');if(app&&app.user&&!fresh)return app;
+  let s=fresh?null:LS.get('topics_session');
+  if(s&&s.user){const r=await post('/login',{user:s.user,password:s.password});const d=await r.json().catch(()=>({}));if(r.ok&&d.plan!=='free')return s}
+  return newGuest()}
+async function ask(s,m){
+  const r=await post('/chat',{user:s.user,password:s.password,model:'claude-opus-5-5',think:false,system:m.system||'',messages:[{role:'user',content:[{type:'text',text:m.prompt}]}]});
+  if(!r.ok){const d=await r.json().catch(()=>({}));return {err:d.error||('http '+r.status),status:r.status,code:d.code}}
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='',full='';
+  for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+    while((i=buf.indexOf('\n'))>=0){const l=buf.slice(0,i).trim();buf=buf.slice(i+1);if(!l.startsWith('data:'))continue;
+      let ev;try{ev=JSON.parse(l.slice(5))}catch(_){continue}
+      if(ev.type==='content_block_delta'&&ev.delta&&ev.delta.type==='text_delta')full+=ev.delta.text;
+      else if(ev.type==='error')return {err:'busy',status:529}}}
+  return full?{text:full}:{err:'пустой ответ',status:529}}
+addEventListener('message',async e=>{
+  if(!OK.includes(e.origin))return;const m=e.data||{};if(m.type!=='topics')return;
+  const reply=d=>e.source.postMessage(Object.assign({type:'topics-res',id:m.id},d),e.origin);
+  try{
+    let s=await session(false),r=await ask(s,m);
+    // вход истёк или лимит: новый гостевой вход и ещё раз
+    if(r.err&&(r.status===401||r.status===402)){s=await session(true);r=await ask(s,m)}
+    reply(r.err?{error:r.err,status:r.status}:{text:r.text});
+  }catch(err){reply({error:String(err.message||err)})}
+});
+parent.postMessage({type:'topics-ready'},'*');
+</script>
