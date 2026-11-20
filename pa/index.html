@@ -126,7 +126,7 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
 
 <div id="installHelp" class="install-help"><div class="ih-card">
   <div class="ih-title">Установка Советника</div>
-  <div id="ihText">Этот браузер не разрешил установку одной кнопкой. Открой эту страницу в Google Chrome на телефоне, кнопка «Установить» там сработает сразу.<br><br>Если Советник уже установлен, открывай его значком на рабочем столе.</div>
+  <div id="ihText">Этот браузер не умеет ставить приложения со страницы. Поставь Android-приложение Советник из файла sovetnik.apk, он в чате с Claude: открой файл на телефоне и нажми «Установить».</div>
   <button id="installHelpClose" class="ih-ok">Понятно</button>
 </div></div>
 
@@ -440,6 +440,7 @@ async function toggleStar(m,e){
 }
 
 function copyText(text){
+  if(window.SovetnikApp){window.SovetnikApp.copy(text);toast("Скопировано");return;}
   navigator.clipboard?.writeText(text).then(()=>toast("Скопировано")).catch(()=>toast("Не удалось скопировать"));
 }
 
@@ -589,6 +590,7 @@ async function push(){
 
 function setupInstall(){
   const btn=document.querySelector("#installBtn");
+  if(window.SovetnikApp){btn.style.display="none";document.querySelector("#pushBtn").style.display="none";return;}
   const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
   if(standalone){btn.style.display="none";return;}
   btn.style.display="block";
@@ -634,6 +636,12 @@ input.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey&&innerWidth>600){e.preventDe
 threadInput.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey&&innerWidth>600){e.preventDefault();send("",activeThread)}};
 
 function voiceInput(area){
+  // в Android-приложении распознаёт сам телефон через мост
+  if(window.SovetnikApp){
+    window.onSovetnikSpeech=t=>{area.value+=(area.value?" ":"")+t;resize(area);area.focus()};
+    window.onSovetnikSpeechError=()=>toast("Не удалось распознать речь");
+    toast("Говори…");window.SovetnikApp.listen();return;
+  }
   const S=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!S)return toast("Голосовой ввод недоступен");
   const r=new S();
