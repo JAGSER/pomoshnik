@@ -230,18 +230,21 @@ function renderMessage(m,container=feedEl){
         ${actionButton("Обсудить","Открыть обсуждение","discuss")}
         ${actionButton("Сделай","Сделать","do")}
         ${actionButton("Не нужно","Не нужно","no")}
+        ${actionButton("🔊","Озвучить","speak","speak")}
+        ${actionButton("⧉","Копировать","copy")}
         ${actionButton(m.starred?"★":"☆",m.starred?"Убрать из закладок":"Добавить в закладки","star","star")}
       </div>`;
     e.addEventListener("click",ev=>{
       const b=ev.target.closest("button");
-      if(!b)return;
+      if(!b){openThread(m);return;}
       ev.stopPropagation();
       const a=b.dataset.action;
       if(a==="discuss")openThread(m);
       if(a==="star")toggleStar(m,e);
       if(a==="do"||a==="no")ideaDecision(m,e,a);
+      if(a==="speak")speakMessage(m,b);
+      if(a==="copy")copyText((m.title?m.title+". ":"")+m.text);
     });
-    e.addEventListener("dblclick",()=>openThread(m));
   }else{
     e.className="msg "+(m.role==="user"?"user ":"")+(m.role==="assistant"&&isUnread(m)?"unread ":"");
     const assistant=m.role==="assistant";
