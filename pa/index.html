@@ -303,7 +303,7 @@ function renderMessage(m,container=feedEl){
 
 function renderFeed(){
   feedEl.innerHTML="";
-  let list=[...allMessages.values()].filter(m=>!m.thread);
+  let list=[...allMessages.values()].filter(m=>!m.thread&&!(m.kind==="idea"&&!m.starred&&localStorage.getItem("idea_no_"+m.id)));
   if(currentFilter==="idea")list=list.filter(m=>m.kind==="idea");
   if(currentFilter==="star")list=list.filter(m=>m.starred);
   list.sort((a,b)=>b.t-a.t);
@@ -456,7 +456,11 @@ function ideaDecision(m,e,a){
   const text=a==="do"
     ?`Разбери идею «${m.title}» и скажи, что конкретно делаем первым шагом`
     :`Идея «${m.title}» мне не подходит. Запомни и больше такое не предлагай.`;
-  openThread(m).then(()=>send(text,m.id));
+  if(a==="do"){openThread(m).then(()=>send(text,m.id));return;}
+  // «Не нужно»: ничего не открываем, тихо сообщаем Советнику и убираем карточку
+  toast("Понял, такое больше не предложу");localStorage.setItem("idea_no_"+m.id,"1");
+  e.style.transition="opacity .3s";e.style.opacity="0";setTimeout(()=>e.remove(),320);
+  api("/pa/chat",{method:"POST",body:JSON.stringify({text,thread:m.id})}).catch(()=>{});
 }
 
 async function speakMessage(m,button){
