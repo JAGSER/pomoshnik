@@ -817,7 +817,7 @@ async function geminiAnalyze(bytes, mime, prompt) {
 }
 
 export async function handler(req, info) {
-  try { if (new URL(req.url).pathname.startsWith("/pa/")) return await paHandler(req); } catch (e) { console.log("pa error", String(e)); }
+  try { if (new URL(req.url).pathname.startsWith("/pa/")) return await paHandler(req, { geminiTTS }); } catch (e) { console.log("pa error", String(e)); }
   const ip = info?.remoteAddr?.hostname || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "anon";
   const origin = req.headers.get("Origin") || "";
   const h = cors(origin);
