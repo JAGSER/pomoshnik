@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#11151c">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="manifest" href="./manifest.webmanifest">
+<link rel="manifest" href="/pa/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/pa/icon-192.png">
+<script>window.__ip=null;addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__ip=e;document.dispatchEvent(new Event("pa-installable"))});</script>
 <title>Советник</title>
 <style>
 :root{color-scheme:dark;--bg:#11151c;--panel:#1b222c;--text:#edf2f7;--muted:#9ca8b8;--accent:#79c8a3;--line:#303b49;--idea:#d9a84f;--danger:#db7777}
@@ -68,6 +70,14 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
 .addnote input{min-width:0;flex:1;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
 .toast{position:fixed;z-index:20;bottom:78px;left:50%;transform:translateX(-50%);background:#273442;padding:10px 15px;border-radius:10px;display:none;max-width:90%;text-align:center}
 @media(max-width:600px){.actions{gap:0}.install{font-size:13px;padding:7px 5px}.bubble{max-width:94%}.msg-actions button,.idea-actions button{font-size:12px;padding:6px}.tabs{top:64px}}
+.install{display:none;background:var(--accent)!important;color:#0d1a14!important;font-weight:700;border-radius:20px;padding:7px 14px;border:0;font-size:15px}
+.install.ready{animation:pulse 2s ease-in-out 3}
+@keyframes pulse{50%{box-shadow:0 0 0 6px #79c8a355}}
+.install-help{display:none;position:fixed;inset:0;z-index:20;background:#000a;align-items:center;justify-content:center;padding:20px}
+.install-help.open{display:flex}
+.ih-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;max-width:420px;line-height:1.45}
+.ih-title{font-size:20px;font-weight:700;margin-bottom:10px}
+.ih-ok{margin-top:16px;width:100%;padding:12px;border:0;border-radius:12px;background:var(--accent);color:#0d1a14;font-weight:700;font-size:16px}
 </style>
 </head>
 <body>
@@ -112,6 +122,12 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
   <textarea id="threadInput" rows="1" placeholder="Обсудить идею..."></textarea>
   <button class="icon" title="Отправить">➤</button>
 </form>
+
+<div id="installHelp" class="install-help"><div class="ih-card">
+  <div class="ih-title">Установка Советника</div>
+  <div id="ihText">Этот браузер не разрешил установку одной кнопкой. Открой эту страницу в Google Chrome на телефоне, кнопка «Установить» там сработает сразу.<br><br>Если Советник уже установлен, открывай его значком на рабочем столе.</div>
+  <button id="installHelpClose" class="ih-ok">Понятно</button>
+</div></div>
 
 <aside id="drawer">
   <div class="drawer-head"><h2>Заметки</h2><button id="closeDrawer">×</button></div>
@@ -567,25 +583,29 @@ async function push(){
 }
 
 function setupInstall(){
+  const btn=document.querySelector("#installBtn");
   const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
-  if(standalone)return;
-  window.addEventListener("beforeinstallprompt",e=>{
-    e.preventDefault();installPrompt=e;
-    document.querySelector("#installBtn").style.display="block";
-  });
-  window.addEventListener("appinstalled",()=>{
-    installPrompt=null;document.querySelector("#installBtn").style.display="none";
-  });
+  if(standalone){btn.style.display="none";return;}
+  btn.style.display="block";
+  if(window.__ip)btn.classList.add("ready");
+  document.addEventListener("pa-installable",()=>btn.classList.add("ready"));
+  window.addEventListener("appinstalled",()=>{window.__ip=null;btn.style.display="none";toast("Советник установлен, значок на рабочем столе")});
 }
 
 document.querySelector("#installBtn").onclick=async()=>{
-  if(installPrompt){
-    installPrompt.prompt();
-    const r=await installPrompt.userChoice;
-    if(r.outcome==="accepted")document.querySelector("#installBtn").style.display="none";
-    installPrompt=null;
-  }else toast("Нажмите «Поделиться» → «На экран Домой»");
+  const btn=document.querySelector("#installBtn");
+  // если Chrome ещё не прислал разрешение, ждём его до 4 секунд
+  if(!window.__ip){btn.textContent="Готовлю…";for(let i=0;i<20&&!window.__ip;i++)await new Promise(r=>setTimeout(r,200));btn.textContent="Установить";}
+  if(window.__ip){
+    window.__ip.prompt();
+    const r=await window.__ip.userChoice;
+    window.__ip=null;
+    if(r.outcome==="accepted")btn.style.display="none";
+    return;
+  }
+  document.querySelector("#installHelp").classList.add("open");
 };
+document.querySelector("#installHelpClose").onclick=()=>document.querySelector("#installHelp").classList.remove("open");
 
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   currentFilter=b.dataset.filter;

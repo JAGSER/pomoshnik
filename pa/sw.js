@@ -1,4 +1,4 @@
-const CACHE = "pa-shell-v2";
+const CACHE = "pa-shell-v3";
 const APP = "./index.html";
 
 self.addEventListener("install", event => {
