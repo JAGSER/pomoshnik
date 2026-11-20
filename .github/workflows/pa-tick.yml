@@ -1,0 +1,10 @@
+name: Советник — плановая проверка
+on:
+  schedule:
+    - cron: "23 1,5,9,13 * * *"
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -sS --max-time 900 https://pomoshnik.jagser.deno.net/pa/tick || true

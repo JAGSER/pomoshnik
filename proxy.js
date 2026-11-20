@@ -9,6 +9,8 @@
 //   ALLOWED_ORIGIN  — адрес приложения, например https://ai.duetplay.app
 //   WEB_SEARCH_TOOL — версия инструмента поиска (по умолчанию web_search_20250305)
 
+import { paHandler } from "./pa.js"; // «Советник» (pomoshnik.ai/pa/)
+
 const API = "https://api.anthropic.com/v1/messages";
 
 function env(name, def = "") {
@@ -815,6 +817,7 @@ async function geminiAnalyze(bytes, mime, prompt) {
 }
 
 export async function handler(req, info) {
+  try { if (new URL(req.url).pathname.startsWith("/pa/")) return await paHandler(req); } catch (e) { console.log("pa error", String(e)); }
   const ip = info?.remoteAddr?.hostname || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "anon";
   const origin = req.headers.get("Origin") || "";
   const h = cors(origin);
