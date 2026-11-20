@@ -70,7 +70,7 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
 .addnote input{min-width:0;flex:1;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
 .toast{position:fixed;z-index:20;bottom:78px;left:50%;transform:translateX(-50%);background:#273442;padding:10px 15px;border-radius:10px;display:none;max-width:90%;text-align:center}
 @media(max-width:600px){.actions{gap:0}.install{font-size:13px;padding:7px 5px}.bubble{max-width:94%}.msg-actions button,.idea-actions button{font-size:12px;padding:6px}.tabs{top:64px}}
-.install{display:none;background:var(--accent)!important;color:#0d1a14!important;font-weight:700;border-radius:20px;padding:7px 14px;border:0;font-size:15px}
+.install{display:none;width:calc(100% - 24px);max-width:736px;margin:10px auto 0;background:var(--accent)!important;color:#0d1a14!important;font-weight:700;border-radius:14px;padding:13px 16px!important;border:0;font-size:16px!important;text-align:center}
 .install.ready{animation:pulse 2s ease-in-out 3}
 @keyframes pulse{50%{box-shadow:0 0 0 6px #79c8a355}}
 .install-help{display:none;position:fixed;inset:0;z-index:20;background:#000a;align-items:center;justify-content:center;padding:20px}
@@ -84,7 +84,7 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
 <header>
   <h1>Советник</h1>
   <div class="actions">
-    <button class="install" id="installBtn" title="Установить приложение">Установить</button>
+    
     <button class="icon scan" title="Найти сейчас"><span class="glass">⌕</span><span class="spin">◌</span><span class="scanword"></span></button>
     <button class="icon" id="refreshBtn" title="Обновить">↻</button>
     <button class="icon" id="notesBtn" title="Заметки">☷</button>
@@ -92,6 +92,7 @@ textarea{resize:none;min-height:43px;max-height:130px;flex:1;border:1px solid va
   </div>
 </header>
 
+<button class="install" id="installBtn" title="Установить приложение">📲 Установить Советник на телефон</button>
 <nav class="tabs">
   <button class="tab active" data-filter="all">Все</button>
   <button class="tab" data-filter="idea">Идеи</button>
@@ -595,7 +596,7 @@ function setupInstall(){
 document.querySelector("#installBtn").onclick=async()=>{
   const btn=document.querySelector("#installBtn");
   // если Chrome ещё не прислал разрешение, ждём его до 4 секунд
-  if(!window.__ip){btn.textContent="Готовлю…";for(let i=0;i<20&&!window.__ip;i++)await new Promise(r=>setTimeout(r,200));btn.textContent="Установить";}
+  if(!window.__ip){btn.textContent="Готовлю…";for(let i=0;i<20&&!window.__ip;i++)await new Promise(r=>setTimeout(r,200));btn.textContent="📲 Установить Советник на телефон";}
   if(window.__ip){
     window.__ip.prompt();
     const r=await window.__ip.userChoice;
