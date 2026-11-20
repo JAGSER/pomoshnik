@@ -48,7 +48,8 @@ main{max-width:760px;margin:auto;padding:12px 12px 108px}
 .expand{margin-top:6px;background:transparent;color:var(--accent);padding:3px 0;font-size:14px}
 .quote{color:#b9c5d1;border-left:3px solid var(--accent);padding-left:9px;margin-bottom:7px;font-size:14px}
 .thread-screen{display:none}
-.thread-screen.open{display:block}
+.thread-screen.open{display:block;position:fixed;inset:0;z-index:3;background:var(--bg,#11151c);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px max(12px,calc((100% - 760px)/2 + 12px)) 90px}
+body.thread-open{overflow:hidden}
 .thread-head{display:flex;align-items:center;gap:8px;margin:4px 0 14px}
 .thread-head h2{font-size:21px;margin:0;flex:1}
 .thread-idea{border:1px solid #755b29;border-left:5px solid var(--idea);border-radius:13px;background:#211e17;padding:14px;margin-bottom:16px}
@@ -484,7 +485,7 @@ async function speakMessage(m,button){
 
 async function openThread(m){
   activeThread=m.id;
-  document.querySelector("#threadScreen").classList.add("open");
+  document.querySelector("#threadScreen").classList.add("open");document.body.classList.add("thread-open");document.querySelector("#threadScreen").scrollTop=0;
   document.querySelector("#composer").style.display="none";
   document.querySelector("#threadIdea").innerHTML=`
     <div class="thread-idea">
@@ -526,7 +527,7 @@ function renderThread(){
 function closeThread(fromPop=false){
   if(!activeThread)return;
   activeThread=null;
-  document.querySelector("#threadScreen").classList.remove("open");
+  document.querySelector("#threadScreen").classList.remove("open");document.body.classList.remove("thread-open");
   document.querySelector("#composer").style.display="flex";
   if(!fromPop&&location.hash.startsWith("#thread-"))history.back();
   renderFeed();
