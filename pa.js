@@ -52,7 +52,17 @@ async function body(req) {
   }
 }
 
+// Юрий слушает голосом: убираем ссылки-источники, которые веб-поиск вставляет в текст
+function noLinks(x) {
+  return String(x || "")
+    .replace(/\s*\(\[[^\]]*\]\([^)]*\)\)/g, "")
+    .replace(/\[([^\]]*)\]\(https?:[^)]*\)/g, "$1")
+    .replace(/\s*\(?https?:\/\/\S+\)?/g, "")
+    .replace(/[ \t]+([.,;:])/g, "$1").trim();
+}
+
 async function saveMessage(role, kind, messageText, title) {
+  messageText = noLinks(messageText);
   const t = Date.now();
   const id = crypto.randomUUID();
   const message = { id, t, role, kind, text: String(messageText || "") };
@@ -64,7 +74,7 @@ async function saveMessage(role, kind, messageText, title) {
 async function feed(after = 0) {
   const result = [];
   for await (const item of (await KV()).list({ prefix: ["pa", "feed"] })) {
-    if (item.value?.t > after) result.push(item.value);
+    if (item.value?.t > after) result.push({ ...item.value, text: noLinks(item.value.text) });
   }
   result.sort((a, b) => a.t - b.t);
   return result.slice(-200);
