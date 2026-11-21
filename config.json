@@ -75,7 +75,8 @@
         "ask"
       ],
       "readAloud": false,
-      "bigText": false
+      "bigText": false,
+      "videoAsk": true
     }
   },
   "presets": {

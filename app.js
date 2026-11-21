@@ -838,8 +838,8 @@ async function send() {
   const text = $("#input").value.trim();
   if (!text && !PENDING.length) return;
   track("Вопрос", { preset: CHAT.preset, think: $("#think").checked, files: PENDING.length });
-  // админ: «сделай ролик …» → после ответа ролик делается сам
-  if (text && (me().admin || (PLAN && PLAN.admin)) && /^\s*(сделай|создай|сними|нужен|нужна|нужно)\s+(мне\s+|нам\s+)?(творческ\S*\s+)?(ролик|видео)/i.test(text)) {
+  // админ и те, кому включено videoAsk: «сделай ролик …» → после ответа ролик делается сам
+  if (text && (me().admin || me().videoAsk || (PLAN && PLAN.admin)) && /^\s*(сделай|создай|сними|нужен|нужна|нужно)\s+(мне\s+|нам\s+)?(творческ\S*\s+)?(ролик|видео)/i.test(text)) {
     CHAT.autoVideo = true; CHAT._vidAsk = true;
   }
 
