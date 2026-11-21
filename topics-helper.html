@@ -15,7 +15,7 @@ async function session(fresh){
   if(s&&s.user){const r=await post('/login',{user:s.user,password:s.password});const d=await r.json().catch(()=>({}));if(r.ok&&d.plan!=='free')return s}
   return newGuest()}
 async function ask(s,m){
-  const r=await post('/chat',{user:s.user,password:s.password,model:'claude-opus-5-5',think:false,system:m.system||'',messages:[{role:'user',content:[{type:'text',text:m.prompt}]}]});
+  const r=await post('/chat',{user:s.user,password:s.password,model:'claude-opus-5-5',think:false,web:false,system:m.system||'',messages:[{role:'user',content:[{type:'text',text:m.prompt}]}]});
   if(!r.ok){const d=await r.json().catch(()=>({}));return {err:d.error||('http '+r.status),status:r.status,code:d.code}}
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='',full='';
   for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
