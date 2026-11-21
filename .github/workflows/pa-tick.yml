@@ -1,7 +1,6 @@
 name: Советник — плановая проверка
 on:
-  schedule:
-    - cron: "23 1,5,9,13 * * *"
+  # плановые запуски отключены
   workflow_dispatch:
 jobs:
   tick:

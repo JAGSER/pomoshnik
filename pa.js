@@ -443,7 +443,11 @@ async function vapid() {
   return value.publicKey;
 }
 
+// Советник отключён по просьбе Юрия 21.11.2026: никаких вызовов API и плановых поисков
+const PA_ENABLED = false;
+
 export async function paHandler(req, deps = {}) {
+  if (!PA_ENABLED) return new Response(JSON.stringify({ error: "Советник отключён" }), { status: 410, headers: { "Access-Control-Allow-Origin": "*", "content-type": "application/json" } });
   const url = new URL(req.url);
   const path = url.pathname;
 
@@ -683,6 +687,6 @@ export async function paHandler(req, deps = {}) {
 
 try {
   if (Deno.cron) {
-    Deno.cron("pa-scan", "7 1,5,9,13 * * *", () => runScan(false));
+    if (PA_ENABLED) Deno.cron("pa-scan", "7 1,5,9,13 * * *", () => runScan(false));
   }
 } catch {}
