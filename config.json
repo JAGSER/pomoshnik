@@ -65,6 +65,17 @@
       ],
       "readAloud": false,
       "bigText": false
+    },
+    "amanda": {
+      "lang": "ru",
+      "name": "Аманда",
+      "avatar": "🌸",
+      "model": "claude-sonnet-5-5",
+      "presets": [
+        "ask"
+      ],
+      "readAloud": false,
+      "bigText": false
     }
   },
   "presets": {
