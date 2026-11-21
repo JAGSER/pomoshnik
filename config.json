@@ -52,7 +52,8 @@
         "ask"
       ],
       "readAloud": false,
-      "bigText": false
+      "bigText": false,
+      "videoAsk": true
     },
     "yuri": {
       "lang": "ru",
