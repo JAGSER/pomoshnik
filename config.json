@@ -68,8 +68,8 @@
       "bigText": false
     },
     "amanda": {
-      "lang": "ru",
-      "name": "Аманда",
+      "lang": "en",
+      "name": "Amanda",
       "avatar": "🌸",
       "model": "claude-sonnet-5-5",
       "presets": [
