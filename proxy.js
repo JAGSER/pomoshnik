@@ -842,6 +842,40 @@ export async function handler(req, info) {
     const r = await fetch("https://api.vk.com/method/" + b.method, { method: "POST", body: form });
     return new Response(await r.text(), { status: 200, headers: { ...h, "Content-Type": "application/json; charset=utf-8" } });
   }
+  // картинки поста с Яндекс Диска в ВК для отложенного поста: вернёт строки вложений photo<owner>_<id>
+  if (req.method === "POST" && url.pathname === "/vk-photo") {
+    if (origin !== "https://shuster.pomoshnik.ai") return json({ error: "Нет доступа" }, 403, h);
+    let b = {};
+    try { b = await req.json(); } catch (_) { /* пусто */ }
+    const vkm = async (m, params) => {
+      const f = new URLSearchParams(params); f.set("access_token", String(b.token || "")); f.set("v", "5.199");
+      const d = await (await fetch("https://api.vk.com/method/" + m, { method: "POST", body: f })).json();
+      if (d.error) throw new Error(d.error.error_msg || "ВК: ошибка");
+      return d.response;
+    };
+    const okHost = (u) => { try { const x = new URL(u); return x.protocol === "https:" && /(^|\.)(yandex\.ru|yandex\.net|yadi\.sk|yandex\.com)$/.test(x.hostname); } catch (_) { return false; } };
+    const gid = String(Math.abs(Number(b.group_id) || 0));
+    const urls = (Array.isArray(b.urls) ? b.urls : []).filter(okHost).slice(0, 10);
+    if (!gid || gid === "0" || !urls.length) return json({ error: "Нет группы или картинок" }, 400, h);
+    try {
+      const out = [];
+      for (const u of urls) {
+        const srv = await vkm("photos.getWallUploadServer", { group_id: gid });
+        const img = await fetch(u);
+        if (!img.ok) throw new Error("Картинка не скачалась: " + img.status);
+        const blob = await img.blob();
+        const fd = new FormData();
+        fd.append("photo", new File([blob], "image.jpg", { type: blob.type || "image/jpeg" }));
+        const up = await (await fetch(srv.upload_url, { method: "POST", body: fd })).json();
+        const saved = await vkm("photos.saveWallPhoto", { group_id: gid, server: String(up.server), photo: up.photo, hash: up.hash });
+        const ph = saved[0];
+        out.push("photo" + ph.owner_id + "_" + ph.id);
+      }
+      return json({ attachments: out }, 200, h);
+    } catch (e) {
+      return json({ error: String(e.message || e) }, 200, h);
+    }
+  }
   // готовый образец голоса отдаём без пароля — генерировать новые может только вошедший пользователь
   // проверка озвучки диалогов: открыть в браузере, ответ показывает, работает ли Cloud TTS и почему нет
   if (req.method === "GET" && url.pathname === "/tts-check") {
