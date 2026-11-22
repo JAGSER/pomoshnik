@@ -24,7 +24,7 @@ function env(name, def = "") {
 function cors(origin) {
   const allowed = env("ALLOWED_ORIGIN", "*");
   // основной адрес приложения и старый, с которого идёт переезд, разрешены всегда
-  const list = allowed.split(",").map((s) => s.trim()).concat(["https://pomoshnik.ai", "https://www.pomoshnik.ai", "https://ai.duetplay.app", "https://video.duetplay.app"]);
+  const list = allowed.split(",").map((s) => s.trim()).concat(["https://pomoshnik.ai", "https://www.pomoshnik.ai", "https://ai.duetplay.app", "https://video.duetplay.app", "https://shuster.pomoshnik.ai"]);
   const ok = list.includes("*") || list.includes(origin);
   return {
     "Access-Control-Allow-Origin": ok ? (list.includes("*") ? "*" : origin) : "null",
@@ -826,6 +826,21 @@ export async function handler(req, info) {
   const url = new URL(req.url);
   if (req.method === "GET" && url.pathname === "/") {
     return json({ ok: true, service: "pomoshnik-proxy" }, 200, h);
+  }
+  // переходник к API ВКонтакте для раздела статей shuster.pomoshnik.ai: отложенные посты групп.
+  // Ключ ВК присылает сама страница (ключ редактора), здесь он не хранится. Только методы стены.
+  if (req.method === "POST" && url.pathname === "/vk") {
+    if (origin !== "https://shuster.pomoshnik.ai") return json({ error: "Нет доступа" }, 403, h);
+    const VK_METHODS = ["wall.get", "wall.getById", "wall.post", "wall.edit", "wall.delete", "groups.getById", "utils.resolveScreenName", "users.get"];
+    let b = {};
+    try { b = await req.json(); } catch (_) { /* пусто */ }
+    if (!VK_METHODS.includes(b.method)) return json({ error: "Метод не разрешён" }, 400, h);
+    const form = new URLSearchParams();
+    for (const [k, v] of Object.entries(b.params || {})) if (v !== undefined && v !== null) form.set(k, String(v));
+    form.set("access_token", String(b.token || ""));
+    form.set("v", "5.199");
+    const r = await fetch("https://api.vk.com/method/" + b.method, { method: "POST", body: form });
+    return new Response(await r.text(), { status: 200, headers: { ...h, "Content-Type": "application/json; charset=utf-8" } });
   }
   // готовый образец голоса отдаём без пароля — генерировать новые может только вошедший пользователь
   // проверка озвучки диалогов: открыть в браузере, ответ показывает, работает ли Cloud TTS и почему нет
