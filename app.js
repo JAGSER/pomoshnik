@@ -4404,11 +4404,12 @@ function loadStylesCached() {
 }
 // пустой id — «Стандартный» (без стиля), "auto" — «Авто» (стиль подбирается под тему ролика)
 const STYLE_MODES = [{ id: "", name: "Стандартный" }, { id: "auto", name: "Авто" }];
+function styleName(s) { return LANG === "en" && s && s.name_en ? String(s.name_en) : T(String((s && (s.name || s.id)) || "")); }
 function styleDisplayName(id) {
   if (!id) return T("Стандартный");
   if (id === "auto") return T("Авто");
   const s = STYLE_LIST_CACHE.find((x) => String(x.id || "") === id);
-  return s ? T(String(s.name || id)) : id;
+  return s ? styleName(s) : id;
 }
 function setCreativeStyle(id) {
   store.set("creativeStyle:" + SESSION.user, id);
@@ -4585,7 +4586,7 @@ function buildChatMenu() {
     b.className = "chat-menu-item";
     b.setAttribute("role", "menuitemradio");
     b.dataset.style = id;
-    b.dataset.label = T(String(s.name || id));
+    b.dataset.label = styleName(s);
     b.textContent = b.dataset.label;
     b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -4621,7 +4622,7 @@ function openStyleDemo() {
       const head = document.createElement("div");
       head.className = "style-card-head";
       const title = document.createElement("b");
-      title.textContent = T(String(s.name || id));
+      title.textContent = styleName(s);
       const mark = document.createElement("span");
       mark.className = "style-mark";
       mark.textContent = T("Выбрано");
