@@ -5227,7 +5227,7 @@ async function makeCreativeScene(v, label) {
           const sys = "Ты подбираешь визуальный стиль для короткого ролика по тексту его озвучки. Ответь только id одного стиля из списка, без пояснений. Если ни один стиль явно не подходит теме, ответь standard.";
           const m = [{ role: "user", content: "Стили (id — как выглядит и для каких тем):\n" + list.map((s) => `${s.id} — ${s.desc}`).join("\n") + "\n\nТекст ролика:\n" + theme + "\n\nid стиля:" }];
           label("✨ Подбираю стиль…");
-          const r = await call("Подбор стиля", m, "claude-haiku-5-5", sys, null, 60);
+          const r = await call("Подбор стиля", m, me().opusOnly ? "claude-opus-5-5" : "claude-haiku-5-5", sys, null, 60);
           pick = vtParseStylePick(r.text, ids);
           how = pick == null ? "" : "модель";
           if (pick == null) note(`подбор стиля: ответ не понят «${String(r.text || "").slice(0, 60)}»`);
@@ -5304,7 +5304,7 @@ async function makeCreativeScene(v, label) {
   let cut = false;
   // правки пишет быстрый Sonnet: он только чинит готовый код
   const write = async (what, fast) => {
-    const { text: txt, stop, err: jerr } = await call(what, msgs, fast ? "claude-sonnet-5-5" : null, null, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
+    const { text: txt, stop, err: jerr } = await call(what, msgs, fast && !me().opusOnly ? "claude-sonnet-5-5" : null, null, (n) => label(`✨ ${what} ${Math.min(99, Math.round(n / 120))}%`));
     cut = stop === "max_tokens";
     const code = extractCode(txt);
     note(`${what}: ${txt.length} симв.${cut ? ", оборвался по длине" : ""}${code ? "" : ", кода нет"}${jerr ? ", сервер: " + jerr : ""}`);
@@ -5411,7 +5411,7 @@ async function makeCreativeScene(v, label) {
         { type: "text", text: askStyle || `Кадры ролика в моменты ${shotT.join(", ")} с. Посмотри как арт-директор: читаемость, налезания, обрезанный текст, пустые или скучные кадры, контраст.${dueText ? " " + dueText : ""} Если всё хорошо — ответь одним словом OK. Если есть что улучшить — пришли исправленный код целиком.` },
       ] });
       let txt = "OK";
-      try { txt = (await call("Кадры", msgs, style ? "claude-opus-5-5" : "claude-sonnet-5-5", null, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), SHOTS_CAP)).text; }
+      try { txt = (await call("Кадры", msgs, style || me().opusOnly ? "claude-opus-5-5" : "claude-sonnet-5-5", null, (n) => label(`✨ Улучшаю ${Math.min(99, Math.round(n / 120))}%`), SHOTS_CAP)).text; }
       catch (e) { txt = "OK"; note(`арт-директор не ответил (${(e && e.message) || e}; предел ${SHOTS_CAP} с) — беру проверенный вариант`); }
       note(/^\s*OK\b/i.test(txt) ? "кадры: OK" : "кадры: прислал улучшение");
       let better = null;
