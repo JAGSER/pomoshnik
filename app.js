@@ -839,7 +839,7 @@ async function send() {
   if (!text && !PENDING.length) return;
   track("Вопрос", { preset: CHAT.preset, think: $("#think").checked, files: PENDING.length });
   // админ и те, кому включено videoAsk: «сделай ролик …» → после ответа ролик делается сам
-  if (text && (me().admin || me().videoAsk || (PLAN && PLAN.admin)) && (/^\s*(сделай|создай|сними|нужен|нужна|нужно)\s+(мне\s+|нам\s+)?(творческ\S*\s+)?(ролик|видео)/i.test(text) || /^\s*(please\s+)?(make|create)\s+(me\s+|us\s+)?(a\s+)?(creative\s+)?(video|clip)\b/i.test(text) || /^\s*(tolong\s+)?(buat|buatkan)\s+(saya\s+)?(video|klip)\b/i.test(text))) {
+  if (text && (me().admin || me().videoAsk || (PLAN && PLAN.admin)) && (/^\s*(сделай|создай|сними|нужен|нужна|нужно)\s+(мне\s+|нам\s+)?(творческ\S*\s+)?(ролик|видео)/i.test(text) || /^\s*(please\s+|can you\s+|could you\s+)?(make|create|generate|produce|do)\s+(me\s+|us\s+)?(a\s+|an\s+)?(short\s+|creative\s+|animated\s+)?(video|clip|reel)\b/i.test(text) || /^\s*(tolong\s+)?(buat|buatkan|buatin|bikin|bikinin)\s+(saya\s+|aku\s+)?(sebuah\s+)?(video|klip)\b/i.test(text))) {
     CHAT.autoVideo = true; CHAT._vidAsk = true;
   }
 
@@ -2459,6 +2459,14 @@ function openSettings() {
     // выбор модели и журнал — только тем, кто разбирается (администратор и Vie)
     const adv = !!(me().admin || me().creative);
     $("#creative-log").hidden = !adv;
+    // выбор стиля ролика на виду (у остальных он только в ⋯ внутри разговора)
+    const sb = $("#set-style");
+    sb.hidden = !(me().admin || me().creative || me().videoAsk);
+    if (!sb.hidden) {
+      const nameIt = () => { sb.textContent = "🎨 " + T("Стиль ролика") + ": " + styleDisplayName(creativeStyle() || ""); };
+      nameIt(); loadStylesCached().then(nameIt).catch(() => {});
+      sb.onclick = () => openStyleDemo();
+    }
     const cr = $("#set-creative");
     cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
@@ -4439,6 +4447,8 @@ function refreshStyleMarks() {
   }
   const nm = document.getElementById("chat-menu-style-name");
   if (nm) nm.textContent = styleDisplayName(cur);
+  const sb = document.getElementById("set-style");
+  if (sb && !sb.hidden) sb.textContent = "🎨 " + T("Стиль ролика") + ": " + styleDisplayName(cur);
 }
 /* ===== Навыки (SKILL.md), только админ ===== */
 async function skillsApi(path, data = {}) {
