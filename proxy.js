@@ -299,6 +299,8 @@ async function callAnthropic(key, payload, orModels) {
 // ТОЛЬКО через api.xpiki.com. Свой ключ Anthropic при этом не используется вообще, даже при сбоях xpiki.
 // Вернуть как было: удалить переменную XPIKI_KEY в настройках сервиса (или поставить XPIKI_OFF=1).
 const XPIKI_API = "https://api.xpiki.com/v1/messages";
+// замены, если xpiki отключил модель: цепочка до доступной
+const XPIKI_ALT = { "claude-sonnet-5-5": "claude-sonnet-5", "claude-sonnet-5": "claude-opus-5-5", "claude-haiku-5-5": "claude-haiku-4-5" };
 async function anthropicFetch(key, payload) {
   const xk = env("XPIKI_KEY").trim();
   if (xk && env("XPIKI_OFF") !== "1") {
@@ -321,6 +323,12 @@ async function anthropicFetch(key, payload) {
         if (xr.ok) { console.log("xpiki ok", payload.model, a ? "попытка " + (a + 1) : ""); return xr; }
         const t = (await xr.text()).slice(0, 200);
         console.log("xpiki error", xr.status, "попытка " + (a + 1), t);
+        // xpiki не знает модель (например, Sonnet 5.5 у них отключена): берём ближайшую доступную
+        const alt = XPIKI_ALT[payload.model];
+        if (/model_not_found|does not exist|is disabled/i.test(t) && alt) {
+          console.log("xpiki: модели", payload.model, "нет, беру", alt);
+          payload = { ...payload, model: alt }; a--; continue;
+        }
         if (![408, 429, 500, 502, 503, 504, 529].includes(xr.status)) break;
       } catch (e) {
         console.log("xpiki network error", "попытка " + (a + 1), String(e).slice(0, 200));
