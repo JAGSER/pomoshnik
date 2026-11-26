@@ -2468,6 +2468,7 @@ function openSettings() {
       sb.onclick = () => openStyleDemo();
     }
     const cr = $("#set-creative");
+    cr.closest(".set-row").hidden = true; // переключатель «простое видео» убран: ролики только творческие
     cr.checked = creativePref();
     cr.onchange = () => store.set("creative:" + SESSION.user, cr.checked);
   }
@@ -2897,20 +2898,19 @@ async function videoButton(btn, text, msg, opt = {}) {
     // звуки и музыка под голос
     try { await addMusic(pcm, speech, outro, `${emoji} ${title} ${text.slice(0, 300)}`, chat, subs); } catch (e) { console.warn("Музыка:", e); }
     let scene = null;
+    // только творческий ролик: простого режима больше нет (так решил Юрий)
     const creativeLeft = !PLAN || !PLAN.usage || PLAN.usage.creativeLeft > 0;
-    if (creativeOn() && !creativeLeft && PLAN.usage.needReg) vidNote(btn, LL("ℹ️ Творческие ролики с анимацией откроются, когда вы сохраните аккаунт: ⚙️ → придумайте имя и пароль. Сейчас сделан обычный ролик.", "ℹ️ Creative videos with animation unlock once you save your account: ⚙️ → choose a name and password. This one is a simple video."));
-    else if (creativeOn() && !creativeLeft) vidNote(btn, LL("ℹ️ Творческие ролики на этот период закончились, сделан обычный. Больше роликов на тарифе «Семья».", "ℹ️ No creative videos left for now, so this is a simple one. More on the Family plan."));
-    if (creativeOn() && creativeLeft) {
+    if (!window.VideoEncoder || !window.OffscreenCanvas || !window.Worker) throw new Error(LL("этот браузер не умеет делать ролики, откройте приложение в Chrome", "this browser can't make videos, please open the app in Chrome"));
+    if (!creativeLeft && PLAN.usage.needReg) throw new Error(LL("ролики откроются, когда вы сохраните аккаунт: ⚙️ → придумайте имя и пароль", "videos unlock once you save your account: ⚙️ → choose a name and password"));
+    if (!creativeLeft) throw new Error(LL("ролики на этот период закончились", "no videos left for this period"));
+    for (let attempt = 1; !scene; attempt++) {
       try { scene = await makeCreativeScene({ emoji, title, subs, words, timing, speech, duration: pcm.length / VRATE, outro, photos }, label); }
       catch (e) {
-        console.warn("Творческий режим:", e);
-        if (/аккаунт|account/i.test(e.message || "")) { vidNote(btn, "ℹ️ " + e.message); loadPlan(); }
-        else vidNote(btn, "⚠️ Творческое видео не получилось: " + (e.message || e) + ". Сделано обычное. Подробности — в ⚙️ → Видео.");
+        console.warn("Творческий режим, попытка " + attempt + ":", e);
+        if (/аккаунт|account|закончил|left|лимит|limit/i.test(e.message || "")) { loadPlan(); throw e; }
+        if (attempt >= 2) throw e;
+        label(LL("⏳ Пробую ещё раз…", "⏳ Trying again…"));
       }
-    } else if (creativeAllowed() && creativePref()) {
-      const why = !creativePref() ? "творческий режим выключен в настройках"
-        : !window.VideoEncoder || !window.OffscreenCanvas || !window.Worker ? "этот браузер не умеет творческие видео (нет WebCodecs/OffscreenCanvas)" : "неизвестно";
-      vidNote(btn, "ℹ️ Обычное видео: " + why + ".");
     }
     // звуки: в творческом ролике — те, что Claude придумал под анимацию; иначе — стандартный набор
     if (sfxOn()) {
@@ -2920,7 +2920,6 @@ async function videoButton(btn, text, msg, opt = {}) {
       if (peak > 0.98) { const k = 0.98 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= k; }
     }
     label("⏳ 0%");
-    if (!scene) scene = photos.length ? makePhotoScene(emoji, title, subs, pcm.length / VRATE, speech, outro, photos) : makeScene(emoji, title, subs, pcm.length / VRATE, speech, outro);
     let blob;
     const tEnc = Date.now();
     try { blob = await encodeVideo(scene, pcm, (k) => label(`⏳ ${Math.round(k * 100)}%`)); }
@@ -2954,6 +2953,7 @@ async function videoButton(btn, text, msg, opt = {}) {
     label("🎬 Видео");
     stopTimer(false);
     toast("Не получилось сделать видео: " + (err.message || err));
+    vidNote(btn, "⚠️ " + LL("Видео не получилось: ", "The video didn't work out: ") + (err.message || err));
     videoDone(false, "");
   } finally { VIDEO_BUSY = false; waitNote(btn, false); wakeOff(); }
 }
@@ -4394,7 +4394,7 @@ function videoOutroOn() { return !SESSION || store.get("outro:" + SESSION.user) 
 function creativeAllowed() { return true; }
 // творческий режим включён у всех по умолчанию; простое видео — если человек сам выключит
 function creativePref() { const v = store.get("creative:" + SESSION.user); return v === null || v === undefined ? true : v !== false; }
-function creativeOn() { return !!(creativeAllowed() && creativePref() && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
+function creativeOn() { return !!(creativeAllowed() && window.VideoEncoder && window.Worker && window.OffscreenCanvas); }
 var STYLE_LIST_CACHE = [];
 function loadStylesCached() {
   return Promise.resolve().then(() => loadStyleList()).then((l) => {
